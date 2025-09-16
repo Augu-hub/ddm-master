@@ -1,426 +1,193 @@
+```vue
 <template>
-  <VerticalLayout>
-    <Head title="" />
-
-    <!-- Titre + filtres -->
-    <b-row>
-      <b-col cols="12">
-        <div class="page-title-head d-flex align-items-sm-center flex-sm-row flex-column">
-          <div class="flex-grow-1">
-            <h4 class="fs-18 fw-semibold m-0">Dashboard</h4>
+  <div class="page">
+    <main class="wrap">
+      <header class="header">
+        <h2 class="h">Accéder à un module</h2>
+      </header>
+      <div class="grid">
+        <Link
+          v-for="m in modules"
+          :key="m.key"
+          :href="m.link"
+          class="card"
+          :style="{
+            '--pill-bg': m.pillBg,
+            '--pill-fg': m.pillFg,
+            '--accent': m.accent
+          }"
+        >
+          <span class="pill">{{ m.category }}</span>
+          <h3 class="ttl">{{ m.title }}</h3>
+          <p class="desc">{{ m.desc }}</p>
+          <div class="meta">
+            {{ m.meta }}
+            <span class="arrow">→</span>
           </div>
-
-          <div class="mt-sm-0 mt-3">
-            <b-form>
-              <b-row class="g-2 align-items-center mb-0">
-                <div class="col-auto">
-                  <a href="#" class="btn btn-light">
-                    <i class="ti ti-sort-ascending me-1"></i> Sort By
-                  </a>
-                </div>
-
-                <div class="col-sm-auto">
-                  <b-input-group>
-                    <!-- FlatPicker en async + fallback -->
-                    <FlatPicker
-                      id="date"
-                      v-model="date"
-                      custom-class="border-0 shadow"
-                      :options="{ dateFormat: 'd M', mode: 'range' }"
-                    />
-                    <b-input-group-text class="bg-primary border-primary text-white">
-                      <i class="ti ti-calendar fs-15"></i>
-                    </b-input-group-text>
-                  </b-input-group>
-                </div>
-              </b-row>
-            </b-form>
-          </div>
-        </div>
-      </b-col>
-    </b-row>
-
-    <!-- CONTENU + SIDEBAR dans la même grille -->
-    <b-row>
-      <!-- Colonne principale -->
-      <b-col lg="9" md="8">
-        <!-- Statistiques -->
-        <b-row class="row-cols-xxl-4 row-cols-md-2 row-cols-1 text-center">
-          <b-col v-for="(item, idx) in statistics" :key="idx">
-            <StatisticCard :item="item" />
-          </b-col>
-        </b-row>
-
-        <!-- Overview + Top Traffic -->
-        <b-row>
-          <b-col xxl="8" md="7">
-            <b-card no-body>
-              <b-card-header class="d-flex justify-content-between align-items-center">
-                <h4 class="header-title">Overview</h4>
-                <b-dropdown :variant="null" no-caret toggle-class="p-0 m-0 card-drop">
-                  <template v-slot:button-content><i class="ti ti-dots-vertical"></i></template>
-                  <b-dropdown-item>Sales Report</b-dropdown-item>
-                  <b-dropdown-item>Export Report</b-dropdown-item>
-                  <b-dropdown-item>Profit</b-dropdown-item>
-                  <b-dropdown-item>Action</b-dropdown-item>
-                </b-dropdown>
-              </b-card-header>
-
-              <div class="bg-light bg-opacity-50">
-                <b-row class="text-center">
-                  <b-col md="3" cols="6">
-                    <p class="text-muted mb-1 mt-3">Revenue</p>
-                    <h4 class="mb-3">
-                      <span class="ti ti-square-rounded-arrow-down text-success me-1"></span>
-                      <span>$29.5k</span>
-                    </h4>
-                  </b-col>
-                  <b-col md="3" cols="6">
-                    <p class="text-muted mb-1 mt-3">Expenses</p>
-                    <h4 class="mb-3">
-                      <span class="ti ti-square-rounded-arrow-up text-danger me-1"></span>
-                      <span>$15.07k</span>
-                    </h4>
-                  </b-col>
-                  <b-col md="3" cols="6">
-                    <p class="text-muted mb-1 mt-3">Investment</p>
-                    <h4 class="mb-3">
-                      <span class="ti ti-chart-infographic me-1"></span>
-                      <span>$3.6k</span>
-                    </h4>
-                  </b-col>
-                  <b-col md="3" cols="6">
-                    <p class="text-muted mb-1 mt-3">Savings</p>
-                    <h4 class="mb-3">
-                      <span class="ti ti-pig me-1"></span>
-                      <span>$6.9k</span>
-                    </h4>
-                  </b-col>
-                </b-row>
-              </div>
-
-              <div class="card-body pt-0">
-                <div dir="ltr">
-                  <!-- ApexChart en async + fallback -->
-                  <ApexChart :chart="overviewChart" />
-                </div>
-              </div>
-            </b-card>
-          </b-col>
-
-          <b-col xxl="4" md="5">
-            <div class="card">
-              <b-card-header class="d-flex justify-content-between align-items-center border-bottom border-dashed">
-                <h4 class="header-title">Top Traffic by Source</h4>
-                <b-dropdown :variant="null" no-caret toggle-class="p-0 m-0 card-drop">
-                  <template v-slot:button-content><i class="ti ti-dots-vertical"></i></template>
-                  <b-dropdown-item>Refresh Report</b-dropdown-item>
-                  <b-dropdown-item>Export Report</b-dropdown-item>
-                </b-dropdown>
-              </b-card-header>
-
-              <b-card-body>
-                <ApexChart :chart="trafficBySourceChart" />
-
-                <b-row class="mt-2">
-                  <b-col>
-                    <div class="d-flex justify-content-between align-items-center p-1">
-                      <div>
-                        <i class="ti ti-circle-filled fs-12 text-primary me-1 align-middle"></i>
-                        <span class="fw-semibold align-middle">Direct</span>
-                      </div>
-                      <span class="fw-semibold text-muted float-end">
-                        <i class="ti ti-arrow-badge-down text-danger"></i> 965
-                      </span>
-                    </div>
-                    <div class="d-flex justify-content-between align-items-center p-1">
-                      <div>
-                        <i class="ti ti-circle-filled fs-12 text-success me-1 align-middle"></i>
-                        <span class="fw-semibold align-middle">Social</span>
-                      </div>
-                      <span class="fw-semibold text-muted float-end">
-                        <i class="ti ti-arrow-badge-up text-success"></i> 75
-                      </span>
-                    </div>
-                  </b-col>
-                  <b-col>
-                    <div class="d-flex justify-content-between align-items-center p-1">
-                      <div>
-                        <i class="ti ti-circle-filled fs-12 text-secondary me-1 align-middle"></i>
-                        <span class="fw-semibold align-middle">Marketing</span>
-                      </div>
-                      <span class="fw-semibold text-muted float-end">
-                        <i class="ti ti-arrow-badge-up text-success"></i> 102
-                      </span>
-                    </div>
-                    <div class="d-flex justify-content-between align-items-center p-1">
-                      <div>
-                        <i class="ti ti-circle-filled fs-12 text-danger me-1 align-middle"></i>
-                        <span class="fw-semibold align-middle">Affiliates</span>
-                      </div>
-                      <span class="fw-semibold text-muted float-end">
-                        <i class="ti ti-arrow-badge-down text-danger"></i> 96
-                      </span>
-                    </div>
-                  </b-col>
-                </b-row>
-              </b-card-body>
-            </div>
-          </b-col>
-        </b-row>
-
-        <!-- Tables -->
-        <b-row>
-          <b-col xxl="6">
-            <b-card no-body>
-              <b-card-header class="d-flex justify-content-between align-items-center">
-                <h4 class="header-title">Brands Listing</h4>
-                <a href="javascript:void(0);" class="btn btn-sm btn-light">Add Brand <i class="ti ti-plus ms-1"></i></a>
-              </b-card-header>
-
-              <b-card-body class="p-0">
-                <div class="bg-light bg-opacity-50 py-1 text-center">
-                  <p class="m-0"><b>69</b> Active brands out of <span class="fw-medium">102</span></p>
-                </div>
-
-                <b-table-simple small hover responsive class="table-custom table-centered table-sm table-nowrap mb-0">
-                  <b-tbody>
-                    <b-tr v-for="(brand, idx) in brandListingTable" :key="idx">
-                      <b-td>
-                        <div class="d-flex align-items-center">
-                          <div class="avatar-md me-2 flex-shrink-0">
-                            <span class="avatar-title bg-primary-subtle rounded-circle">
-                              <img :src="brand.image" alt="" height="22" />
-                            </span>
-                          </div>
-                          <div>
-                            <span class="text-muted fs-12">{{ toSentenceCase(brand.specialistIn) }}</span> <br />
-                            <h5 class="fs-14 mt-1">{{ brand.name }}</h5>
-                          </div>
-                        </div>
-                      </b-td>
-                      <b-td>
-                        <span class="text-muted fs-12">Established</span>
-                        <h5 class="fs-14 fw-normal mt-1">Since {{ brand.establishedIn }}</h5>
-                      </b-td>
-                      <b-td>
-                        <span class="text-muted fs-12">Stores</span> <br />
-                        <h5 class="fs-14 fw-normal mt-1">{{ brand.stores }}</h5>
-                      </b-td>
-                      <b-td>
-                        <span class="text-muted fs-12">Products</span>
-                        <h5 class="fs-14 fw-normal mt-1">{{ brand.products }}</h5>
-                      </b-td>
-                      <b-td>
-                        <span class="text-muted fs-12">Status</span>
-                        <h5 class="fs-14 fw-normal mt-1">
-                          <i class="ti ti-circle-filled fs-12" :class="brand.status === 'active' ? 'text-success' : 'text-danger'"></i>
-                          {{ toSentenceCase(brand.status) }}
-                        </h5>
-                      </b-td>
-                      <b-td style="width: 30px">
-                        <b-dropdown :variant="null" no-caret toggle-class="text-muted card-drop p-0">
-                          <template #button-content><i class="ti ti-dots-vertical"></i></template>
-                          <b-dropdown-item>Refresh Report</b-dropdown-item>
-                          <b-dropdown-item>Export Report</b-dropdown-item>
-                        </b-dropdown>
-                      </b-td>
-                    </b-tr>
-                  </b-tbody>
-                </b-table-simple>
-              </b-card-body>
-
-              <b-card-footer>
-                <div class="align-items-center justify-content-between row text-sm-start text-center">
-                  <div class="col-sm">
-                    <div class="text-muted">Showing <span class="fw-semibold">5</span> of <span class="fw-semibold">15</span> Results</div>
-                  </div>
-                  <div class="col-sm-auto mt-sm-0 mt-3">
-                    <ul class="pagination pagination-boxed pagination-sm justify-content-center mb-0">
-                      <li class="page-item disabled"><a href="#" class="page-link"><i class="ti ti-chevron-left"></i></a></li>
-                      <li class="page-item active"><a href="#" class="page-link">1</a></li>
-                      <li class="page-item"><a href="#" class="page-link">2</a></li>
-                      <li class="page-item"><a href="#" class="page-link">3</a></li>
-                      <li class="page-item"><a href="#" class="page-link"><i class="ti ti-chevron-right"></i></a></li>
-                    </ul>
-                  </div>
-                </div>
-              </b-card-footer>
-            </b-card>
-          </b-col>
-
-          <b-col xxl="6">
-            <b-card no-body class="card-h-100">
-              <b-card-header class="d-flex align-items-center border-bottom flex-wrap gap-2 border-dashed">
-                <h4 class="header-title me-auto">Top Selling Products</h4>
-                <div class="d-flex justify-content-end gap-2 text-end">
-                  <a href="javascript:void(0);" class="btn btn-sm btn-light">Import <i class="ti ti-download ms-1"></i></a>
-                  <a href="javascript:void(0);" class="btn btn-sm btn-primary">Export <i class="ti ti-file-export ms-1"></i></a>
-                </div>
-              </b-card-header>
-
-              <b-card-body class="p-0">
-                <b-table-simple hover class="table-custom table-nowrap mb-0 align-middle">
-                  <b-tbody>
-                    <b-tr v-for="(product, idx) in topSellingProductsTable" :key="idx">
-                      <b-td>
-                        <div class="avatar-lg">
-                          <img :src="product.image" alt="Product-1" class="img-fluid rounded-2" />
-                        </div>
-                      </b-td>
-                      <b-td class="ps-0">
-                        <h5 class="fs-14 my-1">
-                          <Link :href="product.url" class="link-reset">{{ product.name }}</Link>
-                        </h5>
-                        <span class="text-muted fs-12">{{ product.createdAt }}</span>
-                      </b-td>
-                      <b-td>
-                        <h5 class="fs-14 my-1">{{ currency }}{{ product.price }}</h5>
-                        <span class="text-muted fs-12">Price</span>
-                      </b-td>
-                      <b-td>
-                        <h5 class="fs-14 my-1">{{ product.quantity }}</h5>
-                        <span class="text-muted fs-12">Quantity</span>
-                      </b-td>
-                      <b-td>
-                        <div class="d-flex align-items-center justify-content-end">
-                          <div class="me-2">
-                            <h5 class="fs-14 my-1">{{ currency }}{{ product.totalEarning }}</h5>
-                            <span class="text-muted fs-12">Amount</span>
-                          </div>
-                        </div>
-                      </b-td>
-                    </b-tr>
-                  </b-tbody>
-                </b-table-simple>
-              </b-card-body>
-
-              <b-card-footer>
-                <div class="align-items-center justify-content-between row text-sm-start text-center">
-                  <div class="col-sm">
-                    <div class="text-muted">Showing <span class="fw-semibold">5</span> of <span class="fw-semibold">10</span> Results</div>
-                  </div>
-                  <div class="col-sm-auto mt-sm-0 mt-3">
-                    <ul class="pagination pagination-boxed pagination-sm justify-content-center mb-0">
-                      <li class="page-item disabled"><a href="#" class="page-link"><i class="ti ti-chevron-left"></i></a></li>
-                      <li class="page-item active"><a href="#" class="page-link">1</a></li>
-                      <li class="page-item"><a href="#" class="page-link">2</a></li>
-                      <li class="page-item"><a href="#" class="page-link"><i class="ti ti-chevron-right"></i></a></li>
-                    </ul>
-                  </div>
-                </div>
-              </b-card-footer>
-            </b-card>
-          </b-col>
-        </b-row>
-      </b-col>
-
-      <!-- SIDEBAR (colonne séparée, propre) -->
-      <b-col lg="3" md="4" class="info-sidebar">
-        <b-alert v-model="showAlert" variant="primary" class="d-flex align-items-center">
-          <Icon icon="solar:help-bold-duotone" class="fs-24 me-1" />
-          <b>Help line:</b> <span class="fw-medium ms-1">+(012) 123 456 78</span>
-        </b-alert>
-
-        <b-card no-body class="card bg-primary">
-          <b-card-body
-            class="text-white"
-            :style="{ backgroundImage: `url(${arrows})`, backgroundSize: 'contain', backgroundRepeat: 'no-repeat', backgroundPosition: 'right bottom' }"
-          >
-            <h1><i class="ti ti-receipt-tax text-white"></i></h1>
-            <h4 class="text-white">Estimated tax for this year</h4>
-            <p class="text-white text-opacity-75">We kindly encourage you to review your recent transactions</p>
-            <a href="#!" class="btn btn-sm rounded-pill btn-info">Activate Now</a>
-          </b-card-body>
-        </b-card>
-
-        <b-card no-body>
-          <b-card-body>
-            <div class="d-flex justify-content-between align-items-center mb-3">
-              <h4 class="header-title">Recent Orders:</h4>
-              <div><a href="javascript:void(0);" class="btn btn-sm btn-primary rounded-circle btn-icon"><i class="ti ti-plus"></i></a></div>
-            </div>
-
-            <div v-for="(item, idx) in recentOrders" :key="idx" class="d-flex align-items-center position-relative mb-2 gap-2">
-              <div class="avatar-md flex-shrink-0"><img :src="item.image" alt="product-pic" height="36" /></div>
-              <div>
-                <h5 class="fs-14 my-1">
-                  <Link :href="item.url" class="stretched-link link-reset">{{ item.name }}</Link>
-                </h5>
-                <span class="text-muted fs-12">{{ currency }}{{ item.price }} x {{ item.quantity }} = {{ currency }}{{ item.price * item.quantity }}</span>
-              </div>
-              <div class="ms-auto">
-                <b-badge class="px-2 py-1" :variant="null" :class="item.status === 'sold' ? 'badge-soft-success' : 'badge-soft-danger'">
-                  {{ toSentenceCase(item.status) }}
-                </b-badge>
-              </div>
-            </div>
-
-            <div class="mt-3 text-center">
-              <a href="#!" class="text-decoration-underline fw-semibold link-offset-2 link-dark ms-auto">View All</a>
-            </div>
-          </b-card-body>
-
-          <b-card-body class="border-top border-dashed p-0">
-            <h4 class="header-title mb-2 mt-3 px-3">Recent Activity:</h4>
-            <simplebar class="my-3 px-3" style="max-height: 370px">
-              <div class="timeline-alt py-0">
-                <div v-for="(item, idx) in recentActivity" :key="idx" class="timeline-item">
-                  <i class="timeline-icon" :class="`${item.icon} ${idx % 2 == 0 ? 'bg-info-subtle text-info' : 'bg-primary-subtle text-primary'}`"></i>
-                  <div class="timeline-item-info">
-                    <Link :href="item.url" class="link-reset fw-semibold d-block mb-1">{{ item.name }}</Link>
-                    <span class="mb-1">{{ item.description }}</span>
-                    <p class="mb-0 pb-3"><small class="text-muted">{{ item.timestamp }}</small></p>
-                  </div>
-                </div>
-              </div>
-            </simplebar>
-          </b-card-body>
-        </b-card>
-      </b-col>
-    </b-row>
-  </VerticalLayout>
+        </Link>
+      </div>
+    </main>
+  </div>
 </template>
 
 <script setup lang="ts">
-import { defineAsyncComponent, ref } from 'vue'
-import { Head, Link } from '@inertiajs/vue3'
-import { Icon } from '@iconify/vue'
-import simplebar from 'simplebar-vue'
+import { Link } from '@inertiajs/vue3';
 
-import { currency } from '@/helpers'
-import { toSentenceCase } from '@/helpers/change-casing'
-import VerticalLayout from '@/layoutsparam/VerticalLayout.vue'
-import StatisticCard from '@/pages/dashboards/Param/components/StatisticCard.vue'
-import {
-  brandListingTable,
-  overviewChart,
-  recentActivity,
-  recentOrders,
-  statistics,
-  topSellingProductsTable,
-  trafficBySourceChart,
-} 
-from '@/pages/dashboards/Param/components/data'
-import arrows from '@/images/png/arrows.svg'
-
-/** ✅ Composants async avec fallbacks pour éviter le "white screen" si fichiers manquants */
-const ApexChart = defineAsyncComponent({
-  loader: () => import('@/components/ApexChart.vue'),
-  loadingComponent: { template: '<div class="text-center text-muted py-4">Chargement du graphique…</div>' },
-  errorComponent: { template: '<div class="text-center text-danger py-4">Graphique indisponible</div>' },
-  delay: 100,
-  timeout: 30000,
-})
-
-const FlatPicker = defineAsyncComponent({
-  loader: () => import('@/components/FlatPicker.vue'),
-  loadingComponent: { template: '<input class="form-control border-0 shadow" placeholder="Sélectionner une période" />' },
-  errorComponent: { template: '<input class="form-control border-0 shadow" placeholder="Sélectionner une période" />' },
-  delay: 50,
-  timeout: 15000,
-})
-
-const date = ref('01 May to 15 May')
-const showAlert = ref(true)
+const modules = [
+  {
+    key: 'param',
+    category: 'Administration',
+    title: 'DIADEM PARAM',
+    desc: 'Paramétrages globaux, référentiels, agences/tenants, profils et autorisations.',
+    meta: 'Dernière config : hier',
+    pillBg: 'rgba(37,99,235,.10)',
+    pillFg: '#1d4ed8',
+    accent: '#3b82f6',
+    link: '/param/projects', // Updated to match defined route
+  },
+  {
+    key: 'risque',
+    category: 'Gouvernance & Risques',
+    title: 'DIADEME RISQUE',
+    desc: 'Cartographie, évaluations, plans de traitement, suivi des indicateurs.',
+    meta: '3 risques à revoir',
+    pillBg: 'rgba(16,185,129,.12)',
+    pillFg: '#047857',
+    accent: '#10b981',
+    link: '/dashboards/risque', // Updated to match new route
+  },
+  {
+    key: 'process',
+    category: 'Organisation',
+    title: 'DIADEM PROCESSUS',
+    desc: 'Modélisez vos processus, contrôles clés, matrices RACI et procédures.',
+    meta: '2 processus modifiés',
+    pillBg: 'rgba(124,58,237,.12)',
+    pillFg: '#6d28d9',
+    accent: '#8b5cf6',
+    link: '/dashboards/processus', // Updated to match new route
+  },
+  {
+    key: 'audi',
+    category: 'Audit Interne',
+    title: 'DIADEM AUDI',
+    desc: 'Plan d’audit, missions, constats et suivi des recommandations.',
+    meta: '1 mission en cours',
+    pillBg: 'rgba(245,158,11,.14)',
+    pillFg: '#92400e',
+    accent: '#f59e0b',
+    link: '/dashboards/audi', // Updated to match new route
+  },
+];
 </script>
+
+<style scoped>
+.page {
+  min-height: 100vh;
+  background: linear-gradient(180deg, #f8fafc 0%, #f3f4f6 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32px;
+}
+
+.wrap {
+  width: min(1080px, 100%);
+}
+
+.header {
+  text-align: center;
+  padding: 16px 0;
+  background: #fff;
+  border-radius: 12px;
+  margin-bottom: 24px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.04);
+}
+
+.h {
+  margin: 0;
+  font-weight: 700;
+  letter-spacing: 0.1px;
+  font-size: clamp(18px, 3.2vw, 28px);
+  color: #0f172a;
+}
+
+.grid {
+  display: grid;
+  gap: 24px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+@media (max-width: 720px) {
+  .grid {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+}
+
+.card {
+  background: #fff;
+  border-radius: 16px;
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  box-shadow: 0 10px 28px rgba(2, 132, 199, 0.06);
+  padding: 24px;
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+  text-decoration: none;
+  display: block;
+  position: relative;
+  color: inherit; /* Ensure text color is inherited */
+}
+
+.card:hover {
+  transform: translateY(-4px) scale(1.02);
+  box-shadow: 0 20px 40px rgba(2, 132, 199, 0.14);
+  border-color: color-mix(in oklab, var(--accent) 40%, transparent);
+}
+
+.pill {
+  display: inline-block;
+  padding: 0.4rem 0.7rem;
+  border-radius: 999px;
+  background: var(--pill-bg);
+  color: var(--pill-fg);
+  font-weight: 700;
+  font-size: 0.8rem;
+  letter-spacing: 0.2px;
+}
+
+.ttl {
+  margin: 0.8rem 0 0.3rem;
+  font-size: 1.2rem;
+  font-weight: 800;
+  color: #0f172a;
+}
+
+.desc {
+  margin: 0 0 1rem;
+  color: #475569;
+  line-height: 1.5;
+  font-size: 0.95rem;
+}
+
+.meta {
+  font-size: 0.9rem;
+  color: #0f172a;
+  font-weight: 600;
+  border-top: 1px dashed color-mix(in oklab, var(--accent) 30%, #e5e7eb);
+  padding-top: 0.8rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.arrow {
+  color: var(--accent);
+  font-size: 1rem;
+  opacity: 0.7;
+  transition: opacity 0.2s ease;
+}
+
+.card:hover .arrow {
+  opacity: 1;
+}
+</style>

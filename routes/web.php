@@ -18,7 +18,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     // Dashboards
     Route::get('/',                    [DashboardController::class, 'sales'])->name('dashboard');
     Route::get('/dashboards/param',    [DashboardController::class, 'salesparam'])->name('dashboard-param');
-    Route::get('/dashboards/paramrr',  [DashboardController::class, 'salesparam'])->name('dashboard-processus');
+    Route::get('/dashboards/paramr',  [DashboardController::class, 'salesparam'])->name('dashboard-processus');
     Route::get('/dashboards/risque',   [DashboardController::class, 'salesparam'])->name('dashboard-risque');
     Route::get('/dashboards/clinic',   [DashboardController::class, 'clinic']);
     Route::get('/dashboards/e-wallet', [DashboardController::class, 'wallet']);
