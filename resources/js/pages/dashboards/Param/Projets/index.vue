@@ -22,7 +22,6 @@
 
                 <div class="col-sm-auto">
                   <b-input-group>
-                    <!-- FlatPicker en async + fallback -->
                     <FlatPicker
                       id="date"
                       v-model="date"
@@ -121,6 +120,17 @@
                 </b-col>
 
                 <b-col cols="12">
+                  <label for="character" class="form-label">Caractère</label>
+                  <b-form-input
+                    id="character"
+                    v-model="form.character"
+                    placeholder="Caractère unique"
+                    :state="!form.errors.character && null"
+                  />
+                  <small v-if="form.errors.character" class="text-danger">{{ form.errors.character }}</small>
+                </b-col>
+
+                <b-col cols="12">
                   <label for="description" class="form-label">Description</label>
                   <b-form-textarea
                     id="description"
@@ -171,6 +181,7 @@
                   <b-tr>
                     <b-th class="text-muted text-uppercase fs-12">Code</b-th>
                     <b-th class="text-muted text-uppercase fs-12">Nom</b-th>
+                    <b-th class="text-muted text-uppercase fs-12">Caractère</b-th>
                     <b-th class="text-muted text-uppercase fs-12">Description</b-th>
                     <b-th class="text-muted text-uppercase fs-12 text-end">Actions</b-th>
                   </b-tr>
@@ -179,7 +190,8 @@
                   <b-tr v-for="project in projects" :key="project.id" class="align-middle">
                     <b-td class="fw-semibold">{{ project.code ?? project.id }}</b-td>
                     <b-td>{{ project.name }}</b-td>
-                    <b-td class="text-truncate" style="max-width: 200px">{{ project.description }}</b-td>
+                    <b-td>{{ project.character || '—' }}</b-td>
+                    <b-td class="text-truncate" style="max-width: 200px">{{ project.description || '—' }}</b-td>
                     <b-td class="text-end" style="width: 120px">
                       <Link
                         :href="route('param.projects.edit', project.id)"
@@ -195,7 +207,7 @@
                     </b-td>
                   </b-tr>
                   <b-tr v-if="!projects || projects.length === 0">
-                    <b-td colspan="4" class="text-center text-muted py-4">Aucun projet pour le moment.</b-td>
+                    <b-td colspan="5" class="text-center text-muted py-4">Aucun projet pour le moment.</b-td>
                   </b-tr>
                 </b-tbody>
               </b-table-simple>
@@ -240,12 +252,20 @@
 import { defineAsyncComponent, computed, ref } from 'vue'
 import { Head, Link, useForm, router } from '@inertiajs/vue3'
 
-// Helpers & layout (mêmes chemins que ton modèle)
+// Helpers & layout
 import VerticalLayout from '@/layoutsparam/VerticalLayout.vue'
-import arrows from '@/images/png/arrows.svg'
 
 // Props du contrôleur
-type Project = { id: number|string; code?: string; name: string; description?: string; updated_at?: string; created_at?: string }
+type Project = { 
+  id: number|string; 
+  code?: string; 
+  name: string; 
+  character?: string;
+  description?: string; 
+  updated_at?: string; 
+  created_at?: string 
+}
+
 const props = defineProps<{ projects: Project[] }>()
 
 // Données en-tête
@@ -271,7 +291,7 @@ const recentCount = computed(() => {
   }).length
 })
 
-// Composants async (mêmes patterns que le modèle)
+// Composants async
 const FlatPicker = defineAsyncComponent({
   loader: () => import('@/components/FlatPicker.vue'),
   loadingComponent: { template: '<input class="form-control border-0 shadow" placeholder="Sélectionner une période" />' },
@@ -284,20 +304,29 @@ const FlatPicker = defineAsyncComponent({
 const form = useForm({
   code: '',
   name: '',
+  character: '',
   description: '',
 })
+
 const submit = () => {
   form.post(route('param.projects.store'), {
     preserveScroll: true,
     onSuccess: () => form.reset(),
   })
 }
+
 const cancel = () => form.reset()
 
 // Suppression
 const destroyProject = (id: number|string) => {
-  if (confirm('Supprimer ce projet ?')) {
-    router.delete(route('param.projects.destroy', id), { preserveScroll: true })
+  if (confirm('Êtes-vous sûr de vouloir supprimer ce projet ?')) {
+    router.delete(route('param.projects.destroy', id), { 
+      preserveScroll: true,
+      onSuccess: () => {
+        // Recharger les données après suppression
+        router.reload({ only: ['projects'] })
+      }
+    })
   }
 }
 </script>

@@ -10,6 +10,8 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 use Inertia\Response;
+use App\Models\Tenant;
+use Illuminate\Support\Facades\Session;
 
 class AuthenticatedSessionController extends Controller
 {
@@ -30,10 +32,25 @@ class AuthenticatedSessionController extends Controller
     public function store(LoginRequest $request): RedirectResponse
     {
         $request->authenticate();
-
         $request->session()->regenerate();
 
-        return redirect()->intended(route('dashboard', absolute: false));
+        $user = auth()->user();
+        $tenants = $user->tenants;
+
+        if ($tenants->isEmpty()) {
+            // User has no tenants - this shouldn't happen in a proper setup
+            Auth::logout();
+            return redirect()->route('login')->withErrors(['email' => 'No tenants assigned to this account.']);
+        }
+
+        if ($tenants->count() === 1) {
+            // User has only one tenant, auto-select it
+            session(['tenant_id' => $tenants->first()->id]);
+            return redirect()->intended(route('dashboard', absolute: false));
+        }
+
+        // User has multiple tenants, let them choose
+        return redirect()->route('select.tenant');
     }
 
     /**
@@ -41,6 +58,9 @@ class AuthenticatedSessionController extends Controller
      */
     public function destroy(Request $request): RedirectResponse
     {
+        // Clean up tenant session
+        Session::forget('tenant_id');
+        
         Auth::guard('web')->logout();
 
         $request->session()->invalidate();

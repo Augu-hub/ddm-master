@@ -2,7 +2,11 @@
 <html lang="{{ str_replace('_', '-', app()->getLocale()) }}"  @class(['dark' => ($appearance ?? 'system') == 'dark'])>
     <head>
         <meta charset="utf-8">
+        <!-- resources/views/app.blade.php (ou ton layout principal) -->
+<meta name="csrf-token" content="{{ csrf_token() }}">
+
         <meta name="viewport" content="width=device-width, initial-scale=1">
+        <link rel="stylesheet" href="https://unpkg.com/@tabler/icons-webfont@latest/tabler-icons.min.css">
 
         {{-- Inline script to detect system dark mode preference and apply it immediately --}}
         <script>
@@ -33,13 +37,24 @@
         <title inertia>{{ config('app.name', 'Laravel') }}</title>
 
         <link rel="preconnect" href="https://fonts.bunny.net">
-        <link href="https://fonts.bunny.net/css?family=instrument-sans:400,500,600" rel="stylesheet" />
+       
+       <!-- APRÈS (✅) -->
+@routes
+@vite(['resources/js/app.ts'])
+<link rel="stylesheet" href="https://unpkg.com/@tabler/icons-webfont@latest/tabler-icons.min.css">
+@inertiaHead
 
-        @routes
-        @vite(['resources/js/app.ts'])
-        @inertiaHead
     </head>
     <body class="font-sans antialiased">
         @inertia
     </body>
 </html>
+<style>
+  /* Force Tabler sur .ti si un autre pack écrase la police */
+  .ti {
+    font-family: "tabler-icons" !important;
+    font-style: normal;
+    font-weight: normal;
+    line-height: 1;
+  }
+</style>
