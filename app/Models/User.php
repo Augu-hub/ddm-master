@@ -9,12 +9,14 @@ use Illuminate\Notifications\Notifiable;
 use App\Models\Master\Tenant;
 use App\Models\Param\Projet;
 use Spatie\Permission\Traits\HasRoles;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class User extends Authenticatable
 {
     /** @use HasFactory<\Database\Factories\UserFactory> */
-    use HasFactory, Notifiable;
- use HasRoles; // ← important
+    use HasFactory, Notifiable, HasRoles;
+
     /**
      * The attributes that are mass assignable.
      *
@@ -49,23 +51,71 @@ class User extends Authenticatable
         ];
     }
 
-public function tenants()
-{
-    return $this->belongsToMany(Tenant::class, 'tenant_user')
-        ->withPivot('role_hint')->withTimestamps();
-}
- protected $attributes = [
-        'current_project_id' => 1, // Valeur par défaut
-    ];
+    /**
+     * Relation many-to-many avec les tenants
+     */
+    public function tenants(): BelongsToMany
+    {
+        return $this->belongsToMany(
+            Tenant::class, 
+            'tenant_user',
+            'user_id',
+            'tenant_id'
+        )->withPivot('role_hint')
+         ->withTimestamps();
+    }
 
-    protected $casts = [
-        'current_project_id' => 'integer',
-    ];
- 
+    /**
+     * Vérifier si l'utilisateur a accès à un tenant spécifique
+     */
+    public function hasAccessToTenant($tenantId): bool
+    {
+        return $this->tenants()->where('tenant_id', $tenantId)->exists();
+    }
 
-    // Relation avec le projet courant si nécessaire
-    public function currentProject()
+    /**
+     * Vérifier si l'utilisateur est admin global
+     */
+    public function isGlobalAdmin(): bool
+    {
+        return $this->email === 'admin@diaddem.local';
+    }
+
+    /**
+     * Obtenir le tenant actuel de l'utilisateur
+     */
+    public function getCurrentTenantAttribute()
+    {
+        $tenantId = session('tenant_id');
+        if ($tenantId) {
+            return $this->tenants()->where('tenant_id', $tenantId)->first();
+        }
+        return $this->tenants()->first();
+    }
+
+    /**
+     * Relation avec le projet courant si nécessaire
+     */
+    public function currentProject(): BelongsTo
     {
         return $this->belongsTo(Projet::class, 'current_project_id');
+    }
+
+    /**
+     * Scope pour les utilisateurs ayant accès à un tenant spécifique
+     */
+    public function scopeForTenant($query, $tenantId)
+    {
+        return $query->whereHas('tenants', function($q) use ($tenantId) {
+            $q->where('tenant_id', $tenantId);
+        });
+    }
+
+    /**
+     * Scope pour les utilisateurs sans tenant
+     */
+    public function scopeWithoutTenants($query)
+    {
+        return $query->doesntHave('tenants');
     }
 }

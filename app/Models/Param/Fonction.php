@@ -13,7 +13,7 @@ class Fonction extends Model
      protected $connection = 'tenant';
     protected $table = 'functions';
 
-    protected $fillable = ['project_id','name','character','avatar_path','parent_id'];
+    protected $fillable = ['name','character','avatar_path','parent_id'];
 
     protected $appends = ['avatar_url'];
 
@@ -27,10 +27,12 @@ class Fonction extends Model
    
      // ✅ CORRECTION : Relation inverse avec la table pivot entity_function
    // Correct relationship
+
 public function entities()
 {
     return $this->belongsToMany(Entite::class, 'function_assignments', 'function_id', 'entity_id');
 }
+
     public function scopeInProject($q, int|string $projectId)
     {
         return $q->where('project_id', $projectId);

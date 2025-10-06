@@ -16,7 +16,7 @@ class Entite extends Model
     protected $table = 'entities';
 
     protected $fillable = [
-        'project_id','name','description','level','parent_id','code_base',
+        'name','description','level','parent_id','code_base',
         'logo','phone','email','leader','address',
     ];
 

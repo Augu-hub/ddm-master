@@ -11,16 +11,25 @@ class ErrorController extends Controller
     {
         return Inertia::render('error/400');
     }
+ 
+    public function error403()
+    {
+        if (request()->expectsJson() || request()->header('X-Inertia')) {
+            return Inertia::render('error/403', [
+                'title'   => 'Accès refusé',
+                'message' => "Vous n'avez pas la permission d'accéder à cette page.",
+            ])->toResponse(request())->setStatusCode(403);
+        }
+
+        return response()->view('error403', [], 403);
+    }
+
 
     public function error401()
     {
         return Inertia::render('error/401');
     }
 
-    public function error403()
-    {
-        return Inertia::render('error/403');
-    }
 
     public function error404()
     {

@@ -41,6 +41,14 @@ return [
             'provider' => 'users',
         ],
     ],
+    // config/auth.php
+
+    
+    'sanctum' => [
+        'driver' => 'sanctum',
+        'provider' => 'users',
+    ],
+
 
     /*
     |--------------------------------------------------------------------------

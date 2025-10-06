@@ -14,12 +14,9 @@ class ProjetController extends Controller
      */
     public function index()
     {
-        $projets = Projet::all(); // Récupérer tous les projets
         
         // Passer les projets à la vue
-        return Inertia::render('dashboards/Param/Projets/index', [
-            'projects' => $projets
-        ]);
+        return Inertia::render('dashboards/Param/Projets/index');
     }
 
     /**

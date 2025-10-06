@@ -2,9 +2,12 @@
 
 namespace App\Models\Master;
 
-use Illuminate\Database\Eloquent\Model;
+use Spatie\Permission\Models\Role as SpatieRole;
 
-class Role extends Model
+class Role extends SpatieRole
 {
-    //
+    // Lire dans la base maître (ddmparam)
+    protected $connection = 'mysql';
+    protected $table = 'roles';
+    protected $guarded = [];
 }

@@ -61,10 +61,16 @@ class Kernel extends HttpKernel
         'signed' => \Illuminate\Routing\Middleware\ValidateSignature::class,
         'throttle' => \Illuminate\Routing\Middleware\ThrottleRequests::class,
         'verified' => \Illuminate\Auth\Middleware\EnsureEmailIsVerified::class,
-        
+        'tenant' => \App\Http\Middleware\SetPermissionsTeam::class,
         // SUPPRIMEZ TOUT MIDDLEWARE TENANT D'ICI
         // 'tenant' => \App\Http\Middleware\SetTenantDatabase::class,
         // 'set-tenant' => \App\Http\Middleware\SetTenantDatabase::class,
+    ];
+     protected $middlewareAliases = [
+        // ... tes autres alias
+
+        // ✅ Ajoute ceci :
+        'menu.authz' => \App\Http\Middleware\AuthorizeMenu::class,
     ];
 }
 

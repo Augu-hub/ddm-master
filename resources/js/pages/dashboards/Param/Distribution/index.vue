@@ -125,88 +125,85 @@
                 <input class="form-check-input" type="checkbox" v-model="mpa.replace" id="repMpa">
                 <label class="form-check-label xsmall" for="repMpa">Remplacer</label>
               </div>
+              <button class="btn btn-xs btn-light ms-1 rotateable" :class="{'rot-90': ui.mpa.open}" @click="toggleBasket('mpa')" title="Plier/Déplier">
+                <i class="ti ti-chevron-right"></i>
+              </button>
             </div>
           </b-card-header>
 
           <b-card-body class="p-1" @dragover="onDragOver" @drop="e=>onDrop(e,'mpa')">
-            <div class="drop p-2 text-center mb-2">
-              <div v-if="!mpa.staged.length" class="muted xsmall">
-                <i class="ti ti-upload me-1"></i>Déposer M/P/A (multi-sélection)
-              </div>
+            <!-- Zone pliable (drop + actions + preview + debug) -->
+            <b-collapse :visible="ui.mpa.open">
+              <div class="drop p-2 text-center mb-2">
+                <div v-if="!mpa.staged.length" class="muted xsmall">
+                  <i class="ti ti-upload me-1"></i>Déposer M/P/A (multi-sélection)
+                </div>
 
-              <div v-else class="text-start">
-                <!-- MACRO -->
-                <div v-for="(M,mi) in mpa.staged" :key="'SM'+M.id" class="rowit d-flex flex-column">
-                  <div class="d-flex align-items-center justify-content-between" @dblclick="removeMacro(mi)">
-                    <div class="d-flex align-items-center gap-2">
-                      <span class="ico color-type-macro"><i class="ti ti-folder"></i><span class="L">M</span></span>
-                      <span v-if="M.code" class="code">{{ M.code }}</span>
-                      <span class="s fw-semibold">{{ M.name }}</span>
-                    </div>
-                    <button class="btn btn-link text-danger btn-xs p-0" @click="removeMacro(mi)"><i class="ti ti-x"></i></button>
-                  </div>
-
-                  <!-- PROCESS -->
-                  <div v-for="(P,pi) in M.children" :key="'SP'+M.id+':'+P.id" class="ms-3 mt-1 d-flex flex-column">
-                    <div class="d-flex align-items-center justify-content-between" @dblclick="removeProcess(mi,pi)">
+                <div v-else class="text-start">
+                  <!-- MACRO -->
+                  <div v-for="(M,mi) in mpa.staged" :key="'SM'+M.id" class="rowit d-flex flex-column">
+                    <div class="d-flex align-items-center justify-content-between" @dblclick="removeMacro(mi)">
                       <div class="d-flex align-items-center gap-2">
-                        <span class="ico color-type-process"><i class="ti ti-folder"></i><span class="L">P</span></span>
-                        <span v-if="P.code" class="code">{{ P.code }}</span>
-                        <span class="s">{{ P.name }}</span>
+                        <span class="ico color-type-macro"><i class="ti ti-folder"></i><span class="L">M</span></span>
+                        <span v-if="M.code" class="code">{{ M.code }}</span>
+                        <span class="s fw-semibold">{{ M.name }}</span>
                       </div>
-                      <button class="btn btn-link text-danger btn-xs p-0" @click="removeProcess(mi,pi)"><i class="ti ti-x"></i></button>
+                      <button class="btn btn-link text-danger btn-xs p-0" @click="removeMacro(mi)"><i class="ti ti-x"></i></button>
                     </div>
 
-                    <!-- ACTIVITIES -->
-                    <div v-for="(A,ai) in P.children" :key="'SA'+M.id+':'+P.id+':'+A.id" class="ms-3 mt-1 d-flex align-items-center justify-content-between" @dblclick="removeActivity(mi,pi,ai)">
-                      <div class="d-flex align-items-center gap-2">
-                        <span class="ico color-type-activity"><i class="ti ti-file-text"></i><span class="L">A</span></span>
-                        <span v-if="A.code" class="code">{{ A.code }}</span>
-                        <span class="s">{{ A.name }}</span>
+                    <!-- PROCESS -->
+                    <div v-for="(P,pi) in M.children" :key="'SP'+M.id+':'+P.id" class="ms-3 mt-1 d-flex flex-column">
+                      <div class="d-flex align-items-center justify-content-between" @dblclick="removeProcess(mi,pi)">
+                        <div class="d-flex align-items-center gap-2">
+                          <span class="ico color-type-process"><i class="ti ti-folder"></i><span class="L">P</span></span>
+                          <span v-if="P.code" class="code">{{ P.code }}</span>
+                          <span class="s">{{ P.name }}</span>
+                        </div>
+                        <button class="btn btn-link text-danger btn-xs p-0" @click="removeProcess(mi,pi)"><i class="ti ti-x"></i></button>
                       </div>
-                      <button class="btn btn-link text-danger btn-xs p-0" @click="removeActivity(mi,pi,ai)"><i class="ti ti-x"></i></button>
+
+                      <!-- ACTIVITIES -->
+                      <div v-for="(A,ai) in P.children" :key="'SA'+M.id+':'+P.id+':'+A.id" class="ms-3 mt-1 d-flex align-items-center justify-content-between" @dblclick="removeActivity(mi,pi,ai)">
+                        <div class="d-flex align-items-center gap-2">
+                          <span class="ico color-type-activity"><i class="ti ti-file-text"></i><span class="L">A</span></span>
+                          <span v-if="A.code" class="code">{{ A.code }}</span>
+                          <span class="s">{{ A.name }}</span>
+                        </div>
+                        <button class="btn btn-link text-danger btn-xs p-0" @click="removeActivity(mi,pi,ai)"><i class="ti ti-x"></i></button>
+                      </div>
                     </div>
                   </div>
                 </div>
               </div>
-            </div>
 
-            <div class="d-flex align-items-center justify-content-between mb-1">
-              <div class="d-flex align-items-center gap-1">
-                <button class="btn btn-xs btn-outline-secondary" @click="clearBasket('mpa')">Vider</button>
-                <button class="btn btn-xs btn-outline-primary" :disabled="!mpa.staged.length || !mpa.entityId" @click="doPreview"><i class="ti ti-refresh"></i> Prévisualiser</button>
+              <div class="d-flex align-items-center justify-content-between mb-1">
+                <div class="d-flex align-items-center gap-1">
+                  <button class="btn btn-xs btn-outline-secondary" @click="clearBasket('mpa')">Vider</button>
+                  <button class="btn btn-xs btn-outline-primary" :disabled="!mpa.staged.length || !mpa.entityId" @click="doPreview"><i class="ti ti-refresh"></i> Prévisualiser</button>
+                </div>
+                <button class="btn btn-xs btn-primary" 
+                        :disabled="!mpa.entityId || mpa.preview.count===0" 
+                        @click="commitMpa"
+                        id="btn-validate-mpa">
+                  <i class="ti ti-check me-1"></i>Valider ({{ mpa.preview.count }})
+                </button>
               </div>
-              <button class="btn btn-xs btn-primary" 
-                      :disabled="!mpa.entityId || mpa.preview.count===0" 
-                      @click="commitMpa"
-                      id="btn-validate-mpa">
-                <i class="ti ti-check me-1"></i>Valider ({{ mpa.preview.count }})
-              </button>
-            </div>
 
-            <div class="box p-2 mb-1">
-              <span class="xsmall muted">Activités distinctes : </span><b class="xsmall">{{ mpa.preview.count }}</b>
-            </div>
+              <div class="box p-2 mb-1">
+                <span class="xsmall muted">Activités distinctes : </span><b class="xsmall">{{ mpa.preview.count }}</b>
+              </div>
 
-            <div class="box p-2">
+             
+            </b-collapse>
+
+            <!-- Partie NON pliable : déjà affectées -->
+            <div class="box p-2 mt-2">
               <div class="fw-semibold xsmall mb-1">Déjà affectées</div>
               <div v-if="!mpa.entityId" class="xsmall muted">—</div>
               <div v-else-if="!mpa.current.activities?.length" class="xsmall muted">Aucune</div>
               <ul v-else class="xsmall" style="max-height:140px;overflow:auto;">
                 <li v-for="a in mpa.current.activities" :key="'c'+a.id">{{ a.name }}</li>
               </ul>
-            </div>
-
-            <!-- Debug info -->
-            <div v-if="debug.show" class="box p-2 mt-2 bg-light">
-              <div class="fw-semibold xsmall mb-1">Debug Info</div>
-              <div class="xsmall">
-                <div>Project ID: {{ selectedProjectId }}</div>
-                <div>Entity ID: {{ mpa.entityId }}</div>
-                <div>Staged items: {{ mpa.staged.length }}</div>
-                <div>Preview count: {{ mpa.preview.count }}</div>
-                <div>Bouton activé: {{ !(!mpa.entityId || mpa.preview.count===0) }}</div>
-              </div>
             </div>
           </b-card-body>
         </b-card>
@@ -301,36 +298,43 @@
                 <input class="form-check-input" type="checkbox" v-model="funcs.replace" id="repFn">
                 <label class="form-check-label xsmall" for="repFn">Remplacer</label>
               </div>
+              <button class="btn btn-xs btn-light ms-1 rotateable" :class="{'rot-90': ui.funcs.open}" @click="toggleBasket('funcs')" title="Plier/Déplier">
+                <i class="ti ti-chevron-right"></i>
+              </button>
             </div>
           </b-card-header>
 
           <b-card-body class="p-1" @dragover="onDragOver" @drop="e=>onDrop(e,'funcs')">
-            <div class="drop p-2 text-center mb-2">
-              <div v-if="!funcs.staged.length" class="muted xsmall"><i class="ti ti-upload me-1"></i>Déposer des fonctions (multi)</div>
+            <!-- Zone pliable (drop + actions) -->
+            <b-collapse :visible="ui.funcs.open">
+              <div class="drop p-2 text-center mb-2">
+                <div v-if="!funcs.staged.length" class="muted xsmall"><i class="ti ti-upload me-1"></i>Déposer des fonctions (multi)</div>
 
-              <div v-else class="text-start">
-                <div v-for="(n,i) in funcs.staged" :key="'fn'+n.id" class="rowit d-flex align-items-center justify-content-between" @dblclick="removeFunc(i)">
-                  <div class="d-flex align-items-center gap-2">
-                    <input class="form-check-input me-1" type="checkbox"
-                           :checked="funcsStagedIsSelected(n.id)"
-                           @change="ev=>funcsStagedToggle(n.id,ev)"
-                           @click.stop />
-                    <span class="ico color-type-function"><i class="ti ti-user"></i><span class="L">F</span></span>
-                    <span class="s">{{ n.name }}</span>
+                <div v-else class="text-start">
+                  <div v-for="(n,i) in funcs.staged" :key="'fn'+n.id" class="rowit d-flex align-items-center justify-content-between" @dblclick="removeFunc(i)">
+                    <div class="d-flex align-items-center gap-2">
+                      <input class="form-check-input me-1" type="checkbox"
+                             :checked="funcsStagedIsSelected(n.id)"
+                             @change="ev=>funcsStagedToggle(n.id,ev)"
+                             @click.stop />
+                      <span class="ico color-type-function"><i class="ti ti-user"></i><span class="L">F</span></span>
+                      <span class="s">{{ n.name }}</span>
+                    </div>
+                    <button class="btn btn-link text-danger btn-xs p-0" @click="removeFunc(i)"><i class="ti ti-x"></i></button>
                   </div>
-                  <button class="btn btn-link text-danger btn-xs p-0" @click="removeFunc(i)"><i class="ti ti-x"></i></button>
                 </div>
               </div>
-            </div>
 
-            <div class="d-flex align-items-center justify-content-between mb-1">
-              <div class="d-flex align-items-center gap-1">
-                <button class="btn btn-xs btn-outline-secondary" @click="clearBasket('funcs')">Vider</button>
-                <button class="btn btn-xs btn-outline-danger" :disabled="!funcsStagedSel.size" @click="removeSelectedFuncs"><i class="ti ti-trash"></i> Supprimer sélection</button>
+              <div class="d-flex align-items-center justify-content-between mb-1">
+                <div class="d-flex align-items-center gap-1">
+                  <button class="btn btn-xs btn-outline-secondary" @click="clearBasket('funcs')">Vider</button>
+                  <button class="btn btn-xs btn-outline-danger" :disabled="!funcsStagedSel.size" @click="removeSelectedFuncs"><i class="ti ti-trash"></i> Supprimer sélection</button>
+                </div>
+                <button class="btn btn-xs btn-primary" :disabled="!funcs.entityId || !funcs.staged.length" @click="commitFuncs"><i class="ti ti-check me-1"></i>Valider</button>
               </div>
-              <button class="btn btn-xs btn-primary" :disabled="!funcs.entityId || !funcs.staged.length" @click="commitFuncs"><i class="ti ti-check me-1"></i>Valider</button>
-            </div>
+            </b-collapse>
 
+            <!-- Partie NON pliable : déjà affectées -->
             <div class="box p-2">
               <div class="fw-semibold xsmall mb-1">Déjà affectées</div>
               <div v-if="!funcs.entityId" class="xsmall muted">—</div>
@@ -408,7 +412,7 @@
                   <tr v-for="r in mpsresp.rows" :key="rowKey(r)">
                     <td class="text-center">
                       <span class="icon-badge" :class="badgeColor(r.type)">
-                        <i :class="r.type==='activity'?'ti ti-file-text':'ti ti-folder'"></i>
+                        <i :class="r.type==='activity'?'ti ti-file-text':'ti ti-folder'" class="node-icon"></i>
                         <span class="badge-letter">{{ letterFor(r.type) }}</span>
                       </span>
                     </td>
@@ -451,7 +455,7 @@ const props = defineProps({
 })
 
 /* ===================== STATE GLOBAL ===================== */
-const activeTab = ref('mpa') // Changez à 'mpa' pour tester
+const activeTab = ref('mpa')
 const selectedProjectId = ref(props.projects?.[0]?.id ?? null)
 const projectOptions = computed(()=>[
   { value:null, text:'— Projet —', disabled:true },
@@ -465,11 +469,19 @@ const entityOptions = computed(()=>{
   return [{ value:null, text:list.length?'— Entité —':'— Aucune —', disabled:true }, ...list.map(e=>({ value:e.id, text:e.name }))]
 })
 
-// Debug state
-const debug = ref({
-  show: true,
-  lastAction: ''
+// UI (mémoire de pliage)
+const UI_KEYS = { mpa:'ddm.repartition.ui.mpa.open', funcs:'ddm.repartition.ui.funcs.open' }
+const ui = ref({
+  mpa: { open: localStorage.getItem(UI_KEYS.mpa) !== '0' },
+  funcs: { open: localStorage.getItem(UI_KEYS.funcs) !== '0' },
 })
+function toggleBasket(area){
+  if(area==='mpa'){ ui.value.mpa.open = !ui.value.mpa.open; localStorage.setItem(UI_KEYS.mpa, ui.value.mpa.open? '1':'0') }
+  if(area==='funcs'){ ui.value.funcs.open = !ui.value.funcs.open; localStorage.setItem(UI_KEYS.funcs, ui.value.funcs.open? '1':'0') }
+}
+
+// Debug state
+const debug = ref({ show: true, lastAction: '' })
 
 /* Headers fetch */
 const baseHeaders = {
@@ -531,17 +543,14 @@ async function loadMpaTree(){
   if (!selectedProjectId.value) return
   mpa.value.loading=true; mpa.value.netErr=null
   try{
-    console.log('🌳 Chargement arbre MPA pour projet:', selectedProjectId.value);
     const url = new URL(props.routes.mpa.tree, window.location.origin)
     url.searchParams.set('project_id', selectedProjectId.value)
     const res = await fetch(url, { headers: baseHeaders })
     if(!res.ok) throw new Error(`HTTP ${res.status}`)
     const j = await res.json()
     mpa.value.tree = Array.isArray(j)?j:[]
-    console.log('✅ Arbre MPA chargé:', mpa.value.tree.length, 'macros');
     rebuildIndex()
   }catch(e){ 
-    console.error('❌ Erreur chargement arbre MPA:', e);
     mpa.value.netErr=String(e?.message||e); 
     mpa.value.tree=[]; 
     rebuildIndex() 
@@ -555,16 +564,13 @@ async function loadMpaCurrent(){
     return 
   }
   try{
-    console.log('📋 Chargement activités actuelles pour entité:', mpa.value.entityId);
     const url = new URL(props.routes.mpa.current, window.location.origin)
     url.searchParams.set('entity_id', mpa.value.entityId)
     url.searchParams.set('project_id', selectedProjectId.value)
     const resp = await fetch(url, { headers: baseHeaders })
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
     mpa.value.current = await resp.json()
-    console.log('✅ Activités actuelles chargées:', mpa.value.current.activities?.length || 0);
   }catch(e){
-    console.error('❌ Erreur chargement activités actuelles:', e);
     mpa.value.netErr = String(e?.message || e)
     mpa.value.current = { activity_ids:[], activities:[] }
   }
@@ -576,7 +582,6 @@ function ensureMacro(macroId, macroName, macroCode){
   const found = idx.value.macros.get(String(macroId))
   const node = { type:'macro', id:String(macroId), name:macroName||found?.name||'', code:macroCode||found?.code, children:[] }
   mpa.value.staged.push(node)
-  console.log('➕ Macro ajoutée au panier:', node.name);
   return node
 }
 
@@ -596,7 +601,6 @@ function ensureProcess(macroNode, processId, processName, processCode){
     }
   }
   list.splice(at,0,node)
-  console.log('➕ Processus ajouté au panier:', node.name);
   return node
 }
 
@@ -616,7 +620,6 @@ function ensureActivity(processNode, activityId, activityName, activityCode){
     }
   }
   list.splice(at,0,node)
-  console.log('➕ Activité ajoutée au panier:', node.name);
   return node
 }
 
@@ -633,112 +636,42 @@ function flattenNodes(){
 }
 
 async function doPreview(){
-  console.log('=== DEBUT doPreview ===');
-  console.log('mpa.value.entityId:', mpa.value.entityId);
-  console.log('mpa.value.staged.length:', mpa.value.staged.length);
-  
   if (!mpa.value.entityId || !mpa.value.staged.length){ 
     mpa.value.preview={count:0,activity_ids:[]}; 
-    console.log('⛔ Preview annulé - conditions non remplies');
     return 
   }
-  
   const nodes = flattenNodes();
-  console.log('Nodes à envoyer:', nodes);
-  
   try {
     const res = await fetch(props.routes.mpa.preview, { 
       method:'POST', 
       headers: baseHeaders, 
-      body: JSON.stringify({
-        project_id: selectedProjectId.value, 
-        entity_id: mpa.value.entityId, 
-        nodes: nodes
-      })
+      body: JSON.stringify({ project_id: selectedProjectId.value, entity_id: mpa.value.entityId, nodes })
     });
-    
-    console.log('Réponse preview - Status:', res.status);
-    
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    
     const result = await res.json();
-    console.log('Résultat preview:', result);
-    
     mpa.value.preview = result;
-    console.log('✅ Preview terminé -', result.count, 'activités');
   } catch(e) {
-    console.error('❌ Erreur preview:', e);
     mpa.value.preview = {count:0, activity_ids:[]};
   }
 }
 
 async function commitMpa(){
-  console.log('🎯 === DEBUT commitMpa ===');
-  debug.value.lastAction = 'commitMpa appelée';
-  
-  console.log('mpa.value.entityId:', mpa.value.entityId);
-  console.log('selectedProjectId.value:', selectedProjectId.value);
-  
-  const ids = Array.isArray(mpa.value.preview?.activity_ids)
-    ? mpa.value.preview.activity_ids
-    : []
-
-  console.log('Activity IDs à envoyer:', ids);
-  console.log('Nombre d\'activités:', ids.length);
-
-  if (!mpa.value.entityId || ids.length === 0) {
-    console.log('⛔ Conditions non remplies - entityId ou ids manquants');
-    debug.value.lastAction = 'Conditions non remplies';
-    return
-  }
-
+  const ids = Array.isArray(mpa.value.preview?.activity_ids) ? mpa.value.preview.activity_ids : []
+  if (!mpa.value.entityId || ids.length === 0) return
   try{
-    console.log('📤 Envoi de la requête à:', props.routes.mpa.commit);
-    
-    const payload = {
-      project_id: selectedProjectId.value,
-      entity_id: mpa.value.entityId,
-      activity_ids: ids,
-      replace: !!mpa.value.replace
-    };
-    
-    console.log('Payload:', payload);
-
-    const res = await fetch(props.routes.mpa.commit, {
-      method:'POST', 
-      headers: baseHeaders,
-      body: JSON.stringify(payload)
-    })
-
-    console.log('📥 Réponse reçue - Status:', res.status, res.statusText);
-
+    const payload = { project_id: selectedProjectId.value, entity_id: mpa.value.entityId, activity_ids: ids, replace: !!mpa.value.replace }
+    const res = await fetch(props.routes.mpa.commit, { method:'POST', headers: baseHeaders, body: JSON.stringify(payload) })
     if (!res.ok){
       let msg = `HTTP ${res.status}`
-      try { 
-        const j = await res.json(); 
-        console.log('Réponse erreur:', j);
-        if (j?.message) msg = j.message 
-      } catch(e) {
-        console.error('Erreur parsing JSON:', e);
-      }
+      try { const j = await res.json(); if (j?.message) msg = j.message } catch {}
       throw new Error(msg)
     }
-
-    const result = await res.json();
-    console.log('✅ Succès - Réponse:', result);
-
-    // Succès
+    await res.json()
     mpa.value.staged = []
     mpa.value.preview = { count: 0, activity_ids: [] }
     await loadMpaCurrent()
-    
-    console.log('=== FIN commitMpa - Succès ===');
-    debug.value.lastAction = 'Commit réussi';
-    
   }catch(e){
-    console.error('❌ Erreur commitMpa:', e);
     mpa.value.netErr = `Échec de l'enregistrement: ${e?.message || e}`
-    debug.value.lastAction = 'Erreur: ' + e.message;
   }
 }
 
@@ -749,11 +682,7 @@ const mpaLastCtx = ref(null)
 const mpaKey = (n)=>`${n.type}:${n.id}`
 const mpaIsSelected = (n)=> mpaSel.value.has(mpaKey(n))
 
-function mpaSetSel(up){ 
-  const s=new Set(mpaSel.value); 
-  up(s); 
-  mpaSel.value=s 
-}
+function mpaSetSel(up){ const s=new Set(mpaSel.value); up(s); mpaSel.value=s }
 
 function mpaSameParent(curr, ctx, prevCtx){
   if (!ctx || !prevCtx) return false
@@ -793,8 +722,6 @@ function mpaToggleSelected(node, ev, ctx){
 /* Dbl-clic ajout rapide */
 function mpaQuickAdd(payload){
   if (!mpa.value.entityId) return
-  console.log('⚡ QuickAdd:', payload);
-  
   if (payload.type==='macro'){
     const m = idx.value.macros.get(String(payload.id)); if (!m) return
     ensureMacro(m.id, m.name, m.code)
@@ -835,27 +762,9 @@ function onDragStartMpa(ev, node){
 }
 
 /* Suppressions panier MPA */
-function removeMacro(mi){ 
-  console.log('🗑️ Suppression macro index:', mi);
-  mpa.value.staged.splice(mi,1); 
-  doPreview() 
-}
-
-function removeProcess(mi,pi){
-  const M = mpa.value.staged[mi]; if(!M) return
-  M.children.splice(pi,1); if(!M.children.length) mpa.value.staged.splice(mi,1)
-  doPreview()
-}
-
-function removeActivity(mi,pi,ai){
-  const P = mpa.value.staged[mi]?.children?.[pi]; if(!P) return
-  P.children.splice(ai,1)
-  if(!P.children.length){
-    mpa.value.staged[mi].children.splice(pi,1)
-    if(!mpa.value.staged[mi].children.length) mpa.value.staged.splice(mi,1)
-  }
-  doPreview()
-}
+function removeMacro(mi){ mpa.value.staged.splice(mi,1); doPreview() }
+function removeProcess(mi,pi){ const M = mpa.value.staged[mi]; if(!M) return; M.children.splice(pi,1); if(!M.children.length) mpa.value.staged.splice(mi,1); doPreview() }
+function removeActivity(mi,pi,ai){ const P = mpa.value.staged[mi]?.children?.[pi]; if(!P) return; P.children.splice(ai,1); if(!P.children.length){ mpa.value.staged[mi].children.splice(pi,1); if(!mpa.value.staged[mi].children.length) mpa.value.staged.splice(mi,1) } doPreview() }
 
 /* ========================================================= */
 /* ==================== ONGLET FONCTIONS =================== */
@@ -881,9 +790,7 @@ function rebuildFuncIndex(){
       for(const it of arr){
         funcsIdx.value.set(String(it.id), { id:String(it.id), name:it.name, parentId: parentId?String(parentId):'root' })
         funcOrderByParent.value[String(parentId??'root')].push(String(it.id))
-        if(Array.isArray(it.children)&&it.children.length){
-          walk(it.children, it.id)
-        }
+        if(Array.isArray(it.children)&&it.children.length){ walk(it.children, it.id) }
       }
     }
     walk(funcs.value.tree, null)
@@ -951,20 +858,13 @@ function funcsToggleSelected(node, ev){
   funcsLast.value = { id, parentId }
 }
 
-function funcsQuickAdd(id){
-  if (!funcs.value.entityId) return
-  const f = funcsIdx.value.get(String(id)); if(!f) return
-  addFunctionToStaged(f.id)
-}
+function funcsQuickAdd(id){ if (!funcs.value.entityId) return; const f = funcsIdx.value.get(String(id)); if(!f) return; addFunctionToStaged(f.id) }
 
 function onDragStartFuncs(ev, node){
   let ids=[]
   if (funcsSel.value.has(String(node.id))) ids=[...funcsSel.value]
   else ids=[String(node.id)]
-  const items = ids.map(id=>{
-    const f=funcsIdx.value.get(String(id)); if(!f) return null
-    return { type:'function', id:f.id, name:f.name }
-  }).filter(Boolean)
+  const items = ids.map(id=>{ const f=funcsIdx.value.get(String(id)); if(!f) return null; return { type:'function', id:f.id, name:f.name } }).filter(Boolean)
   ev.dataTransfer.setData('application/json', JSON.stringify({ items, area:'funcs' }))
   ev.dataTransfer.effectAllowed='copy'
 }
@@ -990,21 +890,8 @@ function removeFunc(i){ funcs.value.staged.splice(i,1) }
 
 const funcsStagedSel = ref(new Set())
 function funcsStagedIsSelected(id){ return funcsStagedSel.value.has(String(id)) }
-
-function funcsStagedToggle(id, ev){
-  const additive = ev?.metaKey || ev?.ctrlKey
-  id=String(id)
-  const s=new Set(funcsStagedSel.value)
-  if(!additive) s.clear()
-  if (s.has(id)) s.delete(id); else s.add(id)
-  funcsStagedSel.value=s
-}
-
-function removeSelectedFuncs(){
-  const ids = new Set(funcsStagedSel.value)
-  funcs.value.staged = funcs.value.staged.filter(x=>!ids.has(String(x.id)))
-  funcsStagedSel.value = new Set()
-}
+function funcsStagedToggle(id, ev){ const additive = ev?.metaKey || ev?.ctrlKey; id=String(id); const s=new Set(funcsStagedSel.value); if(!additive) s.clear(); if (s.has(id)) s.delete(id); else s.add(id); funcsStagedSel.value=s }
+function removeSelectedFuncs(){ const ids = new Set(funcsStagedSel.value); funcs.value.staged = funcs.value.staged.filter(x=>!ids.has(String(x.id))); funcsStagedSel.value = new Set() }
 
 async function commitFuncs(){
   if (!funcs.value.entityId || !funcs.value.staged.length) return
@@ -1065,18 +952,11 @@ async function reloadMpsResp(){
       for (const P of (M.children||[])){
         const actsOut = []
         for (const A of (P.children||[])){
-          if (activityIds.has(String(A.id))){
-            actsOut.push({ type:'activity', id:String(A.id), code:A.code||'', name:A.name })
-          }
+          if (activityIds.has(String(A.id))){ actsOut.push({ type:'activity', id:String(A.id), code:A.code||'', name:A.name }) }
         }
-        if (actsOut.length){
-          macroTouched = true
-          procsOut.push({ type:'process', id:String(P.id), code:P.code||'', name:P.name, children:actsOut })
-        }
+        if (actsOut.length){ macroTouched = true; procsOut.push({ type:'process', id:String(P.id), code:P.code||'', name:P.name, children:actsOut }) }
       }
-      if (macroTouched){
-        rows.push({ type:'macro', id:String(M.id), code:M.code||'', name:M.name, children:procsOut })
-      }
+      if (macroTouched){ rows.push({ type:'macro', id:String(M.id), code:M.code||'', name:M.name, children:procsOut }) }
     }
     const flat=[]
     for (const M of rows){
@@ -1102,28 +982,15 @@ async function reloadMpsResp(){
       }
     }
 
-    mpsresp.value.rows = flat.map(r=>{
-      const k = rowKey(r)
-      const fid = mapKeyToFunc.get(k) || null
-      return { ...r, function_id: fid, _orig_function_id: fid }
-    })
+    mpsresp.value.rows = flat.map(r=>{ const k = rowKey(r); const fid = mapKeyToFunc.get(k) || null; return { ...r, function_id: fid, _orig_function_id: fid } })
     mpsresp.value.dirtyKeys = new Set()
   }catch(e){
     mpsresp.value.netErr = String(e?.message||e)
     mpsresp.value.rows=[]; mpsresp.value.functionOptions=[]; mpsresp.value.dirtyKeys=new Set()
-  }finally{
-    mpsresp.value.loading=false
-  }
+  }finally{ mpsresp.value.loading=false }
 }
 
-function markDirty(r){
-  const dirty = String(r.function_id||'') !== String(r._orig_function_id||'')
-  const k = rowKey(r)
-  const S = new Set(mpsresp.value.dirtyKeys)
-  if (dirty) S.add(k); else S.delete(k)
-  mpsresp.value.dirtyKeys = S
-}
-
+function markDirty(r){ const dirty = String(r.function_id||'') !== String(r._orig_function_id||''); const k = rowKey(r); const S = new Set(mpsresp.value.dirtyKeys); if (dirty) S.add(k); else S.delete(k); mpsresp.value.dirtyKeys = S }
 function isDirty(r){ return mpsresp.value.dirtyKeys.has(rowKey(r)) }
 function discardChanges(){ reloadMpsResp() }
 
@@ -1140,45 +1007,22 @@ async function saveMpsResp(){
       const newF = r.function_id ? String(r.function_id) : null
       const oldF = r._orig_function_id ? String(r._orig_function_id) : null
 
-      if (oldF && oldF !== newF){
-        toUnlinkList.push({ id: r.id, type: r.type, function_id: oldF })
-      }
-      if (newF){
-        if (!toAssignByFunc.has(newF)) toAssignByFunc.set(newF, [])
-        toAssignByFunc.get(newF).push({ id: r.id, type: r.type })
-      }
+      if (oldF && oldF !== newF){ toUnlinkList.push({ id: r.id, type: r.type, function_id: oldF }) }
+      if (newF){ if (!toAssignByFunc.has(newF)) toAssignByFunc.set(newF, []); toAssignByFunc.get(newF).push({ id: r.id, type: r.type }) }
     }
 
     // Unassign d'abord
     for (const item of toUnlinkList){
-      await fetch(props.routes.mpsresp.unassign, {
-        method:'POST', headers: baseHeaders,
-        body: JSON.stringify({
-          entity_id: mpsresp.value.entityId,
-          function_id: item.function_id,
-          nodes: [{ id: Number(item.id), type: item.type }]
-        })
-      })
+      await fetch(props.routes.mpsresp.unassign, { method:'POST', headers: baseHeaders, body: JSON.stringify({ entity_id: mpsresp.value.entityId, function_id: item.function_id, nodes: [{ id: Number(item.id), type: item.type }] }) })
     }
 
     // Assign groupé par fonction
     for (const [funcId, nodes] of toAssignByFunc.entries()){
-      await fetch(props.routes.mpsresp.assign, {
-        method:'POST', headers: baseHeaders,
-        body: JSON.stringify({
-          entity_id: mpsresp.value.entityId,
-          function_id: funcId,
-          role: null,
-          nodes: nodes.map(n=>({ id:Number(n.id), type:n.type }))
-        })
-      })
+      await fetch(props.routes.mpsresp.assign, { method:'POST', headers: baseHeaders, body: JSON.stringify({ entity_id: mpsresp.value.entityId, function_id: funcId, role: null, nodes: nodes.map(n=>({ id:Number(n.id), type:n.type })) }) })
     }
 
     // Succès local
-    for (const r of mpsresp.value.rows){
-      const k=rowKey(r); if (!mpsresp.value.dirtyKeys.has(k)) continue
-      r._orig_function_id = r.function_id ? String(r.function_id) : null
-    }
+    for (const r of mpsresp.value.rows){ const k=rowKey(r); if (!mpsresp.value.dirtyKeys.has(k)) continue; r._orig_function_id = r.function_id ? String(r.function_id) : null }
     mpsresp.value.dirtyKeys = new Set()
   } finally {
     mpsresp.value.loading=false
@@ -1199,7 +1043,6 @@ function onDrop(ev, area){
   if (area==='mpa'){
     if (!mpa.value.entityId) return
     const items = Array.isArray(payload.items) ? payload.items : [payload]
-    console.log('📥 Drop MPA - Items:', items.length);
     for (const node of items){
       if (node.type==='macro'){
         ensureMacro(node.macroId||node.id, node.name, node.code)
@@ -1217,22 +1060,13 @@ function onDrop(ev, area){
   else if (area==='funcs'){
     if (!funcs.value.entityId) return
     const items = Array.isArray(payload.items) ? payload.items : [payload]
-    for (const it of items){
-      if (it.type==='function') addFunctionToStaged(it.id)
-    }
+    for (const it of items){ if (it.type==='function') addFunctionToStaged(it.id) }
   }
 }
 
 function clearBasket(area){
-  if (area==='mpa'){ 
-    console.log('🧹 Vider panier MPA');
-    mpa.value.staged=[]; 
-    doPreview() 
-  }
-  else if (area==='funcs'){ 
-    funcs.value.staged=[]; 
-    funcsStagedSel.value=new Set() 
-  }
+  if (area==='mpa'){ mpa.value.staged=[]; doPreview() }
+  else if (area==='funcs'){ funcs.value.staged=[]; funcsStagedSel.value=new Set() }
 }
 
 /* ================== Watchers & Mount ================== */
@@ -1241,7 +1075,6 @@ watch(()=>funcs.value.entityId, loadFuncsCurrent)
 watch([selectedProjectId, ()=>mpsresp.value.entityId], reloadMpsResp)
 
 watch(selectedProjectId, ()=>{
-  console.log('🔄 Projet changé:', selectedProjectId.value);
   resetMpa(); 
   resetFuncs(); 
   mpsresp.value.rows=[]; 
@@ -1273,21 +1106,11 @@ function resetFuncs(){
 }
 
 onMounted(()=>{ 
-  console.log('🚀 Composant monté');
-  console.log('Routes disponibles:', props.routes);
-  console.log('Route MPA commit:', props.routes.mpa.commit);
-  console.log('Projets:', props.projects.length);
-  console.log('Entités:', props.entities.length);
-  
-  if (selectedProjectId.value){ 
-    loadMpaTree(); 
-    loadFunctions(); 
-  } 
+  if (selectedProjectId.value){ loadMpaTree(); loadFunctions(); } 
 })
 </script>
 
 <style scoped>
-/* Votre CSS existant reste inchangé */
 :where(h6){ font-size:.82rem; margin:0 }
 .small, small, .xsmall{ font-size:.72rem }
 .xsmall{ font-size:.68rem }
@@ -1339,4 +1162,8 @@ ul > li{ list-style:none }
 .table thead th{ position:sticky; top:0; z-index:1 }
 
 .is-changed{ border-color:#60a5fa; box-shadow:0 0 0 .1rem rgba(59,130,246,.2) }
+
+/* Toggle rotation */
+.rotateable{ transition: transform .18s ease }
+.rot-90{ transform: rotate(90deg) }
 </style>

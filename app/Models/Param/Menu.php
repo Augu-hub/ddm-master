@@ -9,6 +9,8 @@ use Spatie\Permission\Models\Permission;
 
 class Menu extends Model
 {
+     protected $connection = 'mysql';   // <-- IMPORTANT: base maître (ddmparam)
+    protected $table = 'menus';
     protected $fillable = [
         'key','label','icon','url','parent_id','sort',
         'is_title','is_divider','visible','badge_json','tooltip_json','meta_json'
@@ -29,4 +31,5 @@ class Menu extends Model
     {
         return $this->belongsToMany(Permission::class, 'menu_permission', 'menu_id', 'permission_id');
     }
+    
 }

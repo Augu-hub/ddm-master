@@ -12,10 +12,9 @@ class MacroProcessus extends Model
 
     protected $table = 'macro_processes';
 
-    protected $fillable = ['project_id','code','name','character','designation','kind'];
+    protected $fillable = ['code','name','character','designation','kind'];
 
-   public function project(): BelongsTo { return $this->belongsTo(Projet::class); }
-    public function processes(): HasMany  { return $this->hasMany(Processus::class, 'macro_process_id'); }
+       public function processes(): HasMany  { return $this->hasMany(Processus::class, 'macro_process_id'); }
 
      public static function nextCodeForProjectKind(int $projectId, string $kind, ?string $character = null): string
     {

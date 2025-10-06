@@ -1,20 +1,24 @@
 <template>
   <VerticalLayout>
-    <Head title="DIADDEM — MPA (Projet-centric)" />
+    <Head title="DIADDEM — MPA" />
 
-    <!-- Header + Projet -->
+    <!-- Header -->
     <b-row class="mb-0">
       <b-col>
         <div class="d-flex align-items-center justify-content-between">
           <div class="d-flex align-items-center gap-2">
             <i class="ti ti-topology-star-3 text-primary fs-5"></i>
             <h4 class="m-0 fw-semibold">Macro-Processus-Activités</h4>
-            <small class="text-muted ms-2">Sélection obligatoire d’un projet</small>
+            <small class="text-muted ms-2">Vue sans projet</small>
           </div>
-          <b-input-group size="sm" class="w-auto">
-            <b-input-group-text><i class="ti ti-briefcase"></i></b-input-group-text>
-            <b-form-select v-model="selectedProjectId" :options="projectOptions" />
-          </b-input-group>
+
+          <!-- Actions rapides -->
+          <div class="d-flex align-items-center gap-2">
+            <b-button size="sm" variant="outline-primary" @click="validateDefaults" :disabled="macrosLocked">
+              <i class="ti ti-checkup-list me-1"></i>
+              Valider les 3 par défaut
+            </b-button>
+          </div>
         </div>
       </b-col>
     </b-row>
@@ -36,20 +40,17 @@
         <b-card no-body class="shadow-sm">
           <b-card-header class="py-2 px-3 d-flex justify-content-between align-items-center">
             <h6 class="mb-0">
-              <span v-if="activeTab==='macro'">Macros du projet</span>
+              <span v-if="activeTab==='macro'">Macros</span>
               <span v-else-if="activeTab==='process'">Création Processus</span>
               <span v-else>Création Activité</span>
             </h6>
-            <span class="text-muted small"><strong>{{ selectedProjectName || '—' }}</strong></span>
+            <span class="text-muted small"><strong>Contexte global</strong></span>
           </b-card-header>
 
           <b-card-body class="p-2">
-            <b-alert v-if="!selectedProjectId" show variant="secondary" class="py-2 px-3 mb-2">
-              Sélectionnez d’abord un projet pour activer les formulaires et les listes.
-            </b-alert>
 
             <!-- ===== MACRO ===== -->
-            <div v-if="activeTab==='macro' && selectedProjectId">
+            <div v-if="activeTab==='macro'">
               <b-alert v-if="macrosLocked" show variant="success" class="py-2 px-3 mb-2">
                 <i class="ti ti-lock me-1"></i> Ensemble complet présent (3/3). Cliquez une ligne pour <strong>renommer</strong>.
               </b-alert>
@@ -97,7 +98,7 @@
             </div>
 
             <!-- ===== PROCESS ===== -->
-            <div v-else-if="activeTab==='process' && selectedProjectId">
+            <div v-else-if="activeTab==='process'">
               <b-form @submit.prevent="submitProcess" class="mb-2">
                 <b-row class="g-2">
                   <b-col cols="12">
@@ -141,7 +142,7 @@
             </div>
 
             <!-- ===== ACTIVITÉ ===== -->
-            <div v-else-if="activeTab==='activity' && selectedProjectId">
+            <div v-else>
               <b-form @submit.prevent="submitActivity" class="mb-2">
                 <b-row class="g-2">
                   <b-col cols="12">
@@ -200,44 +201,37 @@
         <b-card no-body class="shadow-sm h-100">
           <b-card-header class="py-2 px-3 d-flex justify-content-between align-items-center">
             <h6 class="mb-0"><i class="ti ti-folders me-1"></i> Arborescence</h6>
-            <small class="text-muted">
-              <template v-if="selectedProjectId">Projet : <strong>{{ selectedProjectName }}</strong></template>
-              <template v-else>—</template>
-            </small>
+            <small class="text-muted">Contexte global</small>
           </b-card-header>
 
           <b-card-body class="p-2">
-            <b-alert v-if="!selectedProjectId" show variant="secondary" class="m-2">Sélectionnez un projet pour afficher l’arborescence.</b-alert>
-            <div v-else>
-              <Tree
-                :value="treeNodes"
-                v-model:expandedKeys="expandedKeys"
-                selectionMode="single"
-                :filter="true"
-                filterMode="lenient"
-                class="w-100 pv-tree rounded"
-              >
-                <!-- Un SEUL pictogramme (couleur par TYPE) + code avant nom -->
-                <template #default="{ node }">
-                  <div class="d-flex align-items-center gap-2">
-                    <span class="icon-badge" :class="typeColorClass(node)">
-                      <i :class="nodeIcon(node)" class="node-icon"></i>
-                      <span class="badge-letter">{{ badgeLetter(node) }}</span>
-                    </span>
+            <Tree
+              :value="treeNodes"
+              v-model:expandedKeys="expandedKeys"
+              selectionMode="single"
+              :filter="true"
+              filterMode="lenient"
+              class="w-100 pv-tree rounded"
+            >
+              <template #default="{ node }">
+                <div class="d-flex align-items-center gap-2">
+                  <span class="icon-badge" :class="typeColorClass(node)">
+                    <i :class="nodeIcon(node)" class="node-icon"></i>
+                    <span class="badge-letter">{{ badgeLetter(node) }}</span>
+                  </span>
 
-                    <span class="code-chip font-monospace">{{ node.data?.code }}</span>
-                    <span class="fw-semibold">{{ nodeLabel(node) }}</span>
+                  <span class="code-chip font-monospace">{{ node.data?.code }}</span>
+                  <span class="fw-semibold">{{ nodeLabel(node) }}</span>
 
-                    <small
-                      v-if="node.data?.type==='macro' && activeTab==='activity'"
-                      class="text-muted ms-1"
-                    >
-                      ({{ countProc(node) }} proc. • {{ countAct(node) }} act.)
-                    </small>
-                  </div>
-                </template>
-              </Tree>
-            </div>
+                  <small
+                    v-if="node.data?.type==='macro' && activeTab==='activity'"
+                    class="text-muted ms-1"
+                  >
+                    ({{ countProc(node) }} proc. • {{ countAct(node) }} act.)
+                  </small>
+                </div>
+              </template>
+            </Tree>
           </b-card-body>
         </b-card>
       </b-col>
@@ -275,42 +269,21 @@ import Tree from 'primevue/tree'
 import Tag from 'primevue/tag'
 
 const props = defineProps({
-  projects:   { type: Array, default: () => [] },
   macros:     { type: Array, default: () => [] },
   processes:  { type: Array, default: () => [] },
-  activities: { type: Array, default: () => [] },
-  filters:    { type: Object, default: () => ({ project_id: null }) }
+  activities: { type: Array, default: () => [] }
 })
 
 const activeTab = ref('macro')
-const selectedProjectId = ref(props.filters?.project_id ?? null)
-if (!selectedProjectId.value && (props.projects?.length === 1)) selectedProjectId.value = props.projects[0].id
 
-const projectOptions = computed(() => [
-  { value: null, text: '— Sélectionner un projet —', disabled: true },
-  ...(props.projects||[]).map(p => ({ value: p.id, text: p.name }))
-])
-const selectedProjectName = computed(
-  () => (props.projects||[]).find(p => String(p.id) === String(selectedProjectId.value))?.name ?? ''
-)
-
+/* === FORMS (plus de projet) === */
 const processForm  = useForm({ macro_process_id: null, name:'' })
 const activityForm = useForm({ macro_process_id: null, process_id: null, name:'', description:'' })
 
-const storageKey = computed(() => selectedProjectId.value ? `mpa:lastMacro:${selectedProjectId.value}` : null)
-const loadLastMacro = () => { try { return storageKey.value && localStorage.getItem(storageKey.value) } catch { return null } }
-const saveLastMacro = (macroId) => { try { if (storageKey.value && macroId) localStorage.setItem(storageKey.value, String(macroId)) } catch {} }
-
-watch(selectedProjectId, () => {
-  processForm.macro_process_id  = null
-  activityForm.macro_process_id = null
-  activityForm.process_id       = null
-  const last = loadLastMacro()
-  if (last && macrosFiltered.value.some(m => String(m.id) === String(last))) {
-    processForm.macro_process_id  = String(last)
-    activityForm.macro_process_id = String(last)
-  }
-})
+/* "Dernier macro" mémorisé globalement (pas par projet) */
+const storageKey = 'mpa:lastMacro'
+const loadLastMacro = () => { try { return localStorage.getItem(storageKey) } catch { return null } }
+const saveLastMacro = (macroId) => { try { if (macroId) localStorage.setItem(storageKey, String(macroId)) } catch {} }
 
 watch(() => processForm.macro_process_id, (val) => {
   if (!val) return
@@ -319,14 +292,12 @@ watch(() => processForm.macro_process_id, (val) => {
 })
 watch(() => activityForm.macro_process_id, () => { activityForm.process_id = null })
 
-const macrosFiltered = computed(() =>
-  (props.macros||[]).filter(m => String(m.project_id) === String(selectedProjectId.value))
-)
+/* === Données (sans filtre projet) === */
+const macrosFiltered = computed(() => props.macros || [])
 const orderDRS = { 'Direction': 1, 'Réalisation': 2, 'Support': 3 }
 const macrosFilteredSorted = computed(() => [...macrosFiltered.value].sort((a,b) => (orderDRS[a.kind]||9)-(orderDRS[b.kind]||9)))
 
 const macroOptions = computed(() => {
-  if (!selectedProjectId.value) return [{ value: null, text: '— Sélectionner un projet —', disabled: true }]
   const list = macrosFilteredSorted.value
   return [{ value: null, text: list.length ? '— Sélectionner —' : '— Aucun macro —', disabled: true },
           ...list.map(m => ({ value: String(m.id), text: `${m.code} — ${m.name}` })) ]
@@ -338,31 +309,18 @@ const processesFiltered = computed(() => {
   return (props.processes||[]).filter(p => macroIds.has(p.macro_process_id))
 })
 const activitiesFiltered = computed(() => {
-  const macroIds = new Set(macrosFiltered.value.map(m => m.id))
+  const macroIds   = new Set(macrosFiltered.value.map(m => m.id))
   const processIds = new Set((props.processes||[]).filter(p => macroIds.has(p.macro_process_id)).map(p => p.id))
   return (props.activities||[]).filter(a => processIds.has(a.process_id))
 })
 
-const processOptionsActivity = computed(() => {
-  const mId = activityForm.macro_process_id
-  if (!mId) return [{ value: null, text: '— Choisir un macro d’abord —', disabled: true }]
-  const list = (props.processes || []).filter(p => String(p.macro_process_id) === String(mId))
-  return [{ value: null, text: list.length ? '— Sélectionner —' : '— Aucun processus —', disabled: true },
-          ...list.map(p => ({ value: String(p.id), text: `${p.code} — ${p.name}` })) ]
-})
-
-const requiredKinds = ['Direction','Réalisation','Support']
-const kindsPresent = computed(() => new Set(macrosFiltered.value.map(m => m.kind)))
-const missingKinds = computed(() => requiredKinds.filter(k => !kindsPresent.value.has(k)))
-const macrosLocked = computed(() => selectedProjectId.value && macrosFiltered.value.length === 3 && missingKinds.value.length === 0)
-
+/* Codes auto */
 const byIdString = (list, key='id') => { const map = {}; (list||[]).forEach(it => { map[String(it[key])] = it }); return map }
 const macrosById    = computed(() => byIdString(props.macros))
 const processesById = computed(() => byIdString(props.processes))
 const macroNameById   = (id) => macrosById.value[String(id)]?.name ?? '—'
 const processNameById = (id) => processesById.value[String(id)]?.name ?? '—'
 
-/* Couleur D/R/S gardée pour les tags des LISTES uniquement */
 const macroKindById = computed(() => {
   const map = {}
   ;(props.macros || []).forEach(m => { map[String(m.id)] = m.kind })
@@ -394,64 +352,42 @@ const nextActivityCode = computed(() => {
   return 'A' + String(count + 1).padStart(2, '0') + 'P' + pp + letter
 })
 
-/* ===== Arborescence (TYPE uniquement, pas de couleur D/R/S) ===== */
+/* Arborescence */
 const expandedKeys  = ref({})
-
 function makeMacroNode(m) {
-  return {
-    key: `M-${m.id}`,
-    label: m.name,
-    // pas d'icon pour ne pas avoir l'icône par défaut
-    data: { type: 'macro', id: String(m.id), code: m.code, kind: m.kind },
-    children: []
-  }
+  return { key: `M-${m.id}`, label: m.name, data: { type: 'macro', id: String(m.id), code: m.code, kind: m.kind }, children: [] }
 }
 function makeProcessNode(p, m) {
-  return {
-    key: `P-${p.id}`,
-    label: p.name,
-    data: { type: 'process', id: String(p.id), code: p.code, macroId: String(m.id), kind: m.kind },
-    children: []
-  }
+  return { key: `P-${p.id}`, label: p.name, data: { type: 'process', id: String(p.id), code: p.code, macroId: String(m.id), kind: m.kind }, children: [] }
 }
 function makeActivityNode(a, p, m) {
-  return {
-    key: `A-${a.id}`,
-    label: a.name,
-    data: { type: 'activity', id: String(a.id), code: a.code, processId: String(p.id), macroId: String(m.id), kind: m.kind },
-  }
+  return { key: `A-${a.id}`, label: a.name, data: { type: 'activity', id: String(a.id), code: a.code, processId: String(p.id), macroId: String(m.id), kind: m.kind } }
 }
-
 const treeNodes = computed(() => {
   const macros = macrosFilteredSorted.value
   if (activeTab.value === 'macro') {
-    return macros.map(m => makeMacroNode(m)) // seulement macros
+    return macros.map(m => makeMacroNode(m))
   }
   if (activeTab.value === 'process') {
     return macros.map(m => {
       const root = makeMacroNode(m)
-      root.children = (props.processes || [])
-        .filter(p => String(p.macro_process_id) === String(m.id))
-        .map(p => makeProcessNode(p, m))
+      root.children = (props.processes || []).filter(p => String(p.macro_process_id) === String(m.id)).map(p => makeProcessNode(p, m))
       return root
     })
   }
-  // activity
   return macros.map(m => {
     const root = makeMacroNode(m)
     const procs = (props.processes || []).filter(p => String(p.macro_process_id) === String(m.id))
     root.children = procs.map(p => {
       const pn = makeProcessNode(p, m)
-      pn.children = (props.activities || [])
-        .filter(a => String(a.process_id) === String(p.id))
-        .map(a => makeActivityNode(a, p, m))
+      pn.children = (props.activities || []).filter(a => String(a.process_id) === String(p.id)).map(a => makeActivityNode(a, p, m))
       return pn
     })
     return root
   })
 })
 
-/* Rendu helpers */
+/* UI helpers */
 const nodeLabel    = (n) => n?.label || ''
 const nodeIcon     = (n) => (n?.data?.type === 'activity' ? 'pi pi-file' : 'pi pi-folder')
 const badgeLetter  = (n) => n?.data?.type === 'macro' ? 'M' : (n?.data?.type === 'process' ? 'P' : 'A')
@@ -461,15 +397,13 @@ const typeColorClass = (n) => {
        : t === 'process' ? 'color-type-process'
        : 'color-type-activity'
 }
-
-/* Tags des listes (conserve la couleur D/R/S) */
 const kindSeverity = (k) => ({ 'Direction':'info','Réalisation':'success','Support':'warning' }[k] || 'secondary')
-
 const countProc = (n) => (n?.children || []).length
 const countAct  = (n) => (n?.children || []).reduce((x,c)=> x + (c.children?.length || 0), 0)
 
-/* Routes + Submit */
+/* Actions */
 const r = (name, fallback='/') => (typeof window.route === 'function' ? window.route(name) : fallback)
+
 const submitProcess = () => {
   const payload = { ...processForm.data(), macro_process_id: processForm.macro_process_id ? Number(processForm.macro_process_id) : null }
   if (!payload.macro_process_id) return
@@ -489,8 +423,8 @@ const submitActivity = () => {
   })
 }
 const validateDefaults = () => {
-  if (!selectedProjectId.value) return
-  router.post(r('param.macro.validate','/param/macro/validate-defaults'), { project_id: selectedProjectId.value }, {
+  // Nouvelle version SANS project_id
+  router.post(r('param.macro.validate','/param/macro/validate-defaults'), {}, {
     preserveScroll: true, onSuccess: () => router.reload({ only: ['macros'] })
   })
 }
@@ -515,16 +449,21 @@ const submitEdit = async () => {
 /* Resets */
 const clearProcessName    = () => { processForm.name = '' }
 const clearActivityFields = () => { activityForm.name = ''; activityForm.description = '' }
+
+/* État par défaut : si un dernier macro est stocké, le remettre */
+const last = loadLastMacro()
+if (last && (props.macros||[]).some(m => String(m.id) === String(last))) {
+  processForm.macro_process_id  = String(last)
+  activityForm.macro_process_id = String(last)
+}
 </script>
 
 <style scoped>
-/* ——— Ultra compact global ——— */
+/* (styles identiques à ta version) */
 :where(.topbar, h1,h2,h3,h4,h5,h6,p,small,label,span,th,td,button,input,select,textarea){ letter-spacing:0 }
 :where(h4){ font-size:.9rem; margin:0 }
 :where(h6){ font-size:.8rem; margin:0 }
 :where(label,.form-label){ font-size:.72rem; margin-bottom:.15rem }
-
-/* Espacements compressés */
 .mb-3{ margin-bottom:.35rem!important }
 .mb-2{ margin-bottom:.25rem!important }
 .mb-1{ margin-bottom:.15rem!important }
@@ -535,20 +474,12 @@ const clearActivityFields = () => { activityForm.name = ''; activityForm.descrip
 .px-3{ padding-left:.4rem!important; padding-right:.4rem!important }
 .g-2 { --bs-gutter-x:.35rem; --bs-gutter-y:.35rem }
 .g-1 { --bs-gutter-x:.25rem; --bs-gutter-y:.25rem }
-
-/* Inputs & boutons XS */
-.form-control-sm, .form-select-sm, .input-group-sm>.form-control, .input-group-sm>.form-select{
-  font-size:.75rem; height:26px; padding:.15rem .45rem
-}
+.form-control-sm, .form-select-sm, .input-group-sm>.form-control, .input-group-sm>.form-select{ font-size:.75rem; height:26px; padding:.15rem .45rem }
 .btn{ padding:.2rem .45rem; font-size:.72rem; line-height:1.1; border-radius:.35rem }
 .btn-sm{ padding:.15rem .4rem; font-size:.7rem }
-
-/* Cards compactes */
 .card, .b-card{ border-radius:.55rem }
 .card-header, .b-card-header{ padding:.35rem .5rem!important }
 .card-body, .b-card-body{ padding:.5rem!important }
-
-/* PrimeVue DataTable ultra-flat */
 .pv-table :deep(.p-datatable-header),
 .pv-table :deep(.p-datatable-footer){ display:none }
 .pv-table.flat :deep(.p-datatable-thead > tr > th){
@@ -558,52 +489,20 @@ const clearActivityFields = () => { activityForm.name = ''; activityForm.descrip
   border:1px solid #eef2f7;vertical-align:middle;padding:.25rem .35rem;font-size:.72rem
 }
 .pv-table.flat :deep(.p-datatable-tbody > tr){ height:26px }
-
-/* Tags */
 :deep(.p-tag){ font-weight:600; font-size:.68rem; line-height:1; padding:.15rem .35rem; border-radius:.35rem; height:18px }
-
-/* Tree compact */
 :deep(.p-tree){ width:100% }
 .pv-tree :deep(.p-tree-container .p-treenode-content){ padding:.25rem .35rem; border-radius:.4rem; font-size:.74rem }
 .pv-tree :deep(.p-treenode-content:hover){ background:#f8fafc }
 .pv-tree :deep(.p-tree-toggler){ width:1.1rem; height:1.1rem }
-
-/* Icône unique + lettre intégrée (couleur par TYPE seulement) */
-.icon-badge{
-  position:relative; display:inline-flex; align-items:center; justify-content:center;
-  width:22px; height:18px; border-radius:.45rem;
-}
+.icon-badge{ position:relative; display:inline-flex; align-items:center; justify-content:center; width:22px; height:18px; border-radius:.45rem; }
 .node-icon{ font-size:1rem; color:var(--clr-type, #64748b) }
-.badge-letter{
-  position:absolute; top:50%; left:50%; transform:translate(-50%,-48%);
-  font-size:.7rem; font-weight:900; color:#111; text-shadow:none; pointer-events:none;
-}
-
-/* Couleurs TYPE (Macro / Process / Activité) */
-.color-type-macro{    --clr-type:#0f766e } /* teal-700 */
-.color-type-process{  --clr-type:#7c3aed } /* violet-600 */
-.color-type-activity{ --clr-type:#ef4444 } /* red-500 */
-
-/* Code avant nom dans l’arbo */
-.code-chip{
-  background:#eef2f7;
-  border:1px solid #e2e8f0;
-  border-radius:.35rem;
-  padding:.05rem .35rem;
-  font-size:.72rem;
-  color:#0f172a;
-}
-
-/* Table + textes */
+.badge-letter{ position:absolute; top:50%; left:50%; transform:translate(-50%,-48%); font-size:.7rem; font-weight:900; color:#111; text-shadow:none; pointer-events:none; }
+.color-type-macro{    --clr-type:#0f766e }
+.color-type-process{  --clr-type:#7c3aed }
+.color-type-activity{ --clr-type:#ef4444 }
+.code-chip{ background:#eef2f7; border:1px solid #e2e8f0; border-radius:.35rem; padding:.05rem .35rem; font-size:.72rem; color:#0f172a; }
 .table td,.table th{ padding:.35rem .45rem; font-size:.74rem }
 .small, small{ font-size:.7rem }
-
-/* Textareas XS */
 .compact-textarea{ min-height:64px; resize:none; font-size:.75rem }
-
-/* Mono */
-.font-monospace{
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono","Courier New", monospace;
-  font-size:.74rem
-}
+.font-monospace{ font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono","Courier New", monospace; font-size:.74rem }
 </style>

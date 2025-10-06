@@ -10,7 +10,6 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 use Inertia\Response;
-use App\Models\Tenant;
 use Illuminate\Support\Facades\Session;
 
 class AuthenticatedSessionController extends Controller
@@ -35,22 +34,52 @@ class AuthenticatedSessionController extends Controller
         $request->session()->regenerate();
 
         $user = auth()->user();
-        $tenants = $user->tenants;
 
-        if ($tenants->isEmpty()) {
-            // User has no tenants - this shouldn't happen in a proper setup
-            Auth::logout();
-            return redirect()->route('login')->withErrors(['email' => 'No tenants assigned to this account.']);
-        }
-
-        if ($tenants->count() === 1) {
-            // User has only one tenant, auto-select it
-            session(['tenant_id' => $tenants->first()->id]);
+        // Admin global : uniquement par email (aucun rôle/permission)
+        if ($this->isGlobalAdmin($user)) {
+            session(['tenant_id' => null]);
+            session(['is_global_admin' => true]);
             return redirect()->intended(route('dashboard', absolute: false));
         }
 
-        // User has multiple tenants, let them choose
+        // Récupération des tenants de l'utilisateur
+        $tenants = $user->tenants ?? collect();
+
+        if ($tenants->isEmpty()) {
+            Auth::logout();
+            return redirect()->route('login')->withErrors(['email' => 'Aucun tenant assigné à ce compte.']);
+        }
+
+        if ($tenants->count() === 1) {
+            session(['tenant_id' => $tenants->first()->id]);
+            session(['is_global_admin' => false]);
+            return redirect()->intended(route('dashboard', absolute: false));
+        }
+
         return redirect()->route('select.tenant');
+    }
+
+    /**
+     * Vérifier si l'utilisateur est admin global (sans rôles/permissions)
+     */
+    private function isGlobalAdmin($user): bool
+    {
+        if (! $user) {
+            return false;
+        }
+
+        // Option A : email fixe
+        // return $user->email === 'admin@diaddem.local';
+
+        // Option B : liste d’emails autorisés via .env (séparés par virgules)
+        // Ex: GLOBAL_ADMINS="admin@diaddem.local,root@example.com"
+        try {
+            $whitelist = array_filter(array_map('trim', explode(',', (string) env('GLOBAL_ADMINS', 'admin@diaddem.local'))));
+            return in_array($user->email, $whitelist, true);
+        } catch (\Throwable $e) {
+            \Log::warning('isGlobalAdmin: erreur lecture GLOBAL_ADMINS', ['error' => $e->getMessage()]);
+            return $user->email === 'admin@diaddem.local';
+        }
     }
 
     /**
@@ -58,11 +87,8 @@ class AuthenticatedSessionController extends Controller
      */
     public function destroy(Request $request): RedirectResponse
     {
-        // Clean up tenant session
-        Session::forget('tenant_id');
-        
+        Session::forget(['tenant_id', 'is_global_admin']);
         Auth::guard('web')->logout();
-
         $request->session()->invalidate();
         $request->session()->regenerateToken();
 

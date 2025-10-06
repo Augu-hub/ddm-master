@@ -12,27 +12,50 @@ class BootstrapMenus extends Command
 
     public function handle(): int
     {
-        $this->line('<info>DDM Bootstrap</info>');
+        $this->line('<info>=== DDM Bootstrap ===</info>');
 
+        // Options de migration
         if ($this->option('fresh')) {
-            $this->warn('-> php artisan migrate:fresh');
+            $this->warn('-> Migration complète (fresh)');
             Artisan::call('migrate:fresh', ['--force' => true]);
-            $this->output->write(Artisan::output());
         } else {
-            $this->warn('-> php artisan migrate');
+            $this->warn('-> Migration standard');
             Artisan::call('migrate', ['--force' => true]);
-            $this->output->write(Artisan::output());
+        }
+        $this->output->write(Artisan::output());
+
+        // Seeders dans l'ordre logique
+        $seeders = [
+            
+            'GlobalMenuSeeder' => 'Structure des menus',
+            'TenantMenuPermissionsSeeder' => 'Permissions par tenant',
+            'SuperAdminSeeder' => 'Compte super admin'
+        ];
+
+        foreach ($seeders as $seeder => $description) {
+            $this->warn("-> {$description}");
+            try {
+                Artisan::call('db:seed', [
+                    '--class' => "Database\\Seeders\\{$seeder}",
+                    '--force' => true
+                ]);
+                $this->output->write(Artisan::output());
+            } catch (\Exception $e) {
+                $this->error("❌ Erreur avec {$seeder}: " . $e->getMessage());
+            }
         }
 
-        $this->warn('-> Seeding MenuSeeder');
-        Artisan::call('db:seed', ['--class' => \Database\Seeders\MenuSeeder::class, '--force' => true]);
-        $this->output->write(Artisan::output());
+        // Affichage des informations de connexion
+        $this->info('✅ Bootstrap terminé avec succès !');
+        $this->line('');
+        $this->line('=== INFORMATIONS DE CONNEXION ===');
+        $this->line('📧 Email: <comment>admin@diaddem.local</comment>');
+        $this->line('🔑 Mot de passe: <comment>Admin123!</comment>');
+        $this->line('👤 Rôle: <comment>Super Administrateur</comment>');
+        $this->line('');
+        $this->warn('⚠️  IMPORTANT: Changez le mot de passe après la première connexion !');
+        $this->line('');
 
-        $this->warn('-> Seeding RolesPermissionsSeeder');
-        Artisan::call('db:seed', ['--class' => \Database\Seeders\RolesPermissionsSeeder::class, '--force' => true]);
-        $this->output->write(Artisan::output());
-
-        $this->info('✔ Terminé. Connecte-toi avec admin@diaddem.local / admin123 (à changer !)');
         return Command::SUCCESS;
     }
 }

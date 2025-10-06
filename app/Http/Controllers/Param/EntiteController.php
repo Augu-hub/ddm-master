@@ -4,27 +4,24 @@ namespace App\Http\Controllers\Param;
 
 use App\Http\Controllers\Controller;
 use App\Models\Param\Entite;
-use App\Models\Param\Projet;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
+use Illuminate\Support\Str;
 use Inertia\Inertia;
 
 class EntiteController extends Controller
 {
     public function index(Request $request)
     {
-        $entities = Entite::with(['project:id,name','parent:id,name,level,code_base'])
+        $entities = Entite::with(['parent:id,name,level,code_base'])
             ->orderBy('name')
             ->get();
 
-        $projects = Projet::orderBy('name')->get(['id','name']);
-
         // Parents proposés (on expose level & code_base pour l’UI)
-        $parents  = Entite::orderBy('name')->get(['id','name','project_id','level','code_base']);
+        $parents  = Entite::orderBy('name')->get(['id','name','level','code_base']);
 
         return Inertia::render('dashboards/Param/Entities/index', [
             'entities' => $entities,
-            'projects' => $projects,
             'parents'  => $parents,
         ]);
     }
@@ -37,16 +34,16 @@ class EntiteController extends Controller
     public function store(Request $request)
     {
         $data = $request->validate([
-            'project_id' => ['required','exists:tenant.projects,id'],
-            'name'       => ['required','string','max:255'],
-            'description'=> ['nullable','string'],
-            'parent_id'  => ['nullable','exists:tenant.entities,id'],
-            'code_base'  => ['nullable','string','max:255'],
-            'logo'       => ['nullable','string','max:255'],
-            'phone'      => ['nullable','string','max:50'],
-            'email'      => ['nullable','email','max:255'],
-            'leader'     => ['nullable','string','max:255'],
-            'address'    => ['nullable','string'],
+            // ❌ plus de project_id
+            'name'        => ['required','string','max:255'],
+            'description' => ['nullable','string'],
+            'parent_id'   => ['nullable','exists:tenant.entities,id'],
+            'code_base'   => ['nullable','string','max:255'],
+            'logo'        => ['nullable','string','max:255'],
+            'phone'       => ['nullable','string','max:50'],
+            'email'       => ['nullable','email','max:255'],
+            'leader'      => ['nullable','string','max:255'],
+            'address'     => ['nullable','string'],
         ]);
 
         // Niveau auto
@@ -55,11 +52,7 @@ class EntiteController extends Controller
 
         // Code base auto si vide
         if (empty($data['code_base'])) {
-            $data['code_base'] = Entite::generateCodeBase(
-                projectId: $data['project_id'],
-                parentId:  $data['parent_id'] ?? null,
-                name:      $data['name']
-            );
+            $data['code_base'] = $this->makeCodeBase($data['parent_id'] ?? null, $data['name']);
         }
 
         Entite::create($data);
@@ -72,23 +65,21 @@ class EntiteController extends Controller
     public function show(Entite $entite)
     {
         return Inertia::render('dashboards/Param/Entities/Show', [
-            'entite' => $entite->load('project:id,name','parent:id,name'),
+            'entite' => $entite->load('parent:id,name'),
         ]);
     }
 
     public function edit(Entite $entite)
     {
-        $projects = Projet::orderBy('name')->get(['id','name']);
         $parents  = Entite::where('id','<>',$entite->id)
                         ->orderBy('name')
-                        ->get(['id','name','project_id','level','code_base']);
+                        ->get(['id','name','level','code_base']);
 
         return Inertia::render('dashboards/Param/Entities/Edit', [
             'entite'   => $entite->only([
-                'id','project_id','name','description','level','parent_id',
+                'id','name','description','level','parent_id',
                 'code_base','logo','phone','email','leader','address'
             ]),
-            'projects' => $projects,
             'parents'  => $parents,
         ]);
     }
@@ -96,20 +87,20 @@ class EntiteController extends Controller
     public function update(Request $request, Entite $entite)
     {
         $data = $request->validate([
-            'project_id' => ['required','exists:tenant.projects,id'],
-            'name'       => ['required','string','max:255'],
-            'description'=> ['nullable','string'],
-            'parent_id'  => [
+            // ❌ plus de project_id
+            'name'        => ['required','string','max:255'],
+            'description' => ['nullable','string'],
+            'parent_id'   => [
                 'nullable',
                 'exists:tenant.entities,id',
                 Rule::notIn([$entite->id]),
             ],
-            'code_base'  => ['nullable','string','max:255'],
-            'logo'       => ['nullable','string','max:255'],
-            'phone'      => ['nullable','string','max:50'],
-            'email'      => ['nullable','email','max:255'],
-            'leader'     => ['nullable','string','max:255'],
-            'address'    => ['nullable','string'],
+            'code_base'   => ['nullable','string','max:255'],
+            'logo'        => ['nullable','string','max:255'],
+            'phone'       => ['nullable','string','max:50'],
+            'email'       => ['nullable','email','max:255'],
+            'leader'      => ['nullable','string','max:255'],
+            'address'     => ['nullable','string'],
         ]);
 
         // Niveau auto
@@ -118,11 +109,7 @@ class EntiteController extends Controller
 
         // Code base auto si vide
         if (empty($data['code_base'])) {
-            $data['code_base'] = Entite::generateCodeBase(
-                projectId: $data['project_id'],
-                parentId:  $data['parent_id'] ?? null,
-                name:      $data['name']
-            );
+            $data['code_base'] = $this->makeCodeBase($data['parent_id'] ?? null, $data['name']);
         }
 
         $entite->update($data);
@@ -138,26 +125,52 @@ class EntiteController extends Controller
         return back()->with('success','Entité supprimée.');
     }
 
-public function apiList()
-{
-    $entities = Entite::with(['project:id,name'])
-        ->orderBy('name')
-        ->get(['id', 'name', 'code_base', 'level', 'project_id']);
-
-    return response()->json($entities);
-}
-public function getMenuEntities(Request $request)
+    public function apiList()
     {
-        $entities = Entite::where('project_id', auth()->user()->current_project_id)
-            ->orderBy('level')
+        $entities = Entite::orderBy('name')
+            ->get(['id', 'name', 'code_base', 'level', 'parent_id']);
+
+        return response()->json($entities);
+    }
+
+    public function getMenuEntities(Request $request)
+    {
+        // ❌ plus de filtre par projet courant
+        $entities = Entite::orderBy('level')
             ->orderBy('name')
             ->get(['id', 'name', 'code_base']);
 
         return response()->json($entities);
     }
 
+    /**
+     * Génère un code_base à partir du parent (si présent) ou du nom.
+     */
+    private function makeCodeBase(?int $parentId, string $name): string
+    {
+        $prefix = null;
 
+        if ($parentId) {
+            $prefix = Entite::whereKey($parentId)->value('code_base');
+        }
 
+        if (!$prefix) {
+            $raw = Str::of($name)
+                ->ascii()                // supprime diacritiques
+                ->upper()
+                ->replaceMatches('/[^A-Z0-9]/', '')
+                ->value();
+            $base = substr($raw, 0, 3);
+            $prefix = $base !== '' ? str_pad($base, 3, 'X') : 'ENT';
+        }
 
+        // Nombre de frères/soeurs au même parent (ou racine)
+        $siblingsCount = Entite::when($parentId, fn($q) => $q->where('parent_id', $parentId),
+                                      fn($q) => $q->whereNull('parent_id'))
+                               ->count();
 
+        $seq = str_pad((string)($siblingsCount + 1), 2, '0', STR_PAD_LEFT);
+
+        return "{$prefix}-{$seq}";
+    }
 }
