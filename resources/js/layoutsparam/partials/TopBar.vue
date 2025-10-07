@@ -21,7 +21,7 @@
           @click="toggleShowSearchModal"
         >
           <i class="ti ti-search fs-18"></i>
-          <span class="me-2">Search something..</span>
+          <span class="me-2">Rechercher...</span>
           <span class="fw-medium ms-auto">⌘K</span>
         </div>
 
@@ -94,10 +94,10 @@
                         <i class="ti ti-settings fs-22 align-middle"></i>
                       </a>
                       <div class="dropdown-menu dropdown-menu-end">
-                        <a href="#" class="dropdown-item">Mark as Read</a>
-                        <a href="#" class="dropdown-item">Delete All</a>
-                        <a href="#" class="dropdown-item">Do not Disturb</a>
-                        <a href="#" class="dropdown-item">Other Settings</a>
+                        <a href="#" class="dropdown-item">Marquer comme lu</a>
+                        <a href="#" class="dropdown-item">Tout supprimer</a>
+                        <a href="#" class="dropdown-item">Ne pas déranger</a>
+                        <a href="#" class="dropdown-item">Autres paramètres</a>
                       </div>
                     </div>
                   </div>
@@ -128,7 +128,7 @@
                                     : ''
                           "
                         ></i>
-                        <span class="visually-hidden">unread messages</span>
+                        <span class="visually-hidden">messages non lus</span>
                       </span>
                     </span>
 
@@ -158,7 +158,7 @@
               >
                 <div>
                   <Icon icon="line-md:bell-twotone-alert-loop" class="fs-80 text-secondary mt-2" />
-                  <h4 class="fw-semibold fst-italic lh-base mb-0 mt-3">Hey! 👋 <br />You have no any notifications</h4>
+                  <h4 class="fw-semibold fst-italic lh-base mb-0 mt-3">Aucune notification</h4>
                 </div>
               </div>
 
@@ -166,7 +166,7 @@
                 href="#"
                 class="dropdown-item notification-item position-fixed text-reset text-decoration-underline link-offset-2 fw-bold notify-item border-top border-light z-2 bottom-0 py-2 text-center"
               >
-                View All
+                Voir tout
               </a>
             </div>
           </DropDown>
@@ -226,20 +226,41 @@
             >
               <img :src="userAvatar" width="32" class="rounded-circle me-lg-2 d-flex" alt="user-image" />
               <span class="d-lg-flex flex-column d-none gap-1">
-                <h5 class="my-0">{{ userName }}</h5>
-                <h6 class="fw-normal my-0">{{ userEmail }}</h6>
+                <h5 class="my-0 fw-bold text-primary">{{ displayTenantName }}</h5>
+                <h6 class="fw-normal my-0 text-muted fs-13">{{ userName }}</h6>
               </span>
               <i class="ti ti-chevron-down d-none d-lg-block ms-2 align-middle"></i>
             </a>
 
             <div class="dropdown-menu dropdown-menu-end">
-              <div class="dropdown-header noti-title">
-                <h6 class="text-overflow m-0">Bonjour, {{ userName }} !</h6>
-                <div class="fs-12 text-muted" v-if="userEmail">{{ userEmail }}</div>
-                <div class="fs-12 text-muted" v-if="userTenantName">Tenant : {{ userTenantName }}</div>
-                <div class="fs-12 text-muted" v-if="isGlobalAdmin">Super Admin</div>
+              <!-- En-tête avec informations utilisateur -->
+              <div class="dropdown-header noti-title border-bottom pb-3 mb-2">
+                <h6 class="text-overflow m-0 mb-1">Bonjour, {{ userName }} !</h6>
+                
+                <div class="d-flex flex-column gap-1 mt-2">
+                  <!-- Email -->
+                  <div class="d-flex align-items-center text-muted" v-if="userEmail">
+                    <i class="ti ti-mail fs-14 me-2"></i>
+                    <span class="fs-12">{{ userEmail }}</span>
+                  </div>
+                  
+                  <!-- Tenant -->
+                  <div class="d-flex align-items-center text-primary" v-if="userTenantName">
+                    <i class="ti ti-building fs-14 me-2"></i>
+                    <span class="fs-12 fw-semibold">{{ userTenantName }}</span>
+                  </div>
+                  
+                  <!-- Badge Super Admin -->
+                  <div v-if="isGlobalAdmin" class="mt-1">
+                    <span class="badge bg-danger-subtle text-danger">
+                      <i class="ti ti-shield-check fs-12 me-1"></i>
+                      Super Admin
+                    </span>
+                  </div>
+                </div>
               </div>
 
+              <!-- Menu items -->
               <Link v-for="(item, idx) in profileMenuItems" :key="idx" href="#" class="dropdown-item">
                 <i :class="item.icon" class="fs-17 me-1 align-middle"></i>
                 <span class="align-middle">{{ item.label }}</span>
@@ -247,7 +268,7 @@
 
               <div class="dropdown-divider"></div>
 
-              <!-- LOGOUT -->
+              <!-- Bouton de déconnexion -->
               <button type="button" class="dropdown-item text-danger d-flex align-items-center gap-2" @click="doLogout">
                 <i class="ti ti-logout-2 fs-17"></i>
                 <span class="align-middle">Se déconnecter</span>
@@ -264,7 +285,7 @@
     <b-card no-body class="mb-0">
       <div class="d-flex align-items-center flex-row px-3 py-2" id="top-search">
         <i class="ti ti-search fs-22"></i>
-        <b-form-input type="search" class="border-0" id="search-modal-input" placeholder="Search for actions, people," />
+        <b-form-input type="search" class="border-0" id="search-modal-input" placeholder="Rechercher des actions, personnes..." />
         <b-button :variant="null" type="button" class="p-0" @click="toggleShowSearchModal">[esc]</b-button>
       </div>
     </b-card>
@@ -290,18 +311,29 @@ import { Icon } from '@iconify/vue'
 const page = usePage() as any
 const currentUser = computed<any | null>(() => page?.props?.auth?.user ?? null)
 const userName = computed<string>(() => currentUser.value?.name || 'Utilisateur')
-const userEmail = computed<string>(() => currentUser.value?.email || '—')
+const userEmail = computed<string>(() => currentUser.value?.email || '')
 const userAvatar = computed<string>(() => currentUser.value?.avatar_url || avatar1)
 const userTenantName = computed<string | null>(() => currentUser.value?.tenant?.name ?? null)
 const isGlobalAdmin = computed<boolean>(() => !!currentUser.value?.is_global_admin)
 
+/* ===================== Display name (Tenant prioritaire) ===================== */
+const displayTenantName = computed<string>(() => {
+  if (userTenantName.value) return userTenantName.value
+  if (isGlobalAdmin.value) return 'Administration Globale'
+  return 'Mon Espace'
+})
+
 /* ===================== Search modal ===================== */
 const showSearchModal = ref(false)
-const toggleShowSearchModal = () => { showSearchModal.value = !showSearchModal.value }
+const toggleShowSearchModal = () => { 
+  showSearchModal.value = !showSearchModal.value 
+}
 
 /* ===================== Theme & layout ===================== */
 const { layout, setTheme, setLeftSideBarSize, init } = useLayoutStore()
-const toggleTheme = () => { setTheme(layout.theme === 'light' ? 'dark' : 'light') }
+const toggleTheme = () => { 
+  setTheme(layout.theme === 'light' ? 'dark' : 'light') 
+}
 
 const toggleLeftSideBar = () => {
   if (layout.leftSideBarSize === 'condensed') return setLeftSideBarSize('default')
@@ -311,7 +343,9 @@ const toggleLeftSideBar = () => {
   showBackdrop()
 }
 
-onMounted(() => { init() })
+onMounted(() => { 
+  init() 
+})
 
 const showBackdrop = () => {
   const backdrop = document.createElement('div') as HTMLDivElement
@@ -320,6 +354,7 @@ const showBackdrop = () => {
   document.body.appendChild(backdrop)
   document.body.style.overflow = 'hidden'
   if (window.innerWidth > 1040) document.body.style.paddingRight = '15px'
+  
   backdrop.addEventListener('click', function () {
     toggleDocumentAttribute('class', '')
     document.body.removeChild(backdrop)
@@ -328,16 +363,13 @@ const showBackdrop = () => {
   })
 }
 
-/** ----------------------------
- *  Logout (Inertia + CSRF)
- *  - Utilise Ziggy si présent: route('logout')
- *  - Sinon fallback '/logout'
- * -----------------------------*/
+/* ===================== Logout ===================== */
 const doLogout = () => {
   const ziggy = (window as any)?.route
   const url = ziggy ? ziggy('logout') : '/logout'
+  
   router.post(url, {}, {
-    onError: () => console.error('Logout error'),
+    onError: () => console.error('Erreur lors de la déconnexion'),
     preserveScroll: true
   })
 }

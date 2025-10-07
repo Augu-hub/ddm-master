@@ -3,7 +3,6 @@
 namespace App\Http\Controllers\Param;
 
 use App\Http\Controllers\Controller;
-use App\Models\Param\Projet;
 use App\Models\Param\Fonction;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -15,40 +14,25 @@ class FonctionController extends Controller
 {
     public function index(Request $request)
     {
-        $projectId = $request->integer('project_id');
-        $projects  = Projet::orderBy('name')->get(['id','name']);
-
-        $functions = $projectId
-            ? Fonction::with(['parent:id,name,project_id'])
-                ->inProject($projectId)
-                ->orderBy('name')
-                // IMPORTANT: inclure avatar_path pour que l'accessor avatar_url fonctionne
-                ->get(['id','project_id','name','character','parent_id','avatar_path'])
-            : collect();
+        // Mode GLOBAL : plus de projet
+        $functions = Fonction::with(['parent:id,name'])
+            ->orderBy('name')
+            // IMPORTANT: inclure avatar_path pour que l'accessor avatar_url fonctionne
+            ->get(['id','name','character','parent_id','avatar_path']);
 
         return Inertia::render('dashboards/Param/Functions/index', [
-            'projects'  => $projects,
             'functions' => $functions,
-            'filters'   => ['project_id' => $projectId],
         ]);
     }
 
     public function store(Request $request)
     {
         $data = $request->validate([
-            'project_id'    => ['required','exists:tenant.projects,id'],
-            'name'          => ['required','string','max:255'],
-            'character'     => ['nullable','string','max:50'],
-            'parent_id'     => ['nullable','integer', Rule::exists('tenant.functions','id')],
-            'avatar'        => ['nullable','image','max:2048'],    // <— image (2 Mo)
+            'name'      => ['required','string','max:255'],
+            'character' => ['nullable','string','max:50'],
+            'parent_id' => ['nullable','integer', Rule::exists('tenant.functions','id')],
+            'avatar'    => ['nullable','image','max:2048'], // ≤ 2Mo
         ]);
-
-        if (!empty($data['parent_id'])) {
-            $parent = Fonction::findOrFail($data['parent_id']);
-            if ((int)$parent->project_id !== (int)$data['project_id']) {
-                return back()->withErrors(['parent_id' => 'Le parent doit appartenir au même projet.'])->withInput();
-            }
-        }
 
         DB::connection('tenant')->transaction(function () use ($request, $data) {
             $avatarPath = null;
@@ -57,7 +41,6 @@ class FonctionController extends Controller
             }
 
             Fonction::create([
-                'project_id'  => $data['project_id'],
                 'name'        => $data['name'],
                 'character'   => $data['character'] ?? null,
                 'parent_id'   => $data['parent_id'] ?? null,
@@ -65,34 +48,23 @@ class FonctionController extends Controller
             ]);
         });
 
-        return redirect()->route('param.function.index', ['project_id' => $data['project_id']])
+        return redirect()
+            ->route('param.function.index')
             ->with('success', 'Fonction créée.');
     }
 
     public function update(Request $request, Fonction $function)
     {
         $data = $request->validate([
-            'project_id'    => ['required','exists:tenant.projects,id'],
             'name'          => ['required','string','max:255'],
             'character'     => ['nullable','string','max:50'],
-            'parent_id'     => [
-                'nullable','integer',
-                Rule::exists('tenant.functions','id'),
-                Rule::notIn([$function->id]),
-            ],
-            'avatar'        => ['nullable','image','max:2048'], // <— fichier
-            'remove_avatar' => ['nullable','boolean'],          // <— case pour supprimer
+            'parent_id'     => ['nullable','integer', Rule::exists('tenant.functions','id'), Rule::notIn([$function->id])],
+            'avatar'        => ['nullable','image','max:2048'],
+            'remove_avatar' => ['nullable','boolean'],
         ]);
 
-        if (!empty($data['parent_id'])) {
-            $parent = Fonction::findOrFail($data['parent_id']);
-            if ((int)$parent->project_id !== (int)$data['project_id']) {
-                return back()->withErrors(['parent_id' => 'Le parent doit appartenir au même projet.'])->withInput();
-            }
-        }
-
         DB::connection('tenant')->transaction(function () use ($request, $function, $data) {
-            // Supprimer l’ancien avatar si demandé
+            // Suppression demandée ?
             if (!empty($data['remove_avatar']) && $function->avatar_path) {
                 Storage::disk('public')->delete($function->avatar_path);
                 $function->avatar_path = null;
@@ -106,21 +78,19 @@ class FonctionController extends Controller
                 $function->avatar_path = $request->file('avatar')->store('functions/avatars', 'public');
             }
 
-            $function->project_id = $data['project_id'];
-            $function->name       = $data['name'];
-            $function->character  = $data['character'] ?? null;
-            $function->parent_id  = $data['parent_id'] ?? null;
+            $function->name      = $data['name'];
+            $function->character = $data['character'] ?? null;
+            $function->parent_id = $data['parent_id'] ?? null;
             $function->save();
         });
 
-        return redirect()->route('param.function.index', ['project_id' => $data['project_id']])
+        return redirect()
+            ->route('param.function.index')
             ->with('success', 'Fonction mise à jour.');
     }
 
-    public function destroy(Request $request, Fonction $function)
+    public function destroy(Fonction $function)
     {
-        $projectId = $request->integer('project_id');
-
         DB::connection('tenant')->transaction(function () use ($function) {
             if ($function->avatar_path) {
                 Storage::disk('public')->delete($function->avatar_path);
@@ -128,7 +98,8 @@ class FonctionController extends Controller
             $function->delete();
         });
 
-        return redirect()->route('param.function.index', ['project_id' => $projectId])
+        return redirect()
+            ->route('param.function.index')
             ->with('success', 'Fonction supprimée.');
     }
 }

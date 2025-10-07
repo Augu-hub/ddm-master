@@ -10,11 +10,9 @@
             <h4 class="m-0 fw-semibold">Organigramme des entités</h4>
             <small class="text-muted ms-2">Hiérarchie (avatar + liaisons orthogonales)</small>
           </div>
+
+          <!-- Zoom seulement (projet supprimé) -->
           <div class="d-flex align-items-center gap-2">
-            <b-input-group size="sm" class="w-auto">
-              <b-input-group-text><i class="ti ti-briefcase"></i></b-input-group-text>
-              <b-form-select v-model="selectedProjectId" :options="projectOptions" />
-            </b-input-group>
             <div class="d-flex align-items-center gap-1">
               <small class="text-muted">Zoom</small>
               <input type="range" min="50" max="160" step="10" v-model.number="zoom" />
@@ -26,11 +24,7 @@
 
     <b-card no-body class="shadow-sm">
       <b-card-body class="p-2">
-        <b-alert v-if="!selectedProjectId" show variant="secondary" class="py-2 px-3 mb-2">
-          Sélectionnez un projet pour afficher l’organigramme.
-        </b-alert>
-
-        <div v-else class="canvas-wrap">
+        <div class="canvas-wrap">
           <svg :viewBox="viewBox" preserveAspectRatio="xMinYMin meet" :style="svgStyle">
             <!-- Liaisons orthogonales -->
             <g class="edges">
@@ -90,22 +84,12 @@ import { computed, ref } from 'vue'
 import VerticalLayout from '@/layoutsparam/VerticalLayout.vue'
 
 const props = defineProps({
-  projects:  { type: Array,  default: () => [] },
-  entities:  { type: Array,  default: () => [] }, // {id, project_id, name, code, parent_id, avatar_url?}
-  filters:   { type: Object, default: () => ({ project_id: null }) },
+  // GLOBAL: plus de projects/filters
+  entities:  { type: Array,  default: () => [] }, // {id, name, code, parent_id, avatar_url?}
 })
 
-/* Sélection projet */
-const selectedProjectId = ref(props.filters?.project_id ?? (props.projects?.[0]?.id ?? null))
-const projectOptions = computed(() => [
-  { value: null, text: '— Sélectionner un projet —', disabled: true },
-  ...(props.projects||[]).map(p => ({ value: p.id, text: p.name }))
-])
-
-/* Données filtrées */
-const items = computed(() =>
-  (props.entities||[]).filter(e => String(e.project_id) === String(selectedProjectId.value))
-)
+/* Données (globales) */
+const items = computed(() => props.entities)
 
 /* Tailles & positions */
 const NODE_W = 280, NODE_H = 120
@@ -179,7 +163,7 @@ const nodeById = computed(() =>
   Object.fromEntries(positionedNodes.value.map(n => [String(n.id), n]))
 )
 
-/* Arêtes orthogonales + nœuds */
+/* Arêtes orthogonales */
 const edges = computed(() => {
   const res = []
   items.value.forEach(it => {
@@ -187,8 +171,8 @@ const edges = computed(() => {
     const child = nodeById.value[String(it.id)]
     const par   = nodeById.value[String(it.parent_id)]
     if (!child || !par) return
-    const x1 = par.x + NODE_W/2, y1 = par.y + NODE_H   // bas parent
-    const x2 = child.x + NODE_W/2, y2 = child.y        // haut enfant
+    const x1 = par.x + NODE_W/2, y1 = par.y + NODE_H
+    const x2 = child.x + NODE_W/2, y2 = child.y
     const yMid = (y1 + y2) / 2
     const points = `${x1},${y1} ${x1},${yMid} ${x2},${yMid} ${x2},${y2}`
     const joints = [ {x:x1, y:yMid}, {x:x2, y:yMid} ]
@@ -211,28 +195,11 @@ const viewBox = computed(() => {
 
 <style scoped>
 .canvas-wrap{ width:100%; height:70vh; overflow:auto; background:#fafafa; border:1px solid #e5e7eb; border-radius:.5rem }
-
-/* Liaisons */
 .edge-ortho{ stroke:#64748b; stroke-width:1.2; fill:none }
 .joint{ fill:#ffffff; stroke:#64748b; stroke-width:1.2 }
-
-/* Boîte */
 .uml-box{ fill:#ffffff; stroke:#cbd5e1; stroke-width:1.2 }
-
-/* Avatar */
 .avatar-ring{ fill:#e2e8f0; stroke:#cbd5e1; stroke-width:1 }
-.avatar-initials{
-  font: 800 12px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, "Courier New", monospace;
-  fill:#0f172a;
-}
-
-/* Textes centrés */
-.uml-title{
-  font: 700 13px/1.2 ui-sans-serif,system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif;
-  fill:#0f172a;
-}
-.uml-sub{
-  font: 600 11px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, "Courier New", monospace;
-  fill:#475569;
-}
+.avatar-initials{ font: 800 12px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, "Courier New", monospace; fill:#0f172a; }
+.uml-title{ font: 700 13px/1.2 ui-sans-serif,system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif; fill:#0f172a; }
+.uml-sub{ font: 600 11px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, "Courier New", monospace; fill:#475569; }
 </style>

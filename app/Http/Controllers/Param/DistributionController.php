@@ -14,11 +14,10 @@ class DistributionController extends Controller
 
     public function index(Request $request)
     {
-        $projects = DB::table('projects')->orderBy('name')->get(['id','name']);
-        $entities = DB::table('entities')->orderBy('name')->get(['id','name','project_id']);
+        // Plus de projets ici
+        $entities = DB::table('entities')->orderBy('name')->get(['id','name']);
 
         return Inertia::render('dashboards/Param/Distribution/index', [
-            'projects' => $projects,
             'entities' => $entities,
             'routes' => [
                 'mpa' => [
@@ -33,6 +32,7 @@ class DistributionController extends Controller
                     'commit'  => route('param.functions.commit'),
                 ],
                 'mpsresp' => [
+                    // gardé si utile côté UI
                     'tree'     => route('param.mpsresp.tree'),
                     'current'  => route('param.mpsresp.current'),
                     'assign'   => route('param.mpsresp.assign'),
@@ -44,17 +44,19 @@ class DistributionController extends Controller
 
     public function tree(Request $r)
     {
-        $projectId = (int) $r->integer('project_id');
-        return response()->json($this->svc->fetchTreeByProject($projectId));
+        // Arbo globale (sans filtrage projet)
+        // Adapte selon ton service : fetchTree() ou fetchTreeByProject(null)
+        return response()->json($this->svc->fetchTree());
+        // return response()->json($this->svc->fetchTreeByProject(null));
     }
 
     public function current(Request $r)
     {
         $r->validate(['entity_id'=>['required','integer','exists:entities,id']]);
         $entityId = (int) $r->integer('entity_id');
-        $projectId = $r->has('project_id') ? (int) $r->integer('project_id') : null;
 
-        return response()->json($this->svc->currentForEntity($entityId, $projectId));
+        // retour actuel pour l'entité, sans notion de projet
+        return response()->json($this->svc->currentForEntity($entityId));
     }
 
     public function preview(Request $r)
@@ -64,11 +66,10 @@ class DistributionController extends Controller
             'nodes'          => ['required','array','min:1'],
             'nodes.*.id'     => ['required','integer'],
             'nodes.*.type'   => ['required','in:macro,process,activity'],
-            'project_id'     => ['required','integer','exists:projects,id'], // Maintenant requis
         ]);
 
         return response()->json(
-            $this->svc->preview((int)$data['entity_id'], $data['nodes'], (int)$data['project_id'])
+            $this->svc->preview((int)$data['entity_id'], $data['nodes'])
         );
     }
 
@@ -79,13 +80,12 @@ class DistributionController extends Controller
             'activity_ids'    => ['required','array','min:1'],
             'activity_ids.*'  => ['integer','exists:activities,id'],
             'replace'         => ['sometimes','boolean'],
-            'project_id'      => ['required','integer','exists:projects,id'], // Maintenant requis
         ]);
 
         $res = $this->svc->commit(
             (int)$data['entity_id'],
             $data['activity_ids'],
-            (int)$data['project_id'], // Maintenant toujours présent
+            /* projectId */ null,
             (bool)($data['replace'] ?? false)
         );
 

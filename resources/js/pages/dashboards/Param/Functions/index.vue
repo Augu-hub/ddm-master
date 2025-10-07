@@ -1,21 +1,16 @@
-<!-- resources/js/pages/dashboards/Param/Functions/index.vue -->
 <template>
   <VerticalLayout>
-    <Head title="Fonctions — Paramétrage" />
+    <Head title="Fonctions — Paramétrage (Global)" />
 
-    <!-- Header -->
+    <!-- Header (global, sans projet) -->
     <b-row class="mb-0">
       <b-col>
         <div class="d-flex align-items-center justify-content-between">
           <div class="d-flex align-items-center gap-2">
             <i class="ti ti-hierarchy-3 text-primary fs-5"></i>
             <h4 class="m-0 fw-semibold">Fonctions</h4>
-            <small class="text-muted ms-2">Projet obligatoire</small>
+            <small class="text-muted ms-2">Mode global (aucun projet requis)</small>
           </div>
-          <b-input-group size="sm" class="w-auto">
-            <b-input-group-text><i class="ti ti-briefcase"></i></b-input-group-text>
-            <b-form-select v-model="selectedProjectId" :options="projectOptions" />
-          </b-input-group>
         </div>
       </b-col>
     </b-row>
@@ -31,11 +26,7 @@
           <b-card-header class="py-2 px-3"><h6 class="mb-0">Édition</h6></b-card-header>
 
           <b-card-body class="p-2">
-            <b-alert v-if="!selectedProjectId" show variant="secondary" class="py-2 px-3 mb-2">
-              Sélectionnez un projet pour activer le formulaire et la liste.
-            </b-alert>
-
-            <b-form v-else @submit.prevent="submit" class="mb-2">
+            <b-form @submit.prevent="submit" class="mb-2">
               <b-row class="g-1">
                 <b-col cols="12">
                   <label class="form-label mb-1">Caract. Fonction</label>
@@ -80,7 +71,7 @@
             </b-form>
 
             <!-- LISTE -->
-            <DataTable :value="functionsFilteredSorted" size="small" class="pv-table flat">
+            <DataTable :value="functionsSorted" size="small" class="pv-table flat">
               <Column header="Photo" style="width:72px">
                 <template #body="{ data }">
                   <div class="d-flex align-items-center">
@@ -108,7 +99,7 @@
               <Column header=" " style="width:110px" bodyClass="text-end">
                 <template #body="{ data }">
                   <b-button size="sm" variant="light" class="me-1" @click="editRow(data)" title="Modifier"><i class="ti ti-pencil"></i></b-button>
-                  <b-button size="sm" variant="danger" @click="destroy(data.id)" title="Supprimer"><i class="ti ti-trash"></i></b-button>
+                  <b-button size="sm" variant="danger" @click="destroyRow(data.id)" title="Supprimer"><i class="ti ti-trash"></i></b-button>
                 </template>
               </Column>
               <template #empty><div class="text-muted py-1">Aucune fonction</div></template>
@@ -126,39 +117,30 @@
 
           <b-card-header class="py-2 px-3 d-flex justify-content-between align-items-center">
             <h6 class="mb-0"><i class="ti ti-folders me-1"></i> Arborescence des fonctions</h6>
-            <small class="text-muted">
-              <template v-if="selectedProjectId">Projet : <strong>{{ selectedProjectName }}</strong></template>
-              <template v-else>—</template>
-            </small>
+            <small class="text-muted">Global</small>
           </b-card-header>
 
           <b-card-body class="p-2">
-            <b-alert v-if="!selectedProjectId" show variant="secondary" class="m-2">
-              Sélectionnez un projet pour afficher l’arborescence.
-            </b-alert>
+            <Tree
+              :value="treeNodes"
+              v-model:expandedKeys="expandedKeys"
+              selectionMode="single"
+              :filter="true"
+              filterMode="lenient"
+              :showIcon="false"
+              class="w-100 pv-tree rounded"
+              @node-select="onNodeSelect"
+            >
+              <template #default="{ node }">
+                <div class="d-flex align-items-center gap-2">
+                  <img v-if="node?.data?.avatar_url" :src="node.data.avatar_url" class="tree-avatar rounded-circle" alt="">
+                  <span v-else class="fx-badge" :class="badgeClass(node)" role="img">{{ overlayLetters(node) }}</span>
 
-            <div v-else>
-              <Tree
-                :value="treeNodes"
-                v-model:expandedKeys="expandedKeys"
-                selectionMode="single"
-                :filter="true"
-                filterMode="lenient"
-                :showIcon="false"
-                class="w-100 pv-tree rounded"
-                @node-select="onNodeSelect"
-              >
-                <template #default="{ node }">
-                  <div class="d-flex align-items-center gap-2">
-                    <img v-if="node?.data?.avatar_url" :src="node.data.avatar_url" class="tree-avatar rounded-circle" alt="">
-                    <span v-else class="fx-badge" :class="badgeClass(node)" role="img">{{ overlayLetters(node) }}</span>
-
-                    <span class="code-chip font-monospace">{{ nodeCode(node) }}</span>
-                    <span class="fw-semibold">{{ node.label }}</span>
-                  </div>
-                </template>
-              </Tree>
-            </div>
+                  <span class="code-chip font-monospace">{{ nodeCode(node) }}</span>
+                  <span class="fw-semibold">{{ node.label }}</span>
+                </div>
+              </template>
+            </Tree>
           </b-card-body>
         </b-card>
       </b-col>
@@ -168,7 +150,7 @@
 
 <script setup>
 import { Head, useForm, router } from '@inertiajs/vue3'
-import { computed, ref, watch, onMounted } from 'vue'
+import { computed, ref } from 'vue'
 import VerticalLayout from '@/layoutsparam/VerticalLayout.vue'
 import DataTable from 'primevue/datatable'
 import Column from 'primevue/column'
@@ -176,21 +158,14 @@ import Tree from 'primevue/tree'
 import Tag from 'primevue/tag'
 
 const props = defineProps({
-  projects:  { type: Array, default: () => [] },
-  functions: { type: Array, default: () => [] }, // [{id,project_id,name,character,parent_id,avatar_url}]
-  filters:   { type: Object, default: () => ({ project_id: null }) }
+  functions: { type: Array, default: () => [] } // [{id,name,character,parent_id,avatar_url}]
 })
 
 /* Etat */
 const loading = ref(false)
-const selectedProjectId = ref(props.filters?.project_id ?? null)
-if (!selectedProjectId.value && props.projects?.length === 1) selectedProjectId.value = props.projects[0].id
-const selectedProjectName = computed(() => (props.projects||[]).find(p => String(p.id) === String(selectedProjectId.value))?.name ?? '')
-const projectOptions = computed(() => [{ value: null, text: '— Sélectionner un projet —', disabled: true }, ...(props.projects||[]).map(p => ({ value: p.id, text: p.name }))])
 
 /* Formulaire (inclut avatar) */
 const form = useForm({
-  project_id: selectedProjectId.value,
   id: null,
   character: '',
   name: '',
@@ -199,35 +174,22 @@ const form = useForm({
   avatar_url: '',        // pour preview quand on édite
   remove_avatar: false,  // bool suppression
 })
+
 const noParent = ref(true)
 const avatarPreview = ref(null)
 
-/* Chargement par projet */
-const routeTo = (name, params = {}) => (typeof window.route === 'function' ? window.route(name, params) : '/param/function')
-const fetchProjectData = () => {
-  if (!selectedProjectId.value) return
-  loading.value = true
-  router.get(routeTo('param.function.index'), { project_id: selectedProjectId.value }, {
-    preserveState: true, preserveScroll: true, replace: true, onFinish: () => { loading.value = false }
-  })
-  form.project_id = selectedProjectId.value
-}
-watch(selectedProjectId, fetchProjectData, { immediate: true })
-onMounted(() => { if (selectedProjectId.value) fetchProjectData() })
-
 /* Dérivés */
-const functionsFiltered = computed(() => (props.functions||[]).filter(f => String(f.project_id) === String(selectedProjectId.value)))
-const byId = computed(() => Object.fromEntries(functionsFiltered.value.map(f => [String(f.id), f])))
+const byId = computed(() => Object.fromEntries((props.functions||[]).map(f => [String(f.id), f])))
 const parentNameById = (pid) => (pid ? (byId.value[String(pid)]?.name ?? '—') : '—')
 
 const parentOptions = computed(() => {
-  const list = functionsFiltered.value.filter(f => String(f.id) !== String(form.id ?? ''))
+  const list = (props.functions||[]).filter(f => String(f.id) !== String(form.id ?? ''))
   return [{ value: null, text: '— Aucun —' }, ...list.map(f => ({ value: f.id, text: f.name })) ]
 })
 
-const functionsFilteredSorted = computed(() => {
-  const roots = functionsFiltered.value.filter(f => !f.parent_id)
-  const childs= functionsFiltered.value.filter(f => f.parent_id)
+const functionsSorted = computed(() => {
+  const roots = (props.functions||[]).filter(f => !f.parent_id)
+  const childs= (props.functions||[]).filter(f => f.parent_id)
   return [
     ...roots.sort((a,b)=>a.name.localeCompare(b.name)),
     ...childs.sort((a,b)=>a.name.localeCompare(b.name)),
@@ -236,10 +198,13 @@ const functionsFilteredSorted = computed(() => {
 
 /* CRUD (multipart via forceFormData) */
 const r = (name, fallback='/') => (typeof window.route === 'function' ? window.route(name) : fallback)
-const afterMutate = () => { resetForm(); loading.value = true; router.reload({ only: ['functions'], onFinish: () => { loading.value = false } }) }
+const afterMutate = () => {
+  resetForm()
+  loading.value = true
+  router.reload({ only: ['functions'], onFinish: () => { loading.value = false } })
+}
 
 const submit = () => {
-  form.project_id = selectedProjectId.value
   const opts = { preserveScroll: true, onSuccess: afterMutate, forceFormData: true }
   if (form.id) form.put(r('param.function.update', `/param/function/${form.id}`), opts)
   else         form.post(r('param.function.store','/param/function'), opts)
@@ -247,7 +212,6 @@ const submit = () => {
 
 const editRow = (f) => {
   form.id         = f.id
-  form.project_id = f.project_id
   form.character  = f.character || ''
   form.name       = f.name
   form.parent_id  = f.parent_id
@@ -258,10 +222,10 @@ const editRow = (f) => {
   noParent.value  = !f.parent_id
 }
 
-const destroy = (id) => {
+const destroyRow = (id) => {
   if (!confirm('Supprimer cette fonction ?')) return
   router.delete(r('param.function.destroy', `/param/function/${id}`), {
-    data:{ project_id:selectedProjectId.value }, preserveScroll:true, onSuccess: afterMutate
+    preserveScroll:true, onSuccess: afterMutate
   })
 }
 
@@ -285,7 +249,6 @@ const clearAvatar = () => {
 /* Helpers */
 const resetForm = () => {
   form.reset()
-  form.project_id = selectedProjectId.value
   noParent.value = true
   avatarPreview.value = null
 }
@@ -321,7 +284,7 @@ function buildTree(items){
   })
   return (childrenByParent['root']||[]).map(toNode)
 }
-const treeNodes = computed(() => buildTree(functionsFiltered.value))
+const treeNodes = computed(() => buildTree(props.functions||[]))
 
 /* Pictos */
 const nodeCode = (n) => (n?.data?.code || '—')

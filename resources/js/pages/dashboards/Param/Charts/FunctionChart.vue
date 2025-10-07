@@ -2,7 +2,7 @@
   <VerticalLayout>
     <Head title="Organigramme — Fonctions (UML)" />
 
-    <!-- Zone de zoom -->
+    <!-- Zoom + export -->
     <div class="flex items-center gap-2 mb-2">
       <b-button size="sm" variant="outline-secondary" @click="zoomOut">-</b-button>
       <input type="range" v-model="zoom" min="20" max="200" step="10" class="form-range w-40" />
@@ -15,16 +15,7 @@
 
     <b-card no-body class="shadow-sm">
       <b-card-body class="p-2">
-        <b-alert
-          v-if="!selectedProjectId"
-          show
-          variant="secondary"
-          class="py-2 px-3 mb-2"
-        >
-          Sélectionnez un projet pour afficher l’organigramme.
-        </b-alert>
-
-        <div v-else class="canvas-wrap">
+        <div class="canvas-wrap">
           <svg
             id="orgchart"
             :viewBox="viewBox"
@@ -72,12 +63,7 @@
                       <circle :cx="CENTER_X" :cy="AVATAR_Y" :r="AVATAR_R" />
                     </clipPath>
                   </defs>
-                  <circle
-                    :cx="CENTER_X"
-                    :cy="AVATAR_Y"
-                    :r="AVATAR_R"
-                    class="avatar-ring"
-                  />
+                  <circle :cx="CENTER_X" :cy="AVATAR_Y" :r="AVATAR_R" class="avatar-ring" />
                   <image
                     v-if="n.avatar"
                     :href="n.avatar"
@@ -99,21 +85,11 @@
                   </text>
 
                   <!-- Nom -->
-                  <text
-                    :x="CENTER_X"
-                    :y="TITLE_Y"
-                    text-anchor="middle"
-                    class="uml-title"
-                  >
+                  <text :x="CENTER_X" :y="TITLE_Y" text-anchor="middle" class="uml-title">
                     {{ n.name }}
                   </text>
-                  <!-- Sous-titre -->
-                  <text
-                    :x="CENTER_X"
-                    :y="SUBTITLE_Y"
-                    text-anchor="middle"
-                    class="uml-sub"
-                  >
+                  <!-- Sous-titre (caractère) -->
+                  <text :x="CENTER_X" :y="SUBTITLE_Y" text-anchor="middle" class="uml-sub">
                     {{ n.code || '—' }}
                   </text>
                 </g>
@@ -132,26 +108,22 @@ import { computed, ref } from 'vue'
 import VerticalLayout from '@/layoutsparam/VerticalLayout.vue'
 
 const props = defineProps({
-  projects:  { type: Array,  default: () => [] },
-  functions: { type: Array,  default: () => [] },
-  filters:   { type: Object, default: () => ({ project_id: null }) },
+  // Global : plus de projects / filters
+  // Chaque item doit ressembler à :
+  // { id, name, character, parent_id, avatar_url? }
+  functions: { type: Array, default: () => [] },
 })
 
-/* Sélection projet */
-const selectedProjectId = ref(props.filters?.project_id ?? (props.projects?.[0]?.id ?? null))
-
-/* Données filtrées */
-const items = computed(() =>
-  (props.functions||[]).filter(f => String(f.project_id) === String(selectedProjectId.value))
-)
+/* Données (globales) */
+const items = computed(() => props.functions)
 
 /* Constantes dessin */
 const NODE_W = 280, NODE_H = 140
-const AVATAR_R = 30       // avatar agrandi
+const AVATAR_R = 30
 const CENTER_X = NODE_W/2
-const AVATAR_Y = 45       // avatar un peu plus bas
-const TITLE_Y = NODE_H - 35   // nom en bas
-const SUBTITLE_Y = NODE_H - 15 // sous-titre encore plus bas
+const AVATAR_Y = 45
+const TITLE_Y = NODE_H - 35
+const SUBTITLE_Y = NODE_H - 15
 const H_GAP = 50, V_GAP = 140
 
 /* Zoom */
@@ -207,11 +179,10 @@ const positionedNodes = computed(() => {
   return assignPositions().map(({node,x,y})=>{
     const name = (node.name || '').toString().trim()
     const initials = (name ? name.split(/\s+/).map(w => w[0] || '').join('') : 'F').slice(0,3).toUpperCase()
-
     return {
       id: node.id,
       name: node.name,
-      code: (node.character||'').toString(),
+      code: (node.character || '').toString(),
       initials,
       avatar: node.avatar_url || null,
       x, y
@@ -254,27 +225,27 @@ const viewBox = computed(() => {
 })
 
 /* Export PNG */
-function downloadSVGAsPNG(svgEl, name = 'organigramme.png') {
-  const serializer = new XMLSerializer();
-  const svgStr = serializer.serializeToString(svgEl);
+function downloadSVGAsPNG(svgEl, name = 'organigramme-fonctions.png') {
+  const serializer = new XMLSerializer()
+  const svgStr = serializer.serializeToString(svgEl)
 
-  const canvas = document.createElement('canvas');
-  const bbox = svgEl.getBBox();
-  canvas.width = bbox.width + 100;
-  canvas.height = bbox.height + 100;
-  const ctx = canvas.getContext('2d');
+  const canvas = document.createElement('canvas')
+  const bbox = svgEl.getBBox()
+  canvas.width = bbox.width + 100
+  canvas.height = bbox.height + 100
+  const ctx = canvas.getContext('2d')
 
-  const img = new Image();
+  const img = new Image()
   img.onload = function() {
-    ctx.fillStyle = "#fff";
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    ctx.drawImage(img, 50, 50);
-    const a = document.createElement('a');
-    a.download = name;
-    a.href = canvas.toDataURL('image/png');
-    a.click();
-  };
-  img.src = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svgStr)));
+    ctx.fillStyle = '#fff'
+    ctx.fillRect(0, 0, canvas.width, canvas.height)
+    ctx.drawImage(img, 50, 50)
+    const a = document.createElement('a')
+    a.download = name
+    a.href = canvas.toDataURL('image/png')
+    a.click()
+  }
+  img.src = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svgStr)))
 }
 function download() {
   const svgEl = document.getElementById('orgchart')
