@@ -18,13 +18,28 @@ class AuthServiceProvider extends ServiceProvider
     /**
      * Register any authentication / authorization services.
      */
-    public function boot(): void
+     public function boot(): void
     {
         $this->registerPolicies();
 
-        //
+        // Si role super-admin OU flag de session is_global_admin → passe tout
         Gate::before(function ($user, $ability) {
-            return ($user->is_super_admin ?? false) ? true : null;
+            if (session('is_global_admin', false)) {
+                return true;
+            }
+            if (method_exists($user, 'hasRole') && $user->hasRole('super-admin')) {
+                return true;
+            }
+            return null;
         });
     }
+    // public function boot(): void
+    // {
+    //     $this->registerPolicies();
+
+    //     //
+    //     Gate::before(function ($user, $ability) {
+    //         return ($user->is_super_admin ?? false) ? true : null;
+    //     });
+    // }
 }

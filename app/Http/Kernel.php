@@ -62,6 +62,7 @@ class Kernel extends HttpKernel
         'throttle' => \Illuminate\Routing\Middleware\ThrottleRequests::class,
         'verified' => \Illuminate\Auth\Middleware\EnsureEmailIsVerified::class,
         'tenant' => \App\Http\Middleware\SetPermissionsTeam::class,
+        'module' => \App\Http\Middleware\AuthorizeModule::class,
         // SUPPRIMEZ TOUT MIDDLEWARE TENANT D'ICI
         // 'tenant' => \App\Http\Middleware\SetTenantDatabase::class,
         // 'set-tenant' => \App\Http\Middleware\SetTenantDatabase::class,

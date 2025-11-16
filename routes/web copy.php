@@ -51,6 +51,20 @@ Route::prefix('param')->name('param.')->group(function () {
     Route::put('entities/{entity}',     [EntityController::class, 'update'])->name('entities.update');
     Route::delete('entities/{entity}',  [EntityController::class, 'destroy'])->name('entities.destroy');
 
+Route::middleware(['web','auth','verified'])->group(function () {
+    Route::get('/', \App\Http\Controllers\DashboardController::class)->name('dashboard');
+
+    Route::get('/m/{code}', [\App\Http\Controllers\ModuleEntryController::class, 'show'])
+        ->where('code', '[-_.a-z0-9]+')
+        ->name('modules.shell');
+
+    Route::prefix('api')->group(function () {
+        Route::get('/me/modules',      [\App\Http\Controllers\NavMenuController::class, 'myModules']);
+        Route::get('/menu/structure',  [\App\Http\Controllers\NavMenuController::class, 'structure']);
+        Route::get('/menu/visibility', [\App\Http\Controllers\NavMenuController::class, 'visibility']);
+        Route::get('/menu/entities',   [\App\Http\Controllers\NavMenuController::class, 'getEntities']);
+    });
+});
 
 
 

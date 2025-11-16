@@ -10,31 +10,84 @@ use Illuminate\Support\Facades\Storage;
 
 class Fonction extends Model
 {
-     protected $connection = 'tenant';
+    /** Connexion locataire */
+    protected $connection = 'tenant';
+
     protected $table = 'functions';
 
-    protected $fillable = ['name','character','avatar_path','parent_id'];
+    /** Champs modifiables */
+    protected $fillable = [
+        'name',
+        'character',
+        'avatar_path',
+        'parent_id',
+        'user_id',     // ✅ ajouté
+    ];
 
+    /** Accessors auto-ajoutés */
     protected $appends = ['avatar_url'];
 
-    public function parent() { return $this->belongsTo(self::class, 'parent_id'); }
-    public function children() { return $this->hasMany(self::class, 'parent_id'); }
+    /* =======================
+     * Relations hiérarchiques
+     * ======================= */
+    public function parent(): BelongsTo
+    {
+        return $this->belongsTo(self::class, 'parent_id');
+    }
 
+    public function children(): HasMany
+    {
+        return $this->hasMany(self::class, 'parent_id');
+    }
+
+    /* =======================
+     * Relation utilisateur (master DB)
+     * ======================= */
+    public function user(): BelongsTo
+    {
+        // User est sur la connexion par défaut (master)
+        return $this->belongsTo(\App\Models\User::class, 'user_id');
+    }
+
+    /* =======================
+     * Relation entités (pivot tenant: entity_function)
+     * ======================= */
+    public function entities(): BelongsToMany
+    {
+        // Pivot: entity_function(function_id, entity_id)
+        return $this->belongsToMany(
+            \App\Models\Param\Entite::class,
+            'entity_function',
+            'function_id',
+            'entity_id'
+        )->withTimestamps();
+    }
+
+    /* =======================
+     * Accessors
+     * ======================= */
     public function getAvatarUrlAttribute(): ?string
     {
-        return $this->avatar_path ? asset('storage/'.$this->avatar_path) : null;
+        if (!$this->avatar_path) return null;
+        return Storage::disk('public')->url($this->avatar_path);
     }
-   
-     // ✅ CORRECTION : Relation inverse avec la table pivot entity_function
-   // Correct relationship
 
-public function entities()
-{
-    return $this->belongsToMany(Entite::class, 'function_assignments', 'function_id', 'entity_id');
-}
+    /* =======================
+     * Scopes utiles
+     * ======================= */
 
-    public function scopeInProject($q, int|string $projectId)
+    // ❌ Ancien scopeInProject supprimé (plus de project_id).
+    // Exemple de scopes alternatifs si besoin :
+
+    /** Racines (sans parent) */
+    public function scopeRoots($q)
     {
-        return $q->where('project_id', $projectId);
+        return $q->whereNull('parent_id');
+    }
+
+    /** Filtrer par utilisateur rattaché */
+    public function scopeForUser($q, $userId)
+    {
+        return $q->where('user_id', $userId);
     }
 }

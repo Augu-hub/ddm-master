@@ -12,24 +12,20 @@ class HandleInertiaRequests extends Middleware
 {
     public function share(Request $request): array
     {
-        // Quote (format habituel: "message - author")
-        $rawQuote = Inspiring::quote();
-        $message  = Str::of($rawQuote)->beforeLast(' - ')->trim();
-        $author   = Str::of($rawQuote)->afterLast(' - ')->trim();
+        // Petite citation “safe”
+        $raw   = Inspiring::quote();
+        $msg   = Str::of($raw)->beforeLast(' - ')->trim();
+        $authr = Str::of($raw)->afterLast(' - ')->trim();
 
-        // User + décorations (tenant courant & admin global)
+        // Utilisateur & tenant “light”
         $user   = $request->user();
         $tenant = null;
 
         if ($user) {
             try {
-                $t = $user->currentTenant; // utilise session('tenant_id') si défini
-                if ($t) {
-                    $tenant = [
-                        'id'   => $t->id,
-                        'name' => $t->name,
-                    ];
-                }
+                // ton accessor ou relation courante (optionnel)
+                $t = $user->currentTenant ?? null;
+                if ($t) $tenant = ['id' => $t->id, 'name' => $t->name];
             } catch (\Throwable $e) {
                 \Log::warning('HandleInertiaRequests: tenant courant indisponible', [
                     'user_id' => $user->id ?? null,
@@ -38,26 +34,26 @@ class HandleInertiaRequests extends Middleware
             }
         }
 
-        // Construction de la charge partagée
+        // >>> Module courant (depuis la session alimentée par ModuleEntryController)
+        $currentModuleCode = (string) ($request->session()->get('current_module_code', ''));
+        $currentModuleName = (string) ($request->session()->get('current_module_name', ''));
+
         return array_merge(parent::share($request), [
             'name'  => config('app.name'),
 
             'quote' => [
-                'message' => (string) $message,
-                'author'  => (string) $author,
+                'message' => (string) $msg,
+                'author'  => (string) $authr,
             ],
 
             'auth' => [
                 'user' => $user ? [
-                    'id'             => $user->id,
-                    'name'           => $user->name,
-                    'email'          => $user->email,
-                    // Optionnel: expose un avatar si tu as un accessor `$user->avatar_url`
-                    'avatar_url'     => method_exists($user, 'getAvatarUrlAttribute') ? $user->avatar_url : null,
-                    // Du contrôleur d’auth: session('is_global_admin')
-                    'is_global_admin'=> (bool) session('is_global_admin'),
-                    // Tenant courant minimal (id, name)
-                    'tenant'         => $tenant,
+                    'id'              => $user->id,
+                    'name'            => $user->name,
+                    'email'           => $user->email,
+                    'avatar_url'      => method_exists($user, 'getAvatarUrlAttribute') ? $user->avatar_url : null,
+                    'is_global_admin' => (bool) $request->session()->get('is_global_admin', false),
+                    'tenant'          => $tenant,
                 ] : null,
             ],
 
@@ -68,10 +64,13 @@ class HandleInertiaRequests extends Middleware
             'sidebarOpen' => ! $request->hasCookie('sidebar_state')
                 || $request->cookie('sidebar_state') === 'true',
 
-            // Laisse vide pour éviter des hits DB intempestifs ici
+            // Expose proprement le module courant au front (Shell.vue & helpers)
+            'currentModuleCode' => fn () => $currentModuleCode ?: null,
+            'currentModuleName' => fn () => $currentModuleName ?: null,
+
+            // Évite les hits inutiles ici
             'entities' => [],
 
-            // Pratique si tu veux l’exposer globalement
             'csrf' => csrf_token(),
         ]);
     }

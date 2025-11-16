@@ -2,47 +2,35 @@
 
 namespace App\Models;
 
-// use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+
+// ⬇️ maître
 use App\Models\Master\Tenant;
-use App\Models\Param\Projet;
+use App\Models\Master\Module;
+
+// ⬇️ pivot maître
+use App\Models\Pivots\ModuleUser;
+
 use Spatie\Permission\Traits\HasRoles;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class User extends Authenticatable
 {
-    /** @use HasFactory<\Database\Factories\UserFactory> */
+    // ⚠️ base maître
+    protected $connection = 'mysql';
+
     use HasFactory, Notifiable, HasRoles;
 
-    /**
-     * The attributes that are mass assignable.
-     *
-     * @var list<string>
-     */
-    protected $fillable = [
-        'name',
-        'email',
-        'password',
-    ];
+    // Spatie (si tu utilises plusieurs guards, ajuste au besoin)
+    protected $guard_name = 'web';
 
-    /**
-     * The attributes that should be hidden for serialization.
-     *
-     * @var list<string>
-     */
-    protected $hidden = [
-        'password',
-        'remember_token',
-    ];
+    protected $fillable = ['name','email','password'];
 
-    /**
-     * Get the attributes that should be cast.
-     *
-     * @return array<string, string>
-     */
+    protected $hidden = ['password','remember_token'];
+
     protected function casts(): array
     {
         return [
@@ -52,21 +40,34 @@ class User extends Authenticatable
     }
 
     /**
-     * Relation many-to-many avec les tenants
+     * Tenants accessibles (base maître)
      */
     public function tenants(): BelongsToMany
     {
         return $this->belongsToMany(
-            Tenant::class, 
+            Tenant::class,
             'tenant_user',
             'user_id',
             'tenant_id'
-        )->withPivot('role_hint')
+        )->withPivot('role_hint')->withTimestamps();
+    }
+
+    /**
+     * Modules accessibles (base maître, pivot module_user)
+     */
+    public function modules(): BelongsToMany
+    {
+        return $this->belongsToMany(
+            Module::class,
+            'module_user',
+            'user_id',
+            'module_id'
+        )->using(ModuleUser::class)
          ->withTimestamps();
     }
 
     /**
-     * Vérifier si l'utilisateur a accès à un tenant spécifique
+     * Vérifier l’accès à un tenant donné
      */
     public function hasAccessToTenant($tenantId): bool
     {
@@ -74,15 +75,23 @@ class User extends Authenticatable
     }
 
     /**
-     * Vérifier si l'utilisateur est admin global
+     * Admin global ?
+     * (tu peux aussi t’appuyer sur un rôle Spatie si tu préfères)
      */
     public function isGlobalAdmin(): bool
     {
-        return $this->email === 'admin@diaddem.local';
+        // Exemple simple par email :
+        if ($this->email === 'admin@diaddem.local') return true;
+
+        // Ou via session/roles :
+        if (session('is_global_admin')) return true;
+        if (method_exists($this, 'hasRole') && $this->hasRole('Super Admin')) return true;
+
+        return false;
     }
 
     /**
-     * Obtenir le tenant actuel de l'utilisateur
+     * Tenant courant (via session)
      */
     public function getCurrentTenantAttribute()
     {
@@ -94,26 +103,20 @@ class User extends Authenticatable
     }
 
     /**
-     * Relation avec le projet courant si nécessaire
+     * Projet courant si tu enregistres un FK dans users (OPTIONNEL)
+     * ⚠️ attention : les Projets sont souvent côté tenant. À éviter
+     * en cross-connexion, conserve ceci seulement si c’est réellement en mysql.
      */
     public function currentProject(): BelongsTo
     {
-        return $this->belongsTo(Projet::class, 'current_project_id');
+        return $this->belongsTo(\App\Models\Param\Projet::class, 'current_project_id');
     }
 
-    /**
-     * Scope pour les utilisateurs ayant accès à un tenant spécifique
-     */
     public function scopeForTenant($query, $tenantId)
     {
-        return $query->whereHas('tenants', function($q) use ($tenantId) {
-            $q->where('tenant_id', $tenantId);
-        });
+        return $query->whereHas('tenants', fn($q) => $q->where('tenant_id', $tenantId));
     }
 
-    /**
-     * Scope pour les utilisateurs sans tenant
-     */
     public function scopeWithoutTenants($query)
     {
         return $query->doesntHave('tenants');

@@ -17,27 +17,28 @@ class MpsRespController extends Controller
         return response()->json($this->svc->fetchTreeByProject($projectId));
     }
 
+    /**
+     * Liste des M/P/A actuellement liés à UNE fonction pour UNE entité
+     */
     public function current(Request $r)
     {
         $data = $r->validate([
             'entity_id'   => ['required','integer','exists:entities,id'],
             'function_id' => ['required','integer','exists:functions,id'],
         ]);
-        $entityId   = (int)$data['entity_id'];
-        $functionId = (int)$data['function_id'];
 
-        $rows = DB::table('assignment_functions AS af')
-            ->join('assignments AS a','a.id','=','af.assignment_id')
-            ->where('a.entity_id',$entityId)
-            ->where('af.function_id',$functionId)
+        $rows = DB::table('assignment_functions as af')
+            ->join('assignments as a','a.id','=','af.assignment_id')
+            ->where('af.entity_id', (int)$data['entity_id']) // ✅ filtre direct
+            ->where('af.function_id', (int)$data['function_id'])
             ->get(['a.mpa_type','a.mpa_id']);
 
         if ($rows->isEmpty()) return response()->json([]);
 
         $byType = [
-            'macro'    => $rows->where('mpa_type','macro')->pluck('mpa_id'),
-            'process'  => $rows->where('mpa_type','process')->pluck('mpa_id'),
-            'activity' => $rows->where('mpa_type','activity')->pluck('mpa_id'),
+            'macro'    => $rows->where('mpa_type','macro')->pluck('mpa_id')->unique(),
+            'process'  => $rows->where('mpa_type','process')->pluck('mpa_id')->unique(),
+            'activity' => $rows->where('mpa_type','activity')->pluck('mpa_id')->unique(),
         ];
 
         $out = [];
@@ -61,6 +62,32 @@ class MpsRespController extends Controller
         return response()->json($out);
     }
 
+    /**
+     * ✅ NOUVEAU – Map globale: pour une entité, renvoie (type:id) → function_id
+     * Permet au front d’éviter les multiples appels par fonction.
+     */
+    public function map(Request $r)
+    {
+        $data = $r->validate([
+            'entity_id' => ['required','integer','exists:entities,id'],
+        ]);
+        $rows = DB::table('assignment_functions as af')
+            ->join('assignments as a','a.id','=','af.assignment_id')
+            ->where('af.entity_id', (int)$data['entity_id'])
+            ->get(['a.mpa_type','a.mpa_id','af.function_id']);
+
+        // Format: { items: [ {type,id,function_id}, ... ] }
+        $items = [];
+        foreach ($rows as $r2) {
+            $items[] = [
+                'type' => $r2->mpa_type,
+                'id'   => (int)$r2->mpa_id,
+                'function_id' => (int)$r2->function_id,
+            ];
+        }
+        return response()->json(['items'=>$items]);
+    }
+
     public function assign(Request $r)
     {
         $data = $r->validate([
@@ -82,13 +109,17 @@ class MpsRespController extends Controller
                 $assignmentId = app(AssignmentService::class)
                     ->ensureAssignment($entityId, $n['type'], (int)$n['id']);
 
-                DB::table('assignment_functions')->upsert([[
-                    'assignment_id' => $assignmentId,
-                    'function_id'   => $functionId,
-                    'role_label'    => $role,
-                    'created_at'    => $now,
-                    'updated_at'    => $now,
-                ]], ['assignment_id','function_id'], ['role_label','updated_at']);
+                // ✅ renseigner entity_id pour cohérence et requêtes rapides
+                DB::table('assignment_functions')->upsert([
+                    [
+                        'assignment_id' => $assignmentId,
+                        'function_id'   => $functionId,
+                        'entity_id'     => $entityId,
+                        'role_label'    => $role,
+                        'created_at'    => $now,
+                        'updated_at'    => $now,
+                    ]
+                ], ['assignment_id','function_id'], ['entity_id','role_label','updated_at']);
             }
         });
 
@@ -120,11 +151,12 @@ class MpsRespController extends Controller
                     DB::table('assignment_functions')
                         ->where('assignment_id',$a->id)
                         ->where('function_id',$functionId)
+                        ->where('entity_id',$entityId) // ✅ évite d’impacter d’autres entités
                         ->delete();
                 }
             }
         });
 
         return response()->json(['ok'=>true]);
-    }
+    } 
 }

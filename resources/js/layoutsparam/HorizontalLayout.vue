@@ -1,4 +1,7 @@
 <template>
+    <link rel="stylesheet"
+      href="https://unpkg.com/@tabler/icons-webfont@2.47.0/tabler-icons.min.css" />
+
     <div class="wrapper">
         <TopBar />
         <NavBar />

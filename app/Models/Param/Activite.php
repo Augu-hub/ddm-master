@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class Activite extends Model
 {
+    protected $connection = 'tenant';
     protected $table = 'activities';
     protected $fillable = ['process_id','code','name','description'];
 

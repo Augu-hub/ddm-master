@@ -174,7 +174,7 @@
                       <span v-else class="text-muted">—</span>
                     </b-td>
                     <b-td class="text-end">
-                      <Link :href="route('param.entities.edit', e.id)" class="btn btn-light btn-icon btn-sm me-1" title="Modifier">
+                      <Link :href="route('param.projects.entities.edit', e.id)" class="btn btn-light btn-icon btn-sm me-1" title="Modifier">
                         <i class="ti ti-pencil"></i>
                       </Link>
                       <b-button size="sm" variant="danger" class="btn-icon" @click="destroyEntity(e.id)" title="Supprimer">
@@ -274,7 +274,7 @@ const filtered = computed(() => {
 
 const submit = () => {
   const payload = { ...form.data(), level: autoLevel.value || 0 }
-  router.post(route('param.entities.store'), payload, {
+  router.post(route('param.projects.entities.store'), payload, {
     preserveScroll: true,
     onSuccess: () => { form.reset(); showMore.value = false },
   })
@@ -282,7 +282,7 @@ const submit = () => {
 
 const destroyEntity = (id: number|string) => {
   if (confirm('Supprimer cette entité ?')) {
-    router.delete(route('param.entities.destroy', id), {
+    router.delete(route('param.projects.entities.destroy', id), {
       preserveScroll: true,
       onSuccess: () => router.reload({ only: ['entities'] }),
     })

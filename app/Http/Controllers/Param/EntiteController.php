@@ -17,7 +17,7 @@ class EntiteController extends Controller
             ->orderBy('name')
             ->get();
 
-        // Parents proposés (on expose level & code_base pour l’UI)
+        // Parents proposés
         $parents  = Entite::orderBy('name')->get(['id','name','level','code_base']);
 
         return Inertia::render('dashboards/Param/Entities/index', [
@@ -28,13 +28,12 @@ class EntiteController extends Controller
 
     public function create()
     {
-        return redirect()->route('param.entities.index');
+        return redirect()->route('param.projects.entities.index');
     }
 
     public function store(Request $request)
     {
         $data = $request->validate([
-            // ❌ plus de project_id
             'name'        => ['required','string','max:255'],
             'description' => ['nullable','string'],
             'parent_id'   => ['nullable','exists:tenant.entities,id'],
@@ -46,11 +45,9 @@ class EntiteController extends Controller
             'address'     => ['nullable','string'],
         ]);
 
-        // Niveau auto
         $parent = !empty($data['parent_id']) ? Entite::find($data['parent_id']) : null;
         $data['level'] = $parent ? min(($parent->level ?? 0) + 1, 255) : 0;
 
-        // Code base auto si vide
         if (empty($data['code_base'])) {
             $data['code_base'] = $this->makeCodeBase($data['parent_id'] ?? null, $data['name']);
         }
@@ -58,7 +55,7 @@ class EntiteController extends Controller
         Entite::create($data);
 
         return redirect()
-            ->route('param.entities.index')
+            ->route('param.projects.entities.index')
             ->with('success', 'Entité créée avec succès.');
     }
 
@@ -87,7 +84,6 @@ class EntiteController extends Controller
     public function update(Request $request, Entite $entite)
     {
         $data = $request->validate([
-            // ❌ plus de project_id
             'name'        => ['required','string','max:255'],
             'description' => ['nullable','string'],
             'parent_id'   => [
@@ -103,11 +99,9 @@ class EntiteController extends Controller
             'address'     => ['nullable','string'],
         ]);
 
-        // Niveau auto
         $parent = !empty($data['parent_id']) ? Entite::find($data['parent_id']) : null;
         $data['level'] = $parent ? min(($parent->level ?? 0) + 1, 255) : 0;
 
-        // Code base auto si vide
         if (empty($data['code_base'])) {
             $data['code_base'] = $this->makeCodeBase($data['parent_id'] ?? null, $data['name']);
         }
@@ -115,7 +109,7 @@ class EntiteController extends Controller
         $entite->update($data);
 
         return redirect()
-            ->route('param.entities.index')
+            ->route('param.projects.entities.index')
             ->with('success', 'Entité mise à jour.');
     }
 
@@ -135,7 +129,6 @@ class EntiteController extends Controller
 
     public function getMenuEntities(Request $request)
     {
-        // ❌ plus de filtre par projet courant
         $entities = Entite::orderBy('level')
             ->orderBy('name')
             ->get(['id', 'name', 'code_base']);
@@ -144,7 +137,7 @@ class EntiteController extends Controller
     }
 
     /**
-     * Génère un code_base à partir du parent (si présent) ou du nom.
+     * Génère un code_base à partir du parent ou du nom.
      */
     private function makeCodeBase(?int $parentId, string $name): string
     {
@@ -156,7 +149,7 @@ class EntiteController extends Controller
 
         if (!$prefix) {
             $raw = Str::of($name)
-                ->ascii()                // supprime diacritiques
+                ->ascii()
                 ->upper()
                 ->replaceMatches('/[^A-Z0-9]/', '')
                 ->value();
@@ -164,7 +157,6 @@ class EntiteController extends Controller
             $prefix = $base !== '' ? str_pad($base, 3, 'X') : 'ENT';
         }
 
-        // Nombre de frères/soeurs au même parent (ou racine)
         $siblingsCount = Entite::when($parentId, fn($q) => $q->where('parent_id', $parentId),
                                       fn($q) => $q->whereNull('parent_id'))
                                ->count();

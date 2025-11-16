@@ -5,6 +5,8 @@ namespace App\Models\Param;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use App\Models\Tenant\Process\ContractElement;
+use App\Models\Tenant\Process\Contracts;
 
 class Processus extends Model
 {
@@ -47,4 +49,23 @@ class Processus extends Model
 
         return 'P' . $pp . $macroLetter; // ex: P01D
     }
+
+  public function inputs() {
+        return $this->hasMany(ProcessInput::class, 'process_id');
+    }
+
+    public function outputs() {
+        return $this->hasMany(ProcessOutput::class, 'process_id');
+    }
+
+    public function resources() {
+        return $this->hasMany(ProcessResource::class, 'process_id');
+    }
+    public function contractElements()
+{
+    return $this->hasMany(ContractElement::class, 'process_id');
+}
+
+
+
 }

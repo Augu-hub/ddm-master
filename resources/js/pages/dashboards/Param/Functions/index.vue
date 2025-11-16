@@ -206,8 +206,8 @@ const afterMutate = () => {
 
 const submit = () => {
   const opts = { preserveScroll: true, onSuccess: afterMutate, forceFormData: true }
-  if (form.id) form.put(r('param.function.update', `/param/function/${form.id}`), opts)
-  else         form.post(r('param.function.store','/param/function'), opts)
+  if (form.id) form.put(r('param.projects.fonctions.update', `/param/function/${form.id}`), opts)
+  else         form.post(r('param.projects.fonctions.store','/param/function'), opts)
 }
 
 const editRow = (f) => {
@@ -224,7 +224,7 @@ const editRow = (f) => {
 
 const destroyRow = (id) => {
   if (!confirm('Supprimer cette fonction ?')) return
-  router.delete(r('param.function.destroy', `/param/function/${id}`), {
+  router.delete(r('param.projects.function.destroy', `/param/function/${id}`), {
     preserveScroll:true, onSuccess: afterMutate
   })
 }

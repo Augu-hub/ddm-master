@@ -1,0 +1,2 @@
+php artisan make:migration create_process_criticality_tables --path=database/migrations/tenant/process \
+&& php artisan make:migration create_process_activity_scores_table --path=database/migrations/tenant/process

@@ -5,7 +5,7 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
-use Illuminate\Support\Facades\{DB, Artisan};
+use Illuminate\Support\Facades\{DB, Artisan, Schema};
 use Illuminate\Validation\Rule;
 use App\Models\Master\Tenant;
 use App\Models\User;
@@ -53,17 +53,17 @@ class TenantsController extends Controller
         }
 
         $data = $request->validate([
-            'name'      => ['required', 'string', 'max:255', 'unique:tenants,name'],
-            'code'      => ['required', 'string', 'max:50',  'unique:tenants,code'],
-            'db_name'   => ['required', 'string', 'max:255', 'unique:tenants,db_name'],
-            'user_ids'  => ['nullable', 'array'],
-            'user_ids.*'=> ['exists:users,id'],
+            'name'       => ['required', 'string', 'max:255', 'unique:tenants,name'],
+            'code'       => ['required', 'string', 'max:50',  'unique:tenants,code'],
+            'db_name'    => ['required', 'string', 'max:255', 'unique:tenants,db_name'],
+            'user_ids'   => ['nullable', 'array'],
+            'user_ids.*' => ['exists:users,id'],
         ]);
 
         try {
             DB::beginTransaction();
 
-            // 1) Créer l’enregistrement tenant (master)
+            // 1) Créer l'enregistrement tenant (master)
             $tenant = Tenant::create([
                 'name'        => $data['name'],
                 'code'        => $data['code'],
@@ -78,7 +78,7 @@ class TenantsController extends Controller
                 $tenant->users()->sync($data['user_ids']);
             }
 
-            // 3) Provisionner la base + migrations (automatique ici)
+            // 3) Provisionner la base + migrations + seed process
             $this->provisionTenant($tenant);
 
             DB::commit();
@@ -101,11 +101,11 @@ class TenantsController extends Controller
         }
 
         $data = $request->validate([
-            'name'      => ['required', 'string', 'max:255', Rule::unique('tenants')->ignore($tenant->id)],
-            'code'      => ['required', 'string', 'max:50',  Rule::unique('tenants')->ignore($tenant->id)],
-            'db_name'   => ['required', 'string', 'max:255', Rule::unique('tenants')->ignore($tenant->id)],
-            'user_ids'  => ['nullable', 'array'],
-            'user_ids.*'=> ['exists:users,id'],
+            'name'       => ['required', 'string', 'max:255', Rule::unique('tenants')->ignore($tenant->id)],
+            'code'       => ['required', 'string', 'max:50',  Rule::unique('tenants')->ignore($tenant->id)],
+            'db_name'    => ['required', 'string', 'max:255', Rule::unique('tenants')->ignore($tenant->id)],
+            'user_ids'   => ['nullable', 'array'],
+            'user_ids.*' => ['exists:users,id'],
         ]);
 
         try {
@@ -211,14 +211,17 @@ class TenantsController extends Controller
     }
 
     /**
-     * Provisionnement complet: crée la base + configure connexion + MIGRE (+ seed optionnel)
+     * Provisionnement complet: crée la base + configure connexion + MIGRE + seed Process
      */
     private function provisionTenant(Tenant $tenant): void
     {
+        // 0) Nettoyage du cache avant reconfig
+        Artisan::call('optimize:clear');
+
         // 1) Créer physiquement la base
         $this->createTenantDatabase($tenant->db_name);
 
-        // 2) Configurer la connexion "tenant"
+        // 2) Déclarer la connexion "tenant"
         config(['database.connections.tenant' => [
             'driver'   => 'mysql',
             'host'     => $tenant->db_host,
@@ -233,22 +236,20 @@ class TenantsController extends Controller
         ]]);
 
         DB::purge('tenant');
-        DB::connection('tenant')->getPdo(); // test
+        DB::connection('tenant')->getPdo(); // test connexion
 
-        // 3) MIGRATIONS du tenant (automatique ici)
-        Artisan::call('migrate', [
-            '--database' => 'tenant',
-            '--path'     => 'database/migrations/tenant',
-            '--force'    => true,
+        // 3) MIGRATIONS génériques du tenant (si dossier présent)
+        $this->runTenantMigrations($tenant->db_name, [
+            base_path('database/migrations/tenant'),
         ]);
-        \Log::info("Migrations appliquées sur {$tenant->db_name}", ['output' => Artisan::output()]);
 
-        // 4) (Optionnel) Seed des données de base du tenant
-        // Artisan::call('db:seed', [
-        //     '--database' => 'tenant',
-        //     '--class'    => 'TenantDataSeeder',
-        //     '--force'    => true,
-        // ]);
+        // 4) MIGRATIONS du MODULE PROCESS (annexes)
+        $this->runTenantMigrations($tenant->db_name, [
+            base_path('database/migrations/tenant/process'),
+        ]);
+
+        // 5) Diagnostic tables attendues
+        $this->ensureProcessModule($tenant);
     }
 
     private function createTenantDatabase(string $dbName): void
@@ -259,10 +260,64 @@ class TenantsController extends Controller
 
     private function renameTenantDatabase($oldDbName, $newDbName)
     {
-        // ⚠ MySQL ne supporte plus RENAME DATABASE.
-        // À remplacer si besoin par un export/import ou création+copie table par table.
-        DB::statement("RENAME DATABASE `{$oldDbName}` TO `{$newDbName}`");
-        \Log::info("Base de données renommée: {$oldDbName} -> {$newDbName}");
+        throw new \RuntimeException('MySQL ne supporte pas RENAME DATABASE. Utilisez une procédure export/import ou copie table par table.');
+    }
+
+    /**
+     * Exécute des migrations sur la connexion tenant, en acceptant des chemins absolus (--realpath)
+     */
+    private function runTenantMigrations(string $dbName, array $absPaths): void
+    {
+        foreach ($absPaths as $abs) {
+            if (! is_dir($abs)) {
+                \Log::warning("⏭️ Dossier migrations manquant pour {$dbName}: {$abs}");
+                continue;
+            }
+
+            Artisan::call('migrate', [
+                '--database' => 'tenant',
+                '--path'     => $abs,     // chemin absolu
+                '--realpath' => true,     // accepte le chemin absolu
+                '--force'    => true,
+            ]);
+            \Log::info("✅ Migrations appliquées ({$abs}) sur {$dbName}", [
+                'output' => Artisan::output()
+            ]);
+        }
+    }
+
+    /**
+     * Contrôle la présence des tables annexes du module "process"
+     * (macro/process/activity existent déjà chez toi → non requis ici)
+     */
+    private function ensureProcessModule(Tenant $tenant): void
+    {
+        $conn = Schema::connection('tenant');
+
+        $expected = [
+            'process_diagrams',
+            'process_evaluations',
+            'process_kpis',
+            'process_links',
+            'activity_steps',
+            'activity_flows',
+            'activity_controls',
+            'activity_raci',
+            'activity_idea',
+        ];
+
+        $missing = [];
+        foreach ($expected as $tbl) {
+            if (! $conn->hasTable($tbl)) {
+                $missing[] = $tbl;
+            }
+        }
+
+        if ($missing) {
+            \Log::warning("⚠️ Tables process manquantes sur {$tenant->db_name}", $missing);
+        } else {
+            \Log::info("✅ Module process OK sur {$tenant->db_name}");
+        }
     }
 
     private function dropTenantDatabase($dbName)

@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 
 class Assignment extends Model
 {
+    protected $connection = 'tenant';
     protected $fillable = ['entity_id','mpa_type','mpa_id'];
 
     // pratique pour tracer l’origine (macro/process/activity) déposé,

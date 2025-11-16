@@ -14,29 +14,28 @@ class DistributionController extends Controller
 
     public function index(Request $request)
     {
-        // Plus de projets ici
         $entities = DB::table('entities')->orderBy('name')->get(['id','name']);
 
         return Inertia::render('dashboards/Param/Distribution/index', [
             'entities' => $entities,
             'routes' => [
                 'mpa' => [
-                    'tree'    => route('param.distribution.tree'),
-                    'current' => route('param.distribution.current'),
-                    'preview' => route('param.distribution.preview'),
-                    'commit'  => route('param.distribution.commit'),
+                    'tree'    => route('param.projects.distribution.tree'),
+                    'current' => route('param.projects.distribution.current'),
+                    'preview' => route('param.projects.distribution.preview'),
+                    'commit'  => route('param.projects.distribution.commit'),
                 ],
                 'funcs' => [
-                    'list'    => route('param.functions.list'),
-                    'current' => route('param.functions.current'),
-                    'commit'  => route('param.functions.commit'),
+                    'list'    => route('param.projects.functions.list'),
+                    'current' => route('param.projects.functions.current'),
+                    'commit'  => route('param.projects.functions.commit'),
                 ],
                 'mpsresp' => [
-                    // gardé si utile côté UI
-                    'tree'     => route('param.mpsresp.tree'),
-                    'current'  => route('param.mpsresp.current'),
-                    'assign'   => route('param.mpsresp.assign'),
-                    'unassign' => route('param.mpsresp.unassign'),
+                    'tree'     => route('param.projects.mpsresp.tree'),
+                    'current'  => route('param.projects.mpsresp.current'),
+                    'map'      => route('param.projects.mpsresp.map'),   // ✅ nouveau pour le front
+                    'assign'   => route('param.projects.mpsresp.assign'),
+                    'unassign' => route('param.projects.mpsresp.unassign'),
                 ],
             ]
         ]);
@@ -44,18 +43,13 @@ class DistributionController extends Controller
 
     public function tree(Request $r)
     {
-        // Arbo globale (sans filtrage projet)
-        // Adapte selon ton service : fetchTree() ou fetchTreeByProject(null)
         return response()->json($this->svc->fetchTree());
-        // return response()->json($this->svc->fetchTreeByProject(null));
     }
 
     public function current(Request $r)
     {
         $r->validate(['entity_id'=>['required','integer','exists:entities,id']]);
-        $entityId = (int) $r->integer('entity_id');
-
-        // retour actuel pour l'entité, sans notion de projet
+        $entityId = (int)$r->integer('entity_id');
         return response()->json($this->svc->currentForEntity($entityId));
     }
 
@@ -84,7 +78,7 @@ class DistributionController extends Controller
 
         $res = $this->svc->commit(
             (int)$data['entity_id'],
-            $data['activity_ids'],
+            array_map('intval', $data['activity_ids']),
             /* projectId */ null,
             (bool)($data['replace'] ?? false)
         );

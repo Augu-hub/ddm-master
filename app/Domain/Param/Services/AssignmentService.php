@@ -304,4 +304,43 @@ class AssignmentService
             ->pluck('a.id')
             ->map(fn($v)=>(int)$v);
     }
+
+
+    /**
+     * Activités déjà affectées à une entité
+     */
+
+    /**
+     * Résout les nodes en activités distinctes et renvoie un preview (excluant déjà affectées)
+     */
+
+    /**
+     * Applique l’affectation des activités à l’entité (replace = écrasement)
+     */
+  
+    /**
+     * Garantit l’existence d’un assignment et renvoie son ID
+     */
+    public function ensureAssignment(int $entityId, string $mpaType, int $mpaId): int
+    {
+        $row = DB::table('assignments')
+            ->where('entity_id',$entityId)
+            ->where('mpa_type',$mpaType)
+            ->where('mpa_id',$mpaId)
+            ->first(['id']);
+        if ($row) return (int)$row->id;
+
+        $id = DB::table('assignments')->insertGetId([
+            'entity_id'=>$entityId,
+            'mpa_type'=>$mpaType,
+            'mpa_id'=>$mpaId,
+            'created_at'=>now(),
+            'updated_at'=>now(),
+        ]);
+        return (int)$id;
+    }
+
+    /** Variante projet */
+
+    
 }

@@ -1,35 +1,50 @@
 <?php
 
-
 namespace App\Models\Param;
+
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Illuminate\Database\Eloquent\Relations\HasMany;
-use Spatie\Permission\Models\Permission;
 
 class Menu extends Model
 {
-     protected $connection = 'mysql';   // <-- IMPORTANT: base maître (ddmparam)
     protected $table = 'menus';
+
     protected $fillable = [
-        'key','label','icon','url','parent_id','sort',
-        'is_title','is_divider','visible','badge_json','tooltip_json','meta_json'
+        'key','label','type','icon','url','route_name','target',
+        'parent_id','sort',
+        'service_id','module_id',
+        'visible','badge_json','tooltip_json','meta_json',
     ];
 
     protected $casts = [
-        'is_title' => 'bool',
-        'is_divider' => 'bool',
-        'visible' => 'bool',
-        'badge_json' => 'array',
-        'tooltip_json' => 'array',
-        'meta_json' => 'array',
+        'visible'     => 'boolean',
+        'badge_json'  => 'array',
+        'tooltip_json'=> 'array',
+        'meta_json'   => 'array',
     ];
 
-    public function parent(): BelongsTo { return $this->belongsTo(self::class, 'parent_id'); }
-    public function children(): HasMany { return $this->hasMany(self::class, 'parent_id')->orderBy('sort'); }
-    public function permissions()
+    public function parent()
     {
-        return $this->belongsToMany(Permission::class, 'menu_permission', 'menu_id', 'permission_id');
+        return $this->belongsTo(Menu::class, 'parent_id');
     }
-    
+
+    public function children()
+    {
+        return $this->hasMany(Menu::class, 'parent_id')->orderBy('sort');
+    }
+
+    /** menus d’un module (optionnellement + globaux) */
+    public function scopeForModule($query, $moduleId = null, $includeGlobals = true)
+    {
+        if ($moduleId) {
+            if ($includeGlobals) {
+                $query->where(function($q) use ($moduleId) {
+                    $q->where('module_id', $moduleId)
+                      ->orWhereNull('module_id');
+                });
+            } else {
+                $query->where('module_id', $moduleId);
+            }
+        }
+        return $query;
+    }
 }
