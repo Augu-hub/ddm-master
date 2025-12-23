@@ -37,13 +37,7 @@ return new class extends Migration
             ['code'=>'VH','label'=>'Très élevée','weight'=>5,'sort'=>5,'color'=>'#EF4444'],
         ]);
 
-        // RACI roles
-        $total += $seed('activity_raci_roles', [
-            ['code'=>'R','label'=>'Responsible','description'=>'Exécute le travail','sort'=>1],
-            ['code'=>'A','label'=>'Accountable','description'=>'Responsable final','sort'=>2],
-            ['code'=>'C','label'=>'Consulted','description'=>'Consulté pour avis','sort'=>3],
-            ['code'=>'I','label'=>'Informed','description'=>'Informé des résultats','sort'=>4],
-        ]);
+        
 
         // IDEA axes
         $total += $seed('activity_idea_axes', [
@@ -88,7 +82,7 @@ return new class extends Migration
         $tables = [
         
             'process_criticality_levels',
-            'activity_raci_roles',
+            
             'activity_idea_axes',
             'process_kpi_categories',
             'process_link_types',

@@ -15,7 +15,7 @@ use App\Http\Controllers\Param\MpsRespController;
 use App\Http\Controllers\Param\FunctionAssignmentController;
 use App\Http\Controllers\Param\EntityFunctionsChartController;
 use App\Http\Controllers\Param\FunctionUsersController;
-
+use App\Http\Controllers\Param\EntityProcessRelationsController;  // ← AJOUTER ICI
 
 /* ====== Accueil du module ====== */
 Route::get('/', fn () => Inertia::render('dashboards/Param/Entities/index'))
@@ -90,86 +90,113 @@ Route::resource('fonctions', FonctionController::class)->names([
     'update'  => 'fonctions.update',
     'destroy' => 'fonctions.destroy',
 ]);
-// ====== Fonctions → Entité (catalogue + affectations de fonctions) ======
-    Route::get('functions/list',    [FunctionAssignmentController::class, 'list'])   ->name('functions.list');
-    Route::get('functions/current', [FunctionAssignmentController::class, 'current'])->name('functions.current');
-    Route::post('functions/commit', [FunctionAssignmentController::class, 'commit'])->name('functions.commit');
 
-    // ====== Fonctions ↔ Utilisateurs (PAGE + API dédiée) ======
-    Route::prefix('functions/users')->name('functions.users.')->group(function () {
-        Route::get('/',        [FunctionUsersController::class,'index'])->name('index');   // page Inertia
-        Route::get('search',   [FunctionUsersController::class,'search'])->name('search'); // ?q=
-        Route::get('map',      [FunctionUsersController::class,'map'])   ->name('map');    // ?entity_id=
-        Route::post('set',     [FunctionUsersController::class,'set'])   ->name('set');    // {entity_id,function_id,user_id|null}
-        Route::post('clear',   [FunctionUsersController::class,'clear']) ->name('clear');  // {entity_id,function_id}
-    });
+/* ====== Fonctions → Entité ====== */
+Route::get('functions/list',    [FunctionAssignmentController::class, 'list'])   ->name('functions.list');
+Route::get('functions/current', [FunctionAssignmentController::class, 'current'])->name('functions.current');
+Route::post('functions/commit', [FunctionAssignmentController::class, 'commit'])->name('functions.commit');
 
-/* ====== Distribution ====== */
-Route::get('distribution', [DistributionController::class, 'index'])
-     ->name('distribution.index');
-
-             
-
-        Route::get('distribution/tree',     [DistributionController::class, 'tree'])
-            ->name('distribution.tree');
-
-        Route::get('distribution/current',  [DistributionController::class, 'current'])
-            ->name('distribution.current');
-
-        Route::post('distribution/preview', [DistributionController::class, 'preview'])
-            ->name('distribution.preview');
-            
-
-        Route::post('distribution/commit',  [DistributionController::class, 'commit'])
-            ->name('distribution.commit');
-        Route::get('functions/list',    [FunctionAssignmentController::class, 'list'])
-            ->name('functions.list');
-                    Route::get('functions/current', [FunctionAssignmentController::class, 'current'])
-            ->name('functions.current');
-
-        Route::post('functions/commit', [FunctionAssignmentController::class, 'commit'])
-            ->name('functions.commit');
-            
-                    Route::get('mpsresp/tree',     [MpsRespController::class,'tree'])
-            ->name('mpsresp.tree');
-
-        Route::get('mpsresp/current',  [MpsRespController::class,'current'])
-            ->name('mpsresp.current');
-
-        Route::post('mpsresp/assign',  [MpsRespController::class,'assign'])
-            ->name('mpsresp.assign');
-
-        Route::post('mpsresp/unassign',[MpsRespController::class,'unassign'])
-            ->name('mpsresp.unassign');
-             // nouveaux endpoints pour la table d'ajout utilisateur
-    Route::get('mpsresp/options',    [MpsRespController::class,'options'])->name('mpsresp.options');     // ?entity_id=
-    Route::get('mpsresp/table',      [MpsRespController::class,'table'])->name('mpsresp.table');         // ?entity_id=&function_id=
-    Route::post('mpsresp/save-users',[MpsRespController::class,'saveUsers'])->name('mpsresp.saveUsers');
- Route::get('mpsresp/map', [MpsRespController::class,'map'])->name('mpsresp.map');
-/* ====== Charts ====== */
-Route::get('charts/entity', [ChartsController::class, 'entity'])
-     ->name('charts.entity');
-Route::get('charts/function', [ChartsController::class, 'function'])
-     ->name('charts.function');
-Route::get('charts/entity-functions', [EntityFunctionsChartController::class, 'index'])
-     ->name('charts.entity-functions');
-
-     Route::prefix('param/projects/mpsresp')->name('param.projects.mpsresp.')->group(function () {
-   
-    // (tes routes existantes, si tu les utilises ailleurs)
-    // Route::get('tree', [MpsRespController::class,'tree'])->name('tree');
-    // Route::get('current', [MpsRespController::class,'current'])->name('current');
-    // Route::post('assign', [MpsRespController::class,'assign'])->name('assign');
-    // Route::post('unassign',[MpsRespController::class,'unassign'])->name('unassign');
+/* ====== Fonctions ↔ Utilisateurs ====== */
+Route::prefix('functions/users')->name('functions.users.')->group(function () {
+    Route::get('/',        [FunctionUsersController::class,'index'])->name('index');
+    Route::get('search',   [FunctionUsersController::class,'search'])->name('search');
+    Route::get('map',      [FunctionUsersController::class,'map'])   ->name('map');
+    Route::post('set',     [FunctionUsersController::class,'set'])   ->name('set');
+    Route::post('clear',   [FunctionUsersController::class,'clear']) ->name('clear');
 });
 
+/* ====== Distribution ====== */
+Route::get('distribution', [DistributionController::class, 'index'])->name('distribution.index');
+Route::get('distribution/tree',     [DistributionController::class, 'tree'])->name('distribution.tree');
+Route::get('distribution/current',  [DistributionController::class, 'current'])->name('distribution.current');
+Route::post('distribution/preview', [DistributionController::class, 'preview'])->name('distribution.preview');
+Route::post('distribution/commit',  [DistributionController::class, 'commit'])->name('distribution.commit');
+
+/* ====== MPS Responsables ====== */
+Route::get('mpsresp/tree',     [MpsRespController::class,'tree'])->name('mpsresp.tree');
+Route::get('mpsresp/current',  [MpsRespController::class,'current'])->name('mpsresp.current');
+Route::post('mpsresp/assign',  [MpsRespController::class,'assign'])->name('mpsresp.assign');
+Route::post('mpsresp/unassign',[MpsRespController::class,'unassign'])->name('mpsresp.unassign');
+Route::get('mpsresp/options',  [MpsRespController::class,'options'])->name('mpsresp.options');
+Route::get('mpsresp/table',    [MpsRespController::class,'table'])->name('mpsresp.table');
+Route::post('mpsresp/save-users',[MpsRespController::class,'saveUsers'])->name('mpsresp.saveUsers');
+Route::get('mpsresp/map',      [MpsRespController::class,'map'])->name('mpsresp.map');
+
+/* ====== Charts ====== */
+Route::get('charts/entity', [ChartsController::class, 'entity'])->name('charts.entity');
+Route::get('charts/function', [ChartsController::class, 'function'])->name('charts.function');
+Route::get('charts/entity-functions', [EntityFunctionsChartController::class, 'index'])->name('charts.entity-functions');
+
+/* ====== Param Projects MPS Resp ====== */
+Route::prefix('param/projects/mpsresp')->name('param.projects.mpsresp.')->group(function () {
+    // (vide pour le moment)
+});
+
+/* ====== Param Projects Functions ====== */
 Route::prefix('param/projects/functions')->name('param.projects.functions.')->group(function(){
-   
-    // 🔽 nouveaux endpoints user
     Route::get('users/search', [FunctionAssignmentController::class,'users'])   ->name('users');
     Route::get('users/map',    [FunctionAssignmentController::class,'userMap'])->name('userMap');
     Route::post('users/set',   [FunctionAssignmentController::class,'setUser'])->name('setUser');
     Route::post('users/clear', [FunctionAssignmentController::class,'clearUser'])->name('clearUser');
 });
 
+/* ====== RELATIONS BPMN ====== */
+Route::prefix('macro')->name('macro.')->group(function () {
+    // Routes fixes en premier
+    Route::get('/relations', [EntityProcessRelationsController::class, 'entities'])
+        ->name('relations.entities');
 
+    Route::get('/relations/processes/all', [EntityProcessRelationsController::class, 'processes'])
+        ->name('relations.processes');
+
+    // Routes avec paramètres en dernier
+    Route::get('/relations/{entity}/load', [EntityProcessRelationsController::class, 'load'])
+        ->name('relations.load');
+
+    Route::post('/relations/{entity}/save', [EntityProcessRelationsController::class, 'save'])
+        ->name('relations.save');
+
+    Route::get('/relations/{entity}', [EntityProcessRelationsController::class, 'index'])
+        ->name('relations.index');
+});
+
+/* ====== GRAPHE AUTO ====== */
+Route::get('macro/graph/{entity}', function (\App\Models\Param\Entite $entity) {
+    return inertia('dashboards/Param/Macro/Graph/Index', [
+        'entity' => $entity
+    ]);
+})->name('macro.graph.index');
+
+
+use App\Http\Controllers\Param\UsersController;
+
+
+/**
+ * Routes pour la gestion des utilisateurs dans param.projects
+ * À inclure dans votre fichier de routes tenant (routes/tenant.php)
+ */
+
+   
+    // Routes pour les utilisateurs
+        Route::prefix('users')->name('users.')->group(function () {
+            
+            // Liste et création
+            Route::get('/', [UsersController::class, 'index'])->name('index');
+            Route::get('/create', [UsersController::class, 'create'])->name('create');
+            Route::post('/store', [UsersController::class, 'store'])->name('store');
+            
+            // Export (avant les routes avec {user} pour éviter les conflits)
+            Route::get('/export', [UsersController::class, 'export'])->name('export');
+            
+            // Actions sur un utilisateur spécifique
+            Route::get('/{user}', [UsersController::class, 'show'])->name('show');
+            Route::get('/{user}/edit', [UsersController::class, 'edit'])->name('edit');
+            Route::put('/{user}', [UsersController::class, 'update'])->name('update');
+            Route::delete('/{user}', [UsersController::class, 'destroy'])->name('destroy');
+            
+            // Actions supplémentaires
+            Route::post('/{user}/change-status', [UsersController::class, 'changeStatus'])->name('change-status');
+            Route::post('/{user}/resend-email', [UsersController::class, 'resendWelcomeEmail'])->name('resend-email');
+        });
+
+    

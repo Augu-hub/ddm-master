@@ -96,6 +96,9 @@ class Entite extends Model
     return $prefix . $seq; // ex: KEK01 (si parent KEK → enfant KEK01 ; petit-enfant KEK0101, etc.)
 }
  // Correct - using the actual table name
-
+public function resolveRouteBinding($value, $field = null)
+    {
+        return $this->on('tenant')->where('id',$value)->firstOrFail();
+    }
 
 }

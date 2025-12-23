@@ -1,5 +1,5 @@
 <?php // app/Models/Process/Process.php
-namespace App\Models\Process;
+namespace App\Models\Tenant\Process;
 
 use Illuminate\Database\Eloquent\Model;
 

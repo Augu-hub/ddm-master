@@ -93,3 +93,42 @@ Route::get('/error/500', [ErrorController::class, 'error500'])->name('error500')
 
 
 
+Route::prefix('admin')->name('admin.')->middleware(['web', 'auth', 'verified'])->group(function () {
+    
+    // ========================================
+    // GESTION DES MENUS
+    // ========================================
+    
+    // Afficher la page de gestion des menus
+    Route::get('/menus', [\App\Http\Controllers\Admin\MenusController::class, 'index'])
+        ->name('menus.index');
+    
+    // Créer un nouveau menu (POST)
+    Route::post('/menus', [\App\Http\Controllers\Admin\MenusController::class, 'store'])
+        ->name('menus.store');
+    
+    // Mettre à jour un menu (PUT/PATCH)
+    Route::put('/menus/{menu}', [\App\Http\Controllers\Admin\MenusController::class, 'update'])
+        ->name('menus.update')
+        ->whereNumber('menu');
+    
+    // Supprimer un menu (DELETE)
+    Route::delete('/menus/{menu}', [\App\Http\Controllers\Admin\MenusController::class, 'destroy'])
+        ->name('menus.destroy')
+        ->whereNumber('menu');
+    
+    // Basculer la visibilité d'un menu
+    Route::patch('/menus/{menu}/toggle-visibility', [\App\Http\Controllers\Admin\MenusController::class, 'toggleVisibility'])
+        ->name('menus.toggleVisibility')
+        ->whereNumber('menu');
+    
+    // Mise à jour en masse (ordre, visibilité)
+    Route::post('/menus/batch-update', [\App\Http\Controllers\Admin\MenusController::class, 'batchUpdate'])
+        ->name('menus.batchUpdate');
+    
+    // Réorganiser (drag-drop)
+    Route::post('/menus/reorder', [\App\Http\Controllers\Admin\MenusController::class, 'reorder'])
+        ->name('menus.reorder');
+});
+
+

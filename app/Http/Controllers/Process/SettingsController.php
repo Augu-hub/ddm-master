@@ -3,13 +3,16 @@
 namespace App\Http\Controllers\Process;
 
 use App\Http\Controllers\Controller;
-use Illuminate\Http\Request;              // ✅ Bon namespace
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 
 class SettingsController extends Controller
 {
-    private function t() { return DB::connection('tenant'); }
+    private function t()
+    {
+        return DB::connection('tenant');
+    }
 
     public function index()
     {
@@ -22,6 +25,7 @@ class SettingsController extends Controller
                 'kpi'         => route('process.core.process.settings.kpi-categories'),
                 'links'       => route('process.core.process.settings.link-types'),
                 'controls'    => route('process.core.process.settings.control-types'),
+                'criticalityNorms' => route('process.core.process.settings.criticality-norms'),
             ],
         ]);
     }
@@ -29,8 +33,9 @@ class SettingsController extends Controller
     public function maturityScales()
     {
         $items = $this->t()->table('process_maturity_scales')
-            ->orderBy('sort')->orderBy('rank')
-            ->get(['id','code','label','sort','rank','min_score','max_score','color']);
+            ->orderBy('sort')
+            ->orderBy('rank')
+            ->get(['id', 'code', 'label', 'sort', 'rank', 'min_score', 'max_score', 'color']);
 
         return Inertia::render('dashboards/Process/Core/Settings/Maturity', compact('items'));
     }
@@ -38,18 +43,21 @@ class SettingsController extends Controller
     public function criticality()
     {
         $criteria = $this->t()->table('process_criticality_criteria')
-            ->orderBy('code')->get(['id','code','label','weight']);
+            ->orderBy('code')
+            ->get(['id', 'code', 'label', 'weight']);
 
         $levels = $this->t()->table('process_criticality_levels')
-            ->orderBy('weight')->get(['id','code','label','weight','color']);
+            ->orderBy('weight')
+            ->get(['id', 'code', 'label', 'weight', 'color']);
 
-        return Inertia::render('dashboards/Process/Core/Settings/Criticality', compact('criteria','levels'));
+        return Inertia::render('dashboards/Process/Core/Settings/Criticality', compact('criteria', 'levels'));
     }
 
     public function raciRoles()
     {
         $items = $this->t()->table('activity_raci_roles')
-            ->orderBy('code')->get(['id','code','label','description']);
+            ->orderBy('code')
+            ->get(['id', 'code', 'label', 'description']);
 
         return Inertia::render('dashboards/Process/Core/Settings/RaciRoles', compact('items'));
     }
@@ -57,7 +65,8 @@ class SettingsController extends Controller
     public function ideaAxes()
     {
         $items = $this->t()->table('activity_idea_axes')
-            ->orderBy('code')->get(['id','code','label']);
+            ->orderBy('code')
+            ->get(['id', 'code', 'label']);
 
         return Inertia::render('dashboards/Process/Core/Settings/IdeaAxes', compact('items'));
     }
@@ -65,7 +74,8 @@ class SettingsController extends Controller
     public function kpiCategories()
     {
         $items = $this->t()->table('process_kpi_categories')
-            ->orderBy('sort')->get(['id','code','label','sort']);
+            ->orderBy('sort')
+            ->get(['id', 'code', 'label', 'sort']);
 
         return Inertia::render('dashboards/Process/Core/Settings/KpiCategories', compact('items'));
     }
@@ -73,7 +83,8 @@ class SettingsController extends Controller
     public function linkTypes()
     {
         $items = $this->t()->table('process_link_types')
-            ->orderBy('code')->get(['id','code','label']);
+            ->orderBy('code')
+            ->get(['id', 'code', 'label']);
 
         return Inertia::render('dashboards/Process/Core/Settings/LinkTypes', compact('items'));
     }
@@ -81,32 +92,41 @@ class SettingsController extends Controller
     public function controlTypes()
     {
         $items = $this->t()->table('activity_control_types')
-            ->orderBy('code')->get(['id','code','label']);
+            ->orderBy('code')
+            ->get(['id', 'code', 'label']);
 
         return Inertia::render('dashboards/Process/Core/Settings/ControlTypes', compact('items'));
     }
-    public function criticalityNorms()
-{
-    $items = $this->t()
-        ->table('process_criticality_norms')
-        ->orderBy('min_percent')
-        ->get([
-            'id',
-            'min_percent',
-            'max_percent',
-            'color',
-            'alert_label',
-            'alert_level',
-            'actions',
-            'user_id',
-            'updated_at'
-        ]);
 
-    return Inertia::render('dashboards/Process/Core/Settings/CriticalityNorms', [
-        'items' => $items
-    ]);
-}
-  public function saveCriticalityNorms(Request $request)
+    /**
+     * ⚙️ Normes de criticité — affichage
+     */
+    public function criticalityNorms()
+    {
+        $items = $this->t()
+            ->table('process_criticality_norms')
+            ->orderBy('min_percent')
+            ->get([
+                'id',
+                'min_percent',
+                'max_percent',
+                'color',
+                'alert_label',
+                'alert_level',
+                'actions',
+                'user_id',
+                'updated_at'
+            ]);
+
+        return Inertia::render('dashboards/Process/Core/Settings/CriticalityNorms', [
+            'items' => $items
+        ]);
+    }
+
+    /**
+     * 💾 Enregistrement des normes (ajout/modif uniquement)
+     */
+    public function saveCriticalityNorms(Request $request)
     {
         $data = $request->validate([
             'norms' => 'required|array|min:1',
@@ -119,32 +139,33 @@ class SettingsController extends Controller
         ]);
 
         $norms = $data['norms'];
-        $userId = auth()->id() ?? null;
+        $userId = auth()->id();
 
-        // Vérifier que le dernier max_percent = 100 %
-        $last = collect($norms)->max('max_percent');
-        if ($last < 100) {
-            return back()->with('error', '⚠️ Le dernier intervalle doit se terminer à 100 %.');
+        // Vérifie la borne finale
+        $lastMax = collect($norms)->max('max_percent');
+        if ($lastMax < 100) {
+            return back()->with('error', '⚠️ La dernière borne doit se terminer à 100 %.');
         }
 
         $db = $this->t();
-        $db->table('process_criticality_norms')->truncate();
 
         foreach ($norms as $n) {
-            $db->table('process_criticality_norms')->insert([
-                'min_percent' => $n['min_percent'],
-                'max_percent' => $n['max_percent'],
-                'color'       => $n['color'],
-                'alert_label' => $n['alert_label'],
-                'alert_level' => $n['alert_level'],
-                'actions'     => $n['actions'],
-                'user_id'     => $userId,
-                'created_at'  => now(),
-                'updated_at'  => now(),
-            ]);
+            $db->table('process_criticality_norms')->updateOrInsert(
+                [
+                    'min_percent' => $n['min_percent'],
+                    'max_percent' => $n['max_percent'],
+                ],
+                [
+                    'color'       => $n['color'],
+                    'alert_label' => $n['alert_label'],
+                    'alert_level' => $n['alert_level'],
+                    'actions'     => $n['actions'],
+                    'user_id'     => $userId,
+                    'updated_at'  => now(),
+                ]
+            );
         }
 
         return back()->with('success', '✅ Normes enregistrées avec succès.');
     }
-
 }

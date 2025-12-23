@@ -1,38 +1,52 @@
 <template>
   <VerticalLayout>
-    <Head title="Poids stratégique – Référentiel" />
-
-    <b-card class="shadow-sm">
+    <Head title="Poids stratégique — Référentiel" />
+    <b-card class="shadow-sm border-0">
       <div class="d-flex justify-content-between align-items-center mb-3">
-        <h5 class="fw-semibold mb-0"><i class="ti ti-target-arrow text-warning me-1"></i> Poids stratégique</h5>
+        <h5 class="fw-semibold text-primary mb-0">
+          <i class="ti ti-target-arrow me-2"></i> Échelle du poids stratégique
+        </h5>
         <Link :href="route('process.core.process.evaluations.criticality.index')" class="btn btn-light btn-sm">
           <i class="ti ti-arrow-left"></i> Retour
         </Link>
       </div>
 
       <div class="table-responsive">
-        <b-table-simple hover class="table table-sm table-nowrap align-middle">
-          <b-thead class="bg-light">
-            <b-tr>
-              <b-th class="text-center">Score</b-th>
-              <b-th>Libellé</b-th>
-              <b-th>Description</b-th>
-              <b-th class="text-center">Action</b-th>
-            </b-tr>
-          </b-thead>
-          <b-tbody>
-            <b-tr v-for="(i, idx) in items" :key="idx">
-              <b-td class="text-center fw-bold">{{ i.score }}</b-td>
-              <b-td><input v-model="i.label" class="form-control form-control-sm border-0 bg-transparent fw-semibold" /></b-td>
-              <b-td><textarea v-model="i.description" rows="1" class="form-control form-control-sm border-0 bg-transparent text-muted small"></textarea></b-td>
-              <b-td class="text-center">
-                <button class="btn btn-sm btn-outline-success" @click="submit(i)">
-                  <i class="ti ti-check"></i>
-                </button>
-              </b-td>
-            </b-tr>
-          </b-tbody>
-        </b-table-simple>
+        <table class="table table-bordered table-hover align-middle" style="font-size: 0.8rem">
+          <thead class="table-primary">
+            <tr>
+              <th>Code</th>
+              <th>Libellé</th>
+              <th>Description</th>
+              <th class="text-center">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="(item, i) in form.items" :key="i">
+              <td><input v-model="item.code" class="form-control form-control-sm text-center fw-semibold" /></td>
+              <td><input v-model="item.label" class="form-control form-control-sm" /></td>
+              <td><textarea v-model="item.description" rows="1" class="form-control form-control-sm"></textarea></td>
+              <td class="text-center">
+                <b-button size="sm" variant="success" @click="save(item)">
+                  <i class="ti ti-device-floppy"></i>
+                </b-button>
+              </td>
+            </tr>
+
+            <tr>
+              <td colspan="4" class="text-center">
+                <b-button size="sm" variant="outline-primary" @click="addRow">
+                  <i class="ti ti-plus me-1"></i> Ajouter un niveau
+                </b-button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="d-flex justify-content-end gap-2 mt-3">
+        <b-button size="sm" variant="success" @click="saveAll">✅ ENREGISTRER</b-button>
+        <Link :href="route('process.core.process.evaluations.criticality.index')" class="btn btn-secondary btn-sm">✕ FERMER</Link>
       </div>
     </b-card>
   </VerticalLayout>
@@ -42,14 +56,8 @@
 import { Head, Link, useForm } from '@inertiajs/vue3'
 import VerticalLayout from '@/layoutsparam/VerticalLayout.vue'
 const props = defineProps<{ items: Array<any> }>()
-const form = useForm({ score: null, label: '', description: '' })
-const submit = (item) => {
-  form.score = item.score
-  form.label = item.label
-  form.description = item.description
-  form.post(route('process.core.process.evaluations.criticality.update', 'process_strategic_weight_scales'), {
-    preserveScroll: true,
-    onSuccess: () => alert('✅ Poids stratégique mis à jour !')
-  })
-}
+const form = useForm({ items: JSON.parse(JSON.stringify(props.items || [])) })
+const addRow = () => form.items.push({ code: '', label: '', description: '' })
+const save = (i) => form.post(route('process.core.process.evaluations.criticality.update', 'process_strategic_weight_scales'), { data: i })
+const saveAll = () => form.post(route('process.core.process.evaluations.criticality.store', 'process_strategic_weight_scales'))
 </script>

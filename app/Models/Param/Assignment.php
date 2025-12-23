@@ -11,4 +11,12 @@ class Assignment extends Model
 
     // pratique pour tracer l’origine (macro/process/activity) déposé,
     // même si on stocke finalement au niveau activité lors du commit "résolu".
+
+     public function functions() {
+        return $this->hasMany(AssignmentFunction::class);
+    }
+
+    public function functionUsers() {
+        return $this->hasMany(AssignmentFunctionUser::class);
+    }
 }

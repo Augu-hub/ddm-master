@@ -8,6 +8,8 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use App\Models\Tenant\Process\ContractElement;
 use App\Models\Tenant\Process\Contracts;
 
+use Illuminate\Database\Eloquent\Relations\HasOne;
+
 class Processus extends Model
 {
  protected $connection = 'tenant';     // <— IMPORTANT
@@ -23,10 +25,16 @@ class Processus extends Model
         return $this->belongsTo(MacroProcessus::class, 'macro_process_id');
     }
 
+    // public function activities(): HasMany
+    // {
+    //     return $this->hasMany(Activite::class);
+    // }
+
     public function activities(): HasMany
-    {
-        return $this->hasMany(Activite::class);
-    }
+{
+    return $this->hasMany(Activite::class, 'process_id');
+}
+
 
     public static function macroPrefix(MacroProcessus $macro): string
     {
@@ -61,11 +69,40 @@ class Processus extends Model
     public function resources() {
         return $this->hasMany(ProcessResource::class, 'process_id');
     }
-    public function contractElements()
-{
-    return $this->hasMany(ContractElement::class, 'process_id');
-}
 
 
+
+    
+    public function assignments() {
+        return $this->hasMany(Assignment::class, 'mpa_id')
+            ->where('mpa_type', 'process');
+    }
+ public function macroProcess(): BelongsTo
+    {
+        return $this->belongsTo(MacroProcessus::class, 'macro_process_id');
+    }
+
+     public function diagrams(): HasMany
+    {
+        return $this->hasMany(\App\Models\Bpmn\BpmnDiagramVersion::class, 'process_id');
+    }
+    
+    public function latestDiagram(): HasOne
+    {
+        return $this->hasOne(\App\Models\Bpmn\BpmnDiagramVersion::class, 'process_id')
+            ->where('is_current', true)
+            ->latest();
+    }
+    
+    public function taskLinks(): HasMany
+    {
+        return $this->hasMany(\App\Models\Bpmn\BpmnTaskLink::class, 'process_id');
+    }
+    
+    public function sequenceFlows(): HasMany
+    {
+        return $this->hasMany(\App\Models\Bpmn\BpmnSequenceFlow::class, 'process_id');
+    }
+    
 
 }

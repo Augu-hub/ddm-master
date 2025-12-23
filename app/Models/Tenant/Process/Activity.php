@@ -1,18 +1,26 @@
-<?php // app/Models/Process/Activity.php
-namespace App\Models\Process;
+<?php
+
+namespace App\Models\Tenant\Process;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Activity extends Model
 {
     protected $connection = 'tenant';
     protected $table = 'activities';
-    protected $fillable = ['process_id','code','name','description'];
 
-    public function process(){ return $this->belongsTo(Process::class); }
-    public function steps(){ return $this->hasMany(ActivityStep::class); }
-    public function flows(){ return $this->hasMany(ActivityFlow::class); }
-    public function controls(){ return $this->hasMany(ActivityControl::class); }
-    public function raci(){ return $this->hasMany(ActivityRaci::class); }
-    public function idea(){ return $this->hasMany(ActivityIdea::class); }
+    protected $fillable = ['process_id', 'code', 'name', 'description'];
+    protected $casts = ['process_id' => 'integer'];
+
+    public function process(): BelongsTo
+    {
+        return $this->belongsTo(Process::class);
+    }
+
+    public function raciAssignments(): HasMany
+    {
+        return $this->hasMany(ActivityRaciAssignment::class, 'activity_id');
+    }
 }

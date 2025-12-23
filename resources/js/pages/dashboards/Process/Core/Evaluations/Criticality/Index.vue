@@ -1,44 +1,25 @@
 <template>
   <VerticalLayout>
-    <Head title="Criticité — Vue d’ensemble" />
+    <Head title="Criticité — Référentiels des 4 axes" />
 
     <div class="d-flex justify-content-between align-items-center mb-3">
-      <div>
-        <h4 class="fw-semibold mb-0"><i class="ti ti-flame text-danger me-2"></i>Échelles de criticité</h4>
-        <p class="text-muted mb-0">Vue d’ensemble des référentiels de maturité, motricité, transversalité et poids stratégique.</p>
-      </div>
+      <h4 class="fw-semibold text-primary mb-0">
+        <i class="ti ti-graph me-2"></i> Échelles de criticité (4 axes)
+      </h4>
+      <small class="text-muted">Maturité • Motricité • Transversalité • Stratégique</small>
     </div>
 
-    <b-row>
-      <b-col md="6" lg="6" class="mb-3" v-for="table in tables" :key="table.key">
-        <b-card class="shadow-sm h-100">
-          <div class="d-flex align-items-center justify-content-between mb-2">
-            <h6 class="fw-semibold m-0 text-primary">
-              <i :class="table.icon + ' me-2'"></i>{{ table.label }}
-            </h6>
-            <Link :href="table.link" class="btn btn-sm btn-outline-primary">
-              <i class="ti ti-eye"></i> Voir
-            </Link>
+    <b-row class="g-3">
+      <b-col md="6" lg="3" v-for="axis in axes" :key="axis.code">
+        <b-card class="shadow-sm border-0 h-100">
+          <div class="d-flex align-items-center mb-2">
+            <i :class="axis.icon + ' text-primary me-2 fs-5'"></i>
+            <h6 class="fw-semibold mb-0">{{ axis.label }}</h6>
           </div>
-
-          <div class="table-responsive">
-            <b-table-simple hover class="table table-sm table-nowrap">
-              <b-thead class="bg-light">
-                <b-tr>
-                  <b-th class="text-center">Score</b-th>
-                  <b-th>Libellé</b-th>
-                  <b-th>Description</b-th>
-                </b-tr>
-              </b-thead>
-              <b-tbody>
-                <b-tr v-for="row in table.items" :key="row.score">
-                  <b-td class="text-center fw-bold">{{ row.score }}</b-td>
-                  <b-td>{{ row.label }}</b-td>
-                  <b-td class="text-muted small">{{ row.description }}</b-td>
-                </b-tr>
-              </b-tbody>
-            </b-table-simple>
-          </div>
+          <p class="text-muted small mb-3">{{ axis.desc }}</p>
+          <Link :href="route(axis.route)" class="btn btn-outline-primary btn-sm w-100">
+            <i class="ti ti-edit me-1"></i> Gérer les niveaux
+          </Link>
         </b-card>
       </b-col>
     </b-row>
@@ -49,17 +30,34 @@
 import { Head, Link } from '@inertiajs/vue3'
 import VerticalLayout from '@/layoutsparam/VerticalLayout.vue'
 
-const props = defineProps<{
-  maturity: Array<any>,
-  motricity: Array<any>,
-  transversality: Array<any>,
-  strategic: Array<any>
-}>()
-
-const tables = [
-  { key: 'maturity', label: 'Niveaux de maturité', icon: 'ti ti-chart-bar', link: route('process.core.process.evaluations.criticality.maturity'), items: props.maturity },
-  { key: 'motricity', label: 'Niveaux de motricité', icon: 'ti ti-topology-star', link: route('process.core.process.evaluations.criticality.motricity'), items: props.motricity },
-  { key: 'transversality', label: 'Niveaux de transversalité', icon: 'ti ti-arrows-join-2', link: route('process.core.process.evaluations.criticality.transversality'), items: props.transversality },
-  { key: 'strategic', label: 'Poids stratégique', icon: 'ti ti-target-arrow', link: route('process.core.process.evaluations.criticality.strategic'), items: props.strategic },
+const axes = [
+  {
+    code: 'maturity',
+    label: 'Maturité',
+    desc: 'Mesure du niveau de formalisation et de maîtrise du processus.',
+    icon: 'ti ti-stairs-up',
+    route: 'process.core.process.evaluations.criticality.maturity',
+  },
+  {
+    code: 'motricity',
+    label: 'Motricité',
+    desc: 'Évalue la contribution du processus au fonctionnement global.',
+    icon: 'ti ti-engine',
+    route: 'process.core.process.evaluations.criticality.motricity',
+  },
+  {
+    code: 'transversality',
+    label: 'Transversalité',
+    desc: 'Apprécie les interactions et interdépendances avec d’autres processus.',
+    icon: 'ti ti-arrows-diagonal',
+    route: 'process.core.process.evaluations.criticality.transversality',
+  },
+  {
+    code: 'strategic',
+    label: 'Poids stratégique',
+    desc: 'Mesure la contribution du processus aux objectifs stratégiques.',
+    icon: 'ti ti-target-arrow',
+    route: 'process.core.process.evaluations.criticality.strategic',
+  },
 ]
 </script>

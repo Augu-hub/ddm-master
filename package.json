@@ -30,6 +30,7 @@
         "vue-tsc": "^3.0.8"
     },
     "dependencies": {
+        "@bpmn-io/properties-panel": "^3.34.0",
         "@fullcalendar/bootstrap": "^6.1.17",
         "@fullcalendar/core": "^6.1.17",
         "@fullcalendar/daygrid": "^6.1.17",
@@ -48,6 +49,9 @@
         "apexcharts": "^4.6.0",
         "bootstrap": "^5.3.5",
         "bootstrap-vue-next": "^0.28.6",
+        "bpmn-js": "^18.9.1",
+        "bpmn-js-properties-panel": "^5.45.0",
+        "camunda-bpmn-moddle": "^7.0.1",
         "chart.js": "^4.5.1",
         "choices.js": "^11.1.0",
         "dayjs": "^1.11.13",

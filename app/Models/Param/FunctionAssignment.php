@@ -13,5 +13,10 @@ class FunctionAssignment extends TenantModel
     public function user()
     {
         return $this->belongsTo(\App\Models\User::class, 'user_id');
-    }
+    }public function functionAssignment()
+{
+    return $this->hasOne(FunctionAssignment::class, 'function_id');
+}
+
+
 }
