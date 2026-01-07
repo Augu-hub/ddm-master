@@ -6,7 +6,7 @@ use Illuminate\Support\Facades\Route;
 Route::get('/health', fn () => response()->json(['ok' => true]))->name('api.health');
 
 /* ========= API protégée par session (guard web via middleware 'auth') ========= */
-use App\Http\Controllers\Api\NavMenuController;
+//use App\Http\Controllers\Api\NavMenuController;
 use App\Http\Controllers\Api\MenuController;
 use App\Http\Controllers\Api\ServiceController;
 use App\Http\Controllers\Api\ModuleController;
@@ -15,7 +15,7 @@ use App\Http\Controllers\Param\EntiteController;
 
 Route::middleware(['auth'])->group(function () {
     // ---- NAV / MENUS ----
-    Route::get('/nav/entities', [NavMenuController::class, 'entities'])->name('api.nav.entities');
+   // Route::get('/nav/entities', [NavMenuController::class, 'entities'])->name('api.nav.entities');
 
     // ---- ENTITÉS (Param) ----
     Route::get('/entities/menu',        [EntiteController::class, 'getMenuEntities'])->name('api.entities.menu');

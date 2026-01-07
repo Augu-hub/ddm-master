@@ -1,983 +1,1371 @@
 <template>
   <VerticalLayout>
-    <Head title="Administration — Gestion des Menus" />
+    <Head title="Gestion des Menus" />
 
-    <!-- Header avec gradient -->
-    <div class="page-header mb-4">
-      <div class="d-flex align-items-center justify-content-between flex-wrap gap-3">
-        <div class="d-flex align-items-center gap-3">
-          <div class="icon-wrapper">
-            <i class="ti ti-menu-2 fs-3"></i>
-          </div>
-          <div>
-            <h3 class="mb-1 fw-bold">Gestion des Menus</h3>
-            <p class="text-muted mb-0 small">Créez, organisez et personnalisez votre arborescence</p>
-          </div>
-        </div>
-        <div class="header-actions">
-          <b-button variant="primary" @click="showCreateModal" class="modern-btn">
-            <i class="ti ti-plus me-2"></i>
-            Ajouter un Menu
-          </b-button>
-        </div>
-      </div>
-    </div>
-
-    <!-- Statistiques -->
-    <b-row class="g-3 mb-4">
-      <b-col md="3">
-        <div class="stat-card stat-primary">
-          <div class="stat-icon">
-            <i class="ti ti-list"></i>
-          </div>
-          <div class="stat-content">
-            <h3 class="stat-value">{{ totalMenus }}</h3>
-            <p class="stat-label">Menus Total</p>
-          </div>
-        </div>
-      </b-col>
-      <b-col md="3">
-        <div class="stat-card stat-success">
-          <div class="stat-icon">
-            <i class="ti ti-hierarchy"></i>
-          </div>
-          <div class="stat-content">
-            <h3 class="stat-value">{{ totalWithChildren }}</h3>
-            <p class="stat-label">Avec sous-menus</p>
-          </div>
-        </div>
-      </b-col>
-      <b-col md="3">
-        <div class="stat-card stat-info">
-          <div class="stat-icon">
-            <i class="ti ti-eye"></i>
-          </div>
-          <div class="stat-content">
-            <h3 class="stat-value">{{ totalVisible }}</h3>
-            <p class="stat-label">Visibles</p>
-          </div>
-        </div>
-      </b-col>
-      <b-col md="3">
-        <div class="stat-card stat-warning">
-          <div class="stat-icon">
-            <i class="ti ti-database-cog"></i>
-          </div>
-          <div class="stat-content">
-            <h3 class="stat-value">{{ totalWithModule }}</h3>
-            <p class="stat-label">Avec modules</p>
-          </div>
-        </div>
-      </b-col>
-    </b-row>
-
-    <!-- Filtres et recherche -->
-    <div class="filters-bar mb-4">
-      <b-row class="g-2">
-        <b-col md="4">
-          <div class="search-box">
-            <i class="ti ti-search"></i>
-            <b-form-input
-              v-model="searchQuery"
-              placeholder="Rechercher un menu..."
-              class="search-input"
-            />
-          </div>
-        </b-col>
-        <b-col md="4">
-          <b-form-select
-            v-model="filterType"
-            :options="typeOptions"
-            class="modern-select"
-          />
-        </b-col>
-        <b-col md="4">
-          <b-form-select
-            v-model="filterVisibility"
-            :options="visibilityOptions"
-            class="modern-select"
-          />
-        </b-col>
-      </b-row>
-    </div>
-
-    <!-- Vue arborescente des menus -->
-    <div class="menus-container">
-      <div v-if="filteredMenus.length === 0" class="empty-state">
-        <i class="ti ti-list-off fs-1 text-muted mb-3"></i>
-        <p class="text-muted mb-0">Aucun menu trouvé</p>
-        <small class="text-muted">Créez votre premier menu pour commencer</small>
-      </div>
-
-      <div v-else class="menus-tree" ref="menusTreeEl">
-        <menu-item
-          v-for="menu in filteredMenus"
-          :key="menu.id"
-          :menu="menu"
-          :modules="modules"
-          :icons="icons"
-          @edit="editMenu"
-          @delete="deleteMenu"
-          @add-child="addChildMenu"
-          @update="updateMenu"
-          @toggle-visibility="toggleVisibility"
-        />
-      </div>
-    </div>
-
-    <!-- Modal de création/édition -->
-    <b-modal
-      v-model="modalState.show"
-      :title="modalState.isEdit ? `Modifier — ${modalState.form.label}` : 'Créer un Menu'"
-      size="xl"
-      @hidden="resetModal"
-      centered
-    >
-      <b-form @submit.prevent="saveMenu">
-        <!-- Section Module (PRIORITAIRE) -->
-        <div class="form-section-header">
-          <i class="ti ti-database me-2"></i>
-          <h6>📌 Module (détermine tout)</h6>
-        </div>
-
-        <b-row class="g-3 mb-4">
-          <b-col md="12">
-            <label class="form-label">Sélectionner un Module</label>
-            <b-form-select
-              v-model="modalState.form.module_id"
-              :options="moduleOptions"
-              class="modern-select"
-              @change="applyModuleTemplate"
-            />
-            <small class="form-hint">Sélectionnez un module pour auto-remplir les champs</small>
-          </b-col>
-        </b-row>
-
-        <!-- Section Libellé et Clé -->
-        <div class="form-section-header">
-          <i class="ti ti-tags me-2"></i>
-          <h6>Identité du Menu</h6>
-        </div>
-
-        <b-row class="g-3 mb-4">
-          <b-col md="6">
-            <label class="form-label">Libellé<span class="text-danger">*</span></label>
-            <b-form-input
-              v-model="modalState.form.label"
-              placeholder="ex: Utilisateurs, Processus, Risques..."
-              class="modern-input"
-              required
-              @change="autoGenerateFromLabel"
-            />
-            <small class="form-hint">Change automatiquement clé et icône</small>
-          </b-col>
-
-          <b-col md="6">
-            <label class="form-label">Clé unique<span class="text-danger">*</span></label>
-            <div class="input-group">
-              <b-form-input
-                v-model="modalState.form.key"
-                placeholder="auto-générée"
-                class="modern-input"
-                required
-                :disabled="modalState.isEdit"
-              />
-              <b-button 
-                variant="outline-secondary"
-                @click="regenerateKey"
-                v-if="!modalState.isEdit"
-                v-b-tooltip.hover="'Régénérer depuis le libellé'"
-              >
-                <i class="ti ti-sparkles"></i>
-              </b-button>
+    <div class="menus-page">
+      <!-- Header Pro avec Sidebar Toggle -->
+      <div class="header-section">
+        <div class="header-content">
+          <div class="header-left">
+            <button @click="sidebarOpen = !sidebarOpen" class="btn-sidebar-toggle">
+              <i class="ti ti-menu-2"></i>
+            </button>
+            <div class="header-text">
+              <h1 class="page-title">📋 Gestion des Menus</h1>
+              <p class="page-subtitle">Organisez et personnalisez votre arborescence</p>
             </div>
-            <small class="form-hint">Générée automatiquement depuis le libellé</small>
-          </b-col>
-        </b-row>
-
-        <!-- Section Apparence -->
-        <div class="form-section-header">
-          <i class="ti ti-palette me-2"></i>
-          <h6>Apparence</h6>
+          </div>
+          <div class="header-right">
+            <button @click="refreshData" class="btn-refresh" :class="{ loading: isRefreshing }">
+              <i class="ti ti-refresh"></i>
+              {{ isRefreshing ? 'Actualisation...' : 'Actualiser' }}
+            </button>
+            <button @click="showCreateModal" class="btn-primary-large">
+              <i class="ti ti-plus"></i>
+              Ajouter
+            </button>
+          </div>
         </div>
 
-        <b-row class="g-3 mb-4">
-          <b-col md="6">
-            <label class="form-label">Type<span class="text-danger">*</span></label>
-            <b-form-select
-              v-model="modalState.form.type"
-              :options="typeOptions"
-              class="modern-select"
-              required
-            />
-          </b-col>
-
-          <b-col md="6">
-            <label class="form-label">Icône (auto-générée)</label>
-            <div class="icon-display">
-              <i v-if="modalState.form.icon" :class="modalState.form.icon" class="preview-icon"></i>
-              <span>{{ modalState.form.icon || 'Auto-détectée' }}</span>
+        <!-- Stats Elegantes -->
+        <div class="stats-grid">
+          <div class="stat-box stat-blue" v-if="stats">
+            <div class="stat-icon"><i class="ti ti-list"></i></div>
+            <div class="stat-details">
+              <div class="stat-number">{{ stats.total }}</div>
+              <div class="stat-label">Menus Total</div>
             </div>
-            <small class="form-hint">Détectée automatiquement. Cliquez pour changer :</small>
-            <div class="icon-picker-compact mt-2">
-              <div v-for="icon in icons" :key="icon" class="icon-option-small" @click="modalState.form.icon = icon">
-                <i :class="icon"></i>
+          </div>
+
+          <div class="stat-box stat-green" v-if="stats">
+            <div class="stat-icon"><i class="ti ti-hierarchy"></i></div>
+            <div class="stat-details">
+              <div class="stat-number">{{ stats.withChildren }}</div>
+              <div class="stat-label">Parents</div>
+            </div>
+          </div>
+
+          <div class="stat-box stat-purple" v-if="stats">
+            <div class="stat-icon"><i class="ti ti-eye"></i></div>
+            <div class="stat-details">
+              <div class="stat-number">{{ stats.visible }}</div>
+              <div class="stat-label">Visibles</div>
+            </div>
+          </div>
+
+          <div class="stat-box stat-orange" v-if="stats">
+            <div class="stat-icon"><i class="ti ti-database-cog"></i></div>
+            <div class="stat-details">
+              <div class="stat-number">{{ stats.maxDepth }}</div>
+              <div class="stat-label">Profondeur Max</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Main Content -->
+      <div class="main-content">
+        <!-- Sidebar Filters -->
+        <aside class="sidebar" :class="{ open: sidebarOpen }">
+          <div class="sidebar-header">
+            <h3>🔍 Filtres</h3>
+            <button @click="sidebarOpen = false" class="btn-close-sidebar">
+              <i class="ti ti-x"></i>
+            </button>
+          </div>
+
+          <div class="sidebar-content">
+            <!-- Search -->
+            <div class="filter-section">
+              <label class="filter-title">Rechercher</label>
+              <div class="search-wrapper">
+                <i class="ti ti-search"></i>
+                <input 
+                  v-model="searchQuery" 
+                  type="text" 
+                  placeholder="Nom ou clé..." 
+                  class="search-input"
+                />
               </div>
             </div>
-          </b-col>
-        </b-row>
 
-        <!-- Section Navigation -->
-        <div class="form-section-header">
-          <i class="ti ti-link me-2"></i>
-          <h6>Navigation (auto-générée du module)</h6>
-        </div>
-
-        <b-row class="g-3 mb-4">
-          <b-col md="6">
-            <label class="form-label">URL</label>
-            <b-form-input
-              v-model="modalState.form.url"
-              placeholder="Auto du module"
-              class="modern-input"
-            />
-          </b-col>
-
-          <b-col md="6">
-            <label class="form-label">Route</label>
-            <b-form-input
-              v-model="modalState.form.route_name"
-              placeholder="Auto du module"
-              class="modern-input"
-            />
-          </b-col>
-        </b-row>
-
-        <!-- Section Attributs -->
-        <div class="form-section-header">
-          <i class="ti ti-settings me-2"></i>
-          <h6>Attributs</h6>
-        </div>
-
-        <b-row class="g-3 mb-4">
-          <b-col md="4">
-            <label class="form-label">Ordre d'affichage</label>
-            <b-form-input
-              v-model.number="modalState.form.sort"
-              type="number"
-              min="1"
-              class="modern-input"
-            />
-          </b-col>
-
-          <b-col md="4">
-            <label class="form-label">Cible du lien</label>
-            <b-form-select
-              v-model="modalState.form.target"
-              :options="[
-                { value: null, text: 'Même fenêtre' },
-                { value: '_blank', text: 'Nouvelle fenêtre' }
-              ]"
-              class="modern-select"
-            />
-          </b-col>
-
-          <b-col md="4">
-            <div class="form-check-wrapper">
-              <b-form-checkbox
-                v-model="modalState.form.visible"
-                class="form-check-modern"
-              >
-                <span class="checkbox-label">
-                  <i class="ti ti-eye me-2"></i>
-                  Visible
-                </span>
-              </b-form-checkbox>
+            <!-- Type Filter -->
+            <div class="filter-section">
+              <label class="filter-title">Type</label>
+              <div class="filter-options">
+                <button 
+                  v-for="option in typeOptions"
+                  :key="option.value"
+                  @click="filterType = option.value"
+                  :class="{ active: filterType === option.value }"
+                  class="filter-option"
+                >
+                  {{ option.label }}
+                </button>
+              </div>
             </div>
-          </b-col>
-        </b-row>
 
-        <!-- Badge et Tooltip (auto du module) -->
-        <b-row class="g-3">
-          <b-col md="6">
-            <label class="form-label">Badge (JSON)</label>
-            <b-form-textarea
-              v-model="modalState.form.badge_json"
-              placeholder='Auto du module'
-              rows="2"
-              class="modern-input"
-            />
-            <small class="form-hint">Auto-généré du module</small>
-          </b-col>
+            <!-- Visibility Filter -->
+            <div class="filter-section">
+              <label class="filter-title">Visibilité</label>
+              <div class="filter-options">
+                <button 
+                  v-for="option in visibilityOptions"
+                  :key="option.value"
+                  @click="filterVisibility = option.value"
+                  :class="{ active: filterVisibility === option.value }"
+                  class="filter-option"
+                >
+                  {{ option.label }}
+                </button>
+              </div>
+            </div>
 
-          <b-col md="6">
-            <label class="form-label">Tooltip (JSON)</label>
-            <b-form-textarea
-              v-model="modalState.form.tooltip_json"
-              placeholder='{"text":"Description"}'
-              rows="2"
-              class="modern-input"
-            />
-          </b-col>
-        </b-row>
-      </b-form>
+            <!-- Results Count -->
+            <div class="filter-section">
+              <div class="results-info">
+                <div class="results-count">{{ filteredMenus.length }}/{{ totalMenus }}</div>
+                <button @click="resetFilters" class="btn-reset-filters">
+                  🔄 Réinitialiser
+                </button>
+              </div>
+            </div>
+          </div>
+        </aside>
 
-      <template #modal-footer>
-        <b-button variant="light" @click="modalState.show = false">
-          <i class="ti ti-x me-2"></i>
-          Annuler
-        </b-button>
-        <b-button
-          variant="primary"
-          @click="saveMenu"
-          :disabled="modalState.loading"
-        >
-          <i class="ti ti-check me-2"></i>
-          {{ modalState.loading ? 'Enregistrement...' : 'Enregistrer' }}
-        </b-button>
-      </template>
-    </b-modal>
+        <!-- Content Area -->
+        <main class="content-area">
+          <!-- Toolbar -->
+          <div class="toolbar">
+            <div class="toolbar-left">
+              <span class="toolbar-info">{{ filteredMenus.length }} menu(s) affichés</span>
+            </div>
+            <div class="toolbar-right">
+              <select v-model="sortBy" class="select-sort">
+                <option value="sort">📊 Ordre</option>
+                <option value="label">📝 Nom (A-Z)</option>
+                <option value="created">📅 Récent</option>
+              </select>
+            </div>
+          </div>
 
-    <!-- Modal de suppression -->
-    <b-modal
-      v-model="deleteModal.show"
-      title="Confirmer la suppression"
-      centered
-      @hidden="deleteModal.show = false"
-    >
-      <div class="alert alert-warning mb-3">
-        <i class="ti ti-alert-triangle me-2"></i>
-        <strong>Attention !</strong> Cette action est irréversible.
+          <!-- Menus Tree -->
+          <div class="menus-section">
+            <div v-if="filteredMenus.length === 0" class="empty-state">
+              <i class="ti ti-list-off"></i>
+              <h3>Aucun menu trouvé</h3>
+              <p>Essayez d'ajuster vos filtres</p>
+            </div>
+
+            <div v-else class="tree-container">
+              <div class="tree-header">
+                <span class="tree-label">Menu</span>
+                <span class="tree-module">Module</span>
+                <span class="tree-status">Statut</span>
+                <span class="tree-actions">Actions</span>
+              </div>
+
+              <MenuTreeItem
+                v-for="menu in filteredMenus"
+                :key="menu.id"
+                :menu="menu"
+                :modules="modules"
+                :all-icons="icons"
+                :level="0"
+                @edit="editMenu"
+                @delete="deleteMenu"
+                @add-child="addChildMenu"
+                @toggle-visible="toggleVisible"
+              />
+            </div>
+          </div>
+        </main>
       </div>
-      <p class="mb-3">
-        Vous vous apprêtez à supprimer le menu <strong>{{ deleteModal.menu?.label }}</strong>
-        <span v-if="deleteModal.menu?.children?.length > 0" class="text-danger d-block small mt-2">
-          ({{ deleteModal.menu.children.length }} sous-menu(s) seront aussi supprimés)
-        </span>
-      </p>
+    </div>
 
-      <template #modal-footer>
-        <b-button variant="light" @click="deleteModal.show = false">
-          Annuler
-        </b-button>
-        <b-button
-          variant="danger"
-          @click="confirmDelete"
-          :disabled="deleteModal.loading"
-        >
-          {{ deleteModal.loading ? 'Suppression...' : 'Supprimer' }}
-        </b-button>
-      </template>
-    </b-modal>
+    <!-- Modal Create/Edit -->
+    <div v-if="modal.show" class="modal-overlay" @click.self="closeModal">
+      <div class="modal-box">
+        <div class="modal-header">
+          <h2>{{ modal.edit ? '✏️ Modifier Menu' : '➕ Ajouter Menu' }}</h2>
+          <button @click="closeModal" class="btn-close"><i class="ti ti-x"></i></button>
+        </div>
+
+        <form @submit.prevent="saveMenu" class="modal-form">
+          <!-- Hiérarchie -->
+          <div class="form-section">
+            <h3 class="section-title"><i class="ti ti-hierarchy"></i> Hiérarchie</h3>
+            <label>Parent (optionnel)</label>
+            <select v-model.number="modal.form.parent_id" class="input-modern">
+              <option :value="null">📌 Racine (pas de parent)</option>
+              <option v-for="p in parentOptions" :key="p.id" :value="p.id">
+                {{ p.indent }}{{ p.label }}
+              </option>
+            </select>
+          </div>
+
+          <!-- Module -->
+          <div class="form-section">
+            <h3 class="section-title"><i class="ti ti-database"></i> Module</h3>
+            <select v-model.number="modal.form.module_id" @change="applyModuleTemplate" class="input-modern">
+              <option :value="null">— Aucun</option>
+              <option v-for="m in modules" :key="m.id" :value="m.id">
+                {{ m.name }}
+              </option>
+            </select>
+          </div>
+
+          <!-- Identité -->
+          <div class="form-section">
+            <h3 class="section-title"><i class="ti ti-tag"></i> Identité</h3>
+            <div class="form-row">
+              <div class="form-col">
+                <label>Libellé *</label>
+                <input v-model="modal.form.label" @change="autoKey" required class="input-modern" />
+              </div>
+              <div class="form-col">
+                <label>Clé *</label>
+                <div class="input-with-button">
+                  <input v-model="modal.form.key" :disabled="modal.edit" required class="input-modern" />
+                  <button v-if="!modal.edit" type="button" @click="genKey" class="btn-icon">🔄</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Apparence -->
+          <div class="form-section">
+            <h3 class="section-title"><i class="ti ti-palette"></i> Apparence</h3>
+            <div class="form-row">
+              <div class="form-col">
+                <label>Type *</label>
+                <select v-model="modal.form.type" required class="input-modern">
+                  <option value="item">📄 Élément</option>
+                  <option value="title">📌 Titre</option>
+                  <option value="divider">─ Séparateur</option>
+                </select>
+              </div>
+              <div class="form-col">
+                <label>Icône</label>
+                <div class="icon-preview">
+                  <i v-if="modal.form.icon" :class="modal.form.icon"></i>
+                  <span>{{ modal.form.icon || 'Aucune' }}</span>
+                </div>
+              </div>
+            </div>
+            <div class="icon-picker">
+              <button 
+                v-for="icon in icons" 
+                :key="icon"
+                type="button"
+                @click="modal.form.icon = icon"
+                :class="{ active: modal.form.icon === icon }"
+                class="icon-btn"
+              >
+                <i :class="icon"></i>
+              </button>
+            </div>
+          </div>
+
+          <!-- Navigation -->
+          <div class="form-section">
+            <h3 class="section-title"><i class="ti ti-link"></i> Navigation</h3>
+            <div class="form-row">
+              <div class="form-col">
+                <label>URL</label>
+                <input v-model="modal.form.url" class="input-modern" />
+              </div>
+              <div class="form-col">
+                <label>Route</label>
+                <input v-model="modal.form.route_name" class="input-modern" />
+              </div>
+            </div>
+          </div>
+
+          <!-- Attributs -->
+          <div class="form-section">
+            <h3 class="section-title"><i class="ti ti-settings"></i> Attributs</h3>
+            <div class="form-row">
+              <div class="form-col">
+                <label>Ordre</label>
+                <input v-model.number="modal.form.sort" type="number" min="0" class="input-modern" />
+              </div>
+              <div class="form-col">
+                <label class="checkbox-label">
+                  <input v-model="modal.form.visible" type="checkbox" />
+                  <span>👁️ Visible</span>
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <!-- Actions -->
+          <div class="modal-actions">
+            <button type="button" @click="closeModal" class="btn-secondary">Annuler</button>
+            <button type="submit" class="btn-primary" :disabled="modal.loading">
+              {{ modal.loading ? '⏳ Enregistrement...' : '✓ Enregistrer' }}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Modal Delete -->
+    <div v-if="delModal.show" class="modal-overlay" @click.self="delModal.show = false">
+      <div class="modal-box modal-small">
+        <div class="modal-header danger">
+          <h2>⚠️ Supprimer Menu</h2>
+          <button @click="delModal.show = false" class="btn-close"><i class="ti ti-x"></i></button>
+        </div>
+        <div class="modal-body">
+          <p>Supprimer <strong>{{ delModal.menu?.label }}</strong> ?</p>
+          <p v-if="countAllChildren(delModal.menu?.id) > 0" class="danger-text">
+            ⚠️ {{ countAllChildren(delModal.menu?.id) }} enfant(s) aussi supprimés
+          </p>
+        </div>
+        <div class="modal-actions">
+          <button @click="delModal.show = false" class="btn-secondary">Annuler</button>
+          <button @click="confirmDelete" class="btn-danger" :disabled="delModal.loading">
+            {{ delModal.loading ? '⏳' : '🗑️ Supprimer' }}
+          </button>
+        </div>
+      </div>
+    </div>
   </VerticalLayout>
 </template>
 
 <script setup>
 import { Head, router } from '@inertiajs/vue3'
-import { ref, computed, onMounted, watch } from 'vue'
-import Sortable from 'sortablejs'
+import { ref, computed } from 'vue'
 import VerticalLayout from '@/layoutsparam/VerticalLayout.vue'
-import MenuItem from './MenuManagement/MenuItem.vue'
-
-// Templates de modules
-const MODULE_TEMPLATES = {
-  'param.projects': {
-    icon: 'ti ti-adjustments',
-    badge_json: JSON.stringify({ text: 'Config', variant: 'info' }),
-    url: '/m/param.projects',
-    route_name: 'param.projects.home'
-  },
-  'process.core': {
-    icon: 'ti ti-flow-branch',
-    badge_json: JSON.stringify({ text: 'Processus', variant: 'primary' }),
-    url: '/m/process.core',
-    route_name: 'process.core.home'
-  },
-  'risk.core': {
-    icon: 'ti ti-alert-triangle',
-    badge_json: JSON.stringify({ text: 'Risques', variant: 'danger' }),
-    url: '/m/risk.core',
-    route_name: 'risk.core.home'
-  },
-  'audit.core': {
-    icon: 'ti ti-checklist',
-    badge_json: JSON.stringify({ text: 'Audit', variant: 'warning' }),
-    url: '/m/audit.core',
-    route_name: 'audit.core.home'
-  },
-  'admin.core': {
-    icon: 'ti ti-lock',
-    badge_json: JSON.stringify({ text: 'Admin', variant: 'secondary' }),
-    url: '/m/admin.core',
-    route_name: 'admin.core.home'
-  }
-}
-
-// Détection d'icônes
-const ICON_DETECTION = {
-  'utilisateurs': 'ti ti-users',
-  'users': 'ti ti-users',
-  'paramètres': 'ti ti-settings',
-  'processus': 'ti ti-flow-branch',
-  'risques': 'ti ti-alert-triangle',
-  'audit': 'ti ti-checklist',
-  'administration': 'ti ti-lock',
-  'dashboard': 'ti ti-layout-dashboard',
-  'tableau de bord': 'ti ti-layout-dashboard',
-  'accueil': 'ti ti-home',
-  'projets': 'ti ti-folders',
-  'entités': 'ti ti-building-community',
-  'modules': 'ti ti-apps',
-  'rapports': 'ti ti-report-analytics',
-  'raci': 'ti ti-users-group',
-  'maturité': 'ti ti-stairs-up',
-  'criticité': 'ti ti-flame'
-}
+import MenuTreeItem from '@/Components/Admin/MenuTreeItem.vue'
 
 const props = defineProps({
-  menus: { type: Array, default: () => [] },
-  modules: { type: Array, default: () => [] },
+  menus: Array,
+  modules: Array,
+  stats: Object
 })
 
-const menus = ref(props.menus)
-const searchQuery = ref('')
-const filterType = ref(null)
-const filterVisibility = ref(null)
+const icons = [
+  'ti ti-home', 'ti ti-dashboard', 'ti ti-settings', 'ti ti-users', 'ti ti-lock',
+  'ti ti-database', 'ti ti-chart', 'ti ti-report', 'ti ti-check', 'ti ti-adjustments',
+  'ti ti-flow-branch', 'ti ti-alert-triangle', 'ti ti-checklist', 'ti ti-apps',
+  'ti ti-folder', 'ti ti-folders', 'ti ti-eye', 'ti ti-link', 'ti ti-menu-2',
+  'ti ti-building-community', 'ti ti-hierarchy', 'ti ti-topology-star', 'ti ti-bulb'
+]
+
+const MODULE_TEMPLATES = {
+  'param.projects': { icon: 'ti ti-adjustments', url: '/m/param.projects', route: 'param.projects.home' },
+  'process.core': { icon: 'ti ti-flow-branch', url: '/m/process.core', route: 'process.core.home' },
+  'risk.core': { icon: 'ti ti-alert-triangle', url: '/m/risk.core', route: 'risk.core.home' },
+  'audit.core': { icon: 'ti ti-checklist', url: '/m/audit.core', route: 'audit.core.home' },
+  'admin.core': { icon: 'ti ti-lock', url: '/m/admin.core', route: 'admin.core.home' }
+}
 
 const typeOptions = [
-  { value: null, text: 'Tous les types' },
-  { value: 'item', text: 'Élément simple' },
-  { value: 'title', text: 'Titre/Section' },
-  { value: 'divider', text: 'Séparateur' }
+  { value: '', label: '📝 Tous' },
+  { value: 'item', label: '📄 Élément' },
+  { value: 'title', label: '📌 Titre' },
+  { value: 'divider', label: '─ Séparateur' }
 ]
 
 const visibilityOptions = [
-  { value: null, text: 'Tous' },
-  { value: true, text: 'Visibles uniquement' },
-  { value: false, text: 'Cachés uniquement' }
+  { value: '', label: '👁️ Tous' },
+  { value: 'true', label: '👁️ Visibles' },
+  { value: 'false', label: '🚫 Cachés' }
 ]
 
-const icons = [
-  'ti ti-dashboard', 'ti ti-home', 'ti ti-settings', 'ti ti-folder', 'ti ti-folders',
-  'ti ti-building', 'ti ti-users', 'ti ti-user', 'ti ti-lock', 'ti ti-database',
-  'ti ti-chart', 'ti ti-report', 'ti ti-bell', 'ti ti-check', 'ti ti-menu',
-  'ti ti-eye', 'ti ti-link', 'ti ti-grid', 'ti ti-adjustments', 'ti ti-flow-branch',
-  'ti ti-alert-triangle', 'ti ti-checklist', 'ti ti-building-community', 'ti ti-apps',
-  'ti ti-packages', 'ti ti-report-analytics', 'ti ti-users-group', 'ti ti-bulb',
-  'ti ti-stairs-up', 'ti ti-flame', 'ti ti-arrows-exchange-2', 'ti ti-topology-star'
-]
+const allMenus = ref(props.menus || [])
+const modules = ref(props.modules || [])
+const stats = ref(props.stats || null)
 
-const modalState = ref({
+const searchQuery = ref('')
+const filterType = ref('')
+const filterVisibility = ref('')
+const sortBy = ref('sort')
+const sidebarOpen = ref(window.innerWidth > 768)
+const isRefreshing = ref(false)
+
+const modal = ref({
   show: false,
-  isEdit: false,
+  edit: false,
   loading: false,
-  errors: {},
   form: {
-    key: '',
+    id: null,
     label: '',
+    key: '',
     type: 'item',
     icon: '',
     url: '',
     route_name: '',
     sort: 10,
-    module_id: null,
     visible: true,
-    badge_json: '',
-    tooltip_json: '',
-    target: null,
-    parent_id: null
+    module_id: null,
+    parent_id: null,
   }
 })
 
-const deleteModal = ref({
+const delModal = ref({
   show: false,
   loading: false,
   menu: null
 })
 
-const moduleOptions = computed(() => [
-  { value: null, text: '❌ Aucun module' },
-  ...props.modules.map(m => ({ value: m.id, text: `📦 ${m.name}` }))
-])
-
-const totalMenus = computed(() => menus.value.length)
-const totalVisible = computed(() => menus.value.filter(m => m.visible).length)
-const totalWithModule = computed(() => menus.value.filter(m => m.module_id).length)
-const totalWithChildren = computed(() => menus.value.filter(m => m.children?.length > 0).length)
+// Computed
+const totalMenus = computed(() => allMenus.value.length)
 
 const filteredMenus = computed(() => {
-  return menus.value.filter(menu => {
-    const matchesSearch = !searchQuery.value || 
+  return allMenus.value.filter(menu => {
+    const matchSearch = !searchQuery.value ||
       menu.label.toLowerCase().includes(searchQuery.value.toLowerCase()) ||
       menu.key.toLowerCase().includes(searchQuery.value.toLowerCase())
-    const matchesType = !filterType.value || menu.type === filterType.value
-    const matchesVisibility = filterVisibility.value === null || menu.visible === filterVisibility.value
-    return matchesSearch && matchesType && matchesVisibility
+
+    const matchType = !filterType.value || menu.type === filterType.value
+    const matchVis = !filterVisibility.value || (menu.visible ? 'true' : 'false') === filterVisibility.value
+
+    return matchSearch && matchType && matchVis
+  }).sort((a, b) => {
+    switch(sortBy.value) {
+      case 'label': return a.label.localeCompare(b.label)
+      case 'created': return new Date(b.created_at) - new Date(a.created_at)
+      default: return a.sort - b.sort
+    }
   })
 })
 
-// Auto-générer la clé
-function regenerateKey() {
-  if (modalState.value.form.label) {
-    modalState.value.form.key = modalState.value.form.label
-      .toLowerCase()
-      .trim()
-      .replace(/\s+/g, '-')
-      .replace(/[^a-z0-9-]/g, '')
-  }
-}
+const parentOptions = computed(() => {
+  return buildParentList(allMenus.value, '', modal.value.form.id)
+})
 
-// Auto-générer depuis le libellé
-function autoGenerateFromLabel() {
-  if (!modalState.value.form.label) return
-  
-  // Générer la clé
-  regenerateKey()
-  
-  // Détecter l'icône
-  const labelLower = modalState.value.form.label.toLowerCase()
-  for (const [key, icon] of Object.entries(ICON_DETECTION)) {
-    if (labelLower.includes(key)) {
-      modalState.value.form.icon = icon
-      break
+// Methods
+function buildParentList(menus, indent = '', excludeId = null) {
+  const list = []
+  for (const menu of menus) {
+    if (menu.id === excludeId) continue
+    if (menu.type !== 'divider') {
+      list.push({
+        id: menu.id,
+        label: menu.label,
+        indent: indent
+      })
+      if (menu.children?.length) {
+        list.push(...buildParentList(menu.children, indent + '─ ', excludeId))
+      }
     }
   }
+  return list
 }
 
-// Appliquer le template du module
-function applyModuleTemplate() {
-  if (!modalState.value.form.module_id) return
+function countAllChildren(menuId) {
+  const menu = findMenuById(allMenus.value, menuId)
+  if (!menu || !menu.children) return 0
   
-  const module = props.modules.find(m => m.id === modalState.value.form.module_id)
-  if (!module) return
-  
-  const template = MODULE_TEMPLATES[module.code]
-  if (template) {
-    modalState.value.form.icon = template.icon
-    modalState.value.form.badge_json = template.badge_json
-    modalState.value.form.url = template.url
-    modalState.value.form.route_name = template.route_name
+  let count = menu.children.length
+  for (const child of menu.children) {
+    count += countAllChildren(child.id)
   }
+  return count
+}
+
+function findMenuById(menus, id) {
+  for (const menu of menus) {
+    if (menu.id === id) return menu
+    if (menu.children?.length) {
+      const found = findMenuById(menu.children, id)
+      if (found) return found
+    }
+  }
+  return null
+}
+
+function refreshData() {
+  isRefreshing.value = true
+  router.reload({ only: ['menus', 'stats'] })
+  setTimeout(() => {
+    isRefreshing.value = false
+  }, 500)
+}
+
+function resetFilters() {
+  searchQuery.value = ''
+  filterType.value = ''
+  filterVisibility.value = ''
 }
 
 function showCreateModal() {
-  modalState.value.isEdit = false
-  resetModalForm()
-  modalState.value.show = true
+  modal.value.edit = false
+  resetForm()
+  modal.value.show = true
 }
 
 function editMenu(menu) {
-  modalState.value.isEdit = true
-  modalState.value.form = { ...menu }
-  modalState.value.show = true
+  modal.value.edit = true
+  modal.value.form = { ...menu }
+  modal.value.show = true
 }
 
-function deleteMenu(menu) {
-  deleteModal.value.menu = menu
-  deleteModal.value.show = true
+function addChildMenu(parentId) {
+  modal.value.edit = false
+  resetForm()
+  modal.value.form.parent_id = parentId
+  modal.value.show = true
 }
 
-function confirmDelete() {
-  if (!deleteModal.value.menu) return
-  deleteModal.value.loading = true
-  router.delete(`/admin/menus/${deleteModal.value.menu.id}`, {
-    onSuccess: () => {
-      deleteModal.value.show = false
-      router.reload({ only: ['menus'] })
-    },
-    onFinish: () => {
-      deleteModal.value.loading = false
-    }
-  })
-}
-
-function addChildMenu(parentMenu) {
-  modalState.value.isEdit = false
-  resetModalForm()
-  modalState.value.form.parent_id = parentMenu.id
-  modalState.value.show = true
-}
-
-function updateMenu(updatedMenu) {
-  const index = menus.value.findIndex(m => m.id === updatedMenu.id)
-  if (index !== -1) {
-    menus.value[index] = { ...updatedMenu }
-  }
-}
-
-function toggleVisibility(menu) {
-  menu.visible = !menu.visible
-}
-
-function saveMenu() {
-  if (!modalState.value.form.label || !modalState.value.form.key) {
-    alert('Veuillez remplir les champs obligatoires')
-    return
-  }
-
-  modalState.value.loading = true
-  const method = modalState.value.isEdit ? 'put' : 'post'
-  const url = modalState.value.isEdit ? `/admin/menus/${modalState.value.form.id}` : '/admin/menus'
-
-  router[method](url, modalState.value.form, {
-    onSuccess: () => {
-      modalState.value.show = false
-      router.reload({ only: ['menus'] })
-    },
-    onError: (errors) => {
-      modalState.value.errors = errors
-    },
-    onFinish: () => {
-      modalState.value.loading = false
-    }
-  })
-}
-
-function resetModal() {
-  resetModalForm()
-  modalState.value.isEdit = false
-  modalState.value.errors = {}
-}
-
-function resetModalForm() {
-  modalState.value.form = {
-    key: '',
+function resetForm() {
+  modal.value.form = {
+    id: null,
     label: '',
+    key: '',
     type: 'item',
     icon: '',
     url: '',
     route_name: '',
     sort: 10,
-    module_id: null,
     visible: true,
-    badge_json: '',
-    tooltip_json: '',
-    target: null,
-    parent_id: null
+    module_id: null,
+    parent_id: null,
   }
+}
+
+function autoKey() {
+  genKey()
+}
+
+function genKey() {
+  const label = modal.value.form.label
+  if (!label) return
+  modal.value.form.key = label
+    .toLowerCase()
+    .trim()
+    .replace(/\s+/g, '-')
+    .replace(/[^a-z0-9-]/g, '')
+}
+
+function applyModuleTemplate() {
+  if (!modal.value.form.module_id) return
+  const m = modules.value.find(x => x.id === modal.value.form.module_id)
+  if (!m) return
+  const t = MODULE_TEMPLATES[m.code]
+  if (t) {
+    modal.value.form.icon = t.icon
+    modal.value.form.url = t.url
+    modal.value.form.route_name = t.route
+  }
+}
+
+function saveMenu() {
+  if (!modal.value.form.label || !modal.value.form.key) {
+    alert('Libellé et clé obligatoires')
+    return
+  }
+
+  modal.value.loading = true
+  const method = modal.value.edit ? 'put' : 'post'
+  const url = modal.value.edit
+    ? `/admin/menus/${modal.value.form.id}`
+    : '/admin/menus'
+
+  router[method](url, modal.value.form, {
+    onSuccess: () => {
+      closeModal()
+      refreshData()
+    },
+    onFinish: () => {
+      modal.value.loading = false
+    }
+  })
+}
+
+function toggleVisible(menu) {
+  menu.visible = !menu.visible
+  router.put(`/admin/menus/${menu.id}`, { visible: menu.visible }, {
+    onSuccess: () => {
+      refreshData()
+    }
+  })
+}
+
+function deleteMenu(menu) {
+  delModal.value.menu = menu
+  delModal.value.show = true
+}
+
+function confirmDelete() {
+  delModal.value.loading = true
+  router.delete(`/admin/menus/${delModal.value.menu.id}`, {
+    onSuccess: () => {
+      delModal.value.show = false
+      refreshData()
+    },
+    onFinish: () => {
+      delModal.value.loading = false
+    }
+  })
+}
+
+function closeModal() {
+  modal.value.show = false
+  resetForm()
 }
 </script>
 
 <style scoped>
-.page-header {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  padding: 1.5rem;
-  border-radius: 12px;
-  color: white;
-  box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
 }
 
-.icon-wrapper {
-  width: 50px;
-  height: 50px;
-  background: rgba(255, 255, 255, 0.2);
-  border-radius: 12px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  backdrop-filter: blur(10px);
+.menus-page {
+  min-height: 100vh;
+  background: #f5f7fa;
 }
 
-.header-actions {
-  display: flex;
-  gap: 0.75rem;
-  flex-wrap: wrap;
-}
-
-.stat-card {
+/* Header */
+.header-section {
   background: white;
-  border-radius: 12px;
-  padding: 1.5rem;
+  padding: 2rem;
+  border-bottom: 1px solid #e9ecef;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.03);
+}
+
+.header-content {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 2rem;
+  gap: 1rem;
+}
+
+.header-left {
   display: flex;
   align-items: center;
   gap: 1rem;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+  flex: 1;
+}
+
+.btn-sidebar-toggle {
+  background: none;
+  border: none;
+  font-size: 1.5rem;
+  cursor: pointer;
+  color: #667eea;
+  padding: 0.5rem;
+  display: none;
+}
+
+.header-text h1 {
+  font-size: 1.75rem;
+  font-weight: 700;
+  color: #212529;
+  margin: 0;
+}
+
+.header-text p {
+  font-size: 0.9rem;
+  color: #6c757d;
+  margin: 0.25rem 0 0 0;
+}
+
+.header-right {
+  display: flex;
+  gap: 1rem;
+}
+
+.btn-refresh {
+  background: #f0f0f0;
+  border: 2px solid #e0e0e0;
+  color: #667eea;
+  padding: 0.7rem 1.25rem;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
   transition: all 0.3s;
 }
 
-.stat-card:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+.btn-refresh:hover {
+  background: #e9ecef;
+  border-color: #667eea;
+}
+
+.btn-refresh.loading {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.btn-refresh.loading i {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.btn-primary-large {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border: none;
+  padding: 0.7rem 1.5rem;
+  border-radius: 8px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  transition: all 0.3s;
+  box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+}
+
+.btn-primary-large:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+}
+
+/* Stats */
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 1.25rem;
+}
+
+.stat-box {
+  background: white;
+  border-radius: 10px;
+  padding: 1.25rem;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  border-left: 4px solid;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  transition: all 0.3s;
+}
+
+.stat-box:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
 }
 
 .stat-icon {
-  width: 60px;
-  height: 60px;
-  border-radius: 12px;
+  width: 45px;
+  height: 45px;
+  border-radius: 8px;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 1.75rem;
+  font-size: 1.5rem;
+  flex-shrink: 0;
 }
 
-.stat-primary .stat-icon {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
-}
+.stat-blue { border-left-color: #667eea; }
+.stat-blue .stat-icon { background: rgba(102, 126, 234, 0.1); color: #667eea; }
 
-.stat-success .stat-icon {
-  background: linear-gradient(135deg, #56ab2f 0%, #a8e063 100%);
-  color: white;
-}
+.stat-green { border-left-color: #56ab2f; }
+.stat-green .stat-icon { background: rgba(86, 171, 47, 0.1); color: #56ab2f; }
 
-.stat-info .stat-icon {
-  background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
-  color: white;
-}
+.stat-purple { border-left-color: #764ba2; }
+.stat-purple .stat-icon { background: rgba(118, 75, 162, 0.1); color: #764ba2; }
 
-.stat-warning .stat-icon {
-  background: linear-gradient(135deg, #f2994a 0%, #f2c94c 100%);
-  color: white;
-}
+.stat-orange { border-left-color: #f2994a; }
+.stat-orange .stat-icon { background: rgba(242, 153, 74, 0.1); color: #f2994a; }
 
-.stat-value {
-  font-size: 2rem;
+.stat-number {
+  font-size: 1.5rem;
   font-weight: 700;
-  margin: 0;
-  line-height: 1;
+  color: #212529;
 }
 
 .stat-label {
-  font-size: 0.875rem;
+  font-size: 0.8rem;
   color: #6c757d;
-  margin: 0;
-  margin-top: 0.25rem;
+  margin-top: 0.2rem;
 }
 
-.filters-bar {
+/* Main Content */
+.main-content {
+  display: flex;
+  height: calc(100vh - 320px);
+}
+
+/* Sidebar */
+.sidebar {
+  width: 280px;
   background: white;
-  padding: 1rem 1.25rem;
-  border-radius: 12px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+  border-right: 1px solid #e9ecef;
+  overflow-y: auto;
+  transition: all 0.3s;
+  position: relative;
 }
 
-.search-box {
+.sidebar-header {
+  padding: 1.5rem;
+  border-bottom: 1px solid #e9ecef;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.sidebar-header h3 {
+  font-size: 1rem;
+  font-weight: 700;
+  margin: 0;
+}
+
+.btn-close-sidebar {
+  background: none;
+  border: none;
+  font-size: 1.25rem;
+  cursor: pointer;
+  color: #6c757d;
+  display: none;
+}
+
+.sidebar-content {
+  padding: 1.5rem;
+}
+
+.filter-section {
+  margin-bottom: 1.75rem;
+}
+
+.filter-title {
+  display: block;
+  font-weight: 600;
+  color: #212529;
+  margin-bottom: 0.75rem;
+  font-size: 0.9rem;
+}
+
+.search-wrapper {
   position: relative;
   display: flex;
   align-items: center;
 }
 
-.search-box i {
+.search-wrapper i {
   position: absolute;
-  left: 12px;
+  left: 10px;
   color: #6c757d;
 }
 
 .search-input {
-  padding-left: 36px !important;
+  width: 100%;
+  padding: 0.6rem 1rem 0.6rem 32px;
   border: 2px solid #e0e0e0;
   border-radius: 8px;
-}
-
-.search-input:focus {
-  border-color: #667eea;
-  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
-}
-
-.modern-select {
-  border: 2px solid #e0e0e0;
-  border-radius: 8px;
-  padding: 0.625rem 0.875rem;
+  font-size: 0.9rem;
   transition: all 0.2s;
 }
 
-.modern-select:focus {
+.search-input:focus {
+  outline: none;
   border-color: #667eea;
   box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
 }
 
-.menus-container {
-  background: white;
-  border-radius: 12px;
-  padding: 1.5rem;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
-  min-height: 400px;
-}
-
-.menus-tree {
+.filter-options {
   display: flex;
   flex-direction: column;
-  gap: 1rem;
+  gap: 0.5rem;
+}
+
+.filter-option {
+  padding: 0.6rem 0.75rem;
+  border: 2px solid #e0e0e0;
+  background: white;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 0.85rem;
+  transition: all 0.2s;
+  text-align: left;
+}
+
+.filter-option:hover {
+  border-color: #667eea;
+  background: #f8f9fa;
+}
+
+.filter-option.active {
+  background: #667eea;
+  color: white;
+  border-color: #667eea;
+}
+
+.results-info {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.results-count {
+  flex: 1;
+  text-align: center;
+  padding: 0.6rem;
+  background: #f0f0f0;
+  border-radius: 6px;
+  font-weight: 700;
+  color: #667eea;
+}
+
+.btn-reset-filters {
+  padding: 0.6rem 0.75rem;
+  background: #f0f0f0;
+  border: 2px solid #e0e0e0;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 600;
+  transition: all 0.2s;
+}
+
+.btn-reset-filters:hover {
+  background: #e0e0e0;
+}
+
+/* Content Area */
+.content-area {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* Toolbar */
+.toolbar {
+  background: white;
+  padding: 1rem 2rem;
+  border-bottom: 1px solid #e9ecef;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.toolbar-info {
+  font-weight: 600;
+  color: #667eea;
+  font-size: 0.9rem;
+}
+
+.select-sort {
+  padding: 0.6rem 1rem;
+  border: 2px solid #e0e0e0;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 600;
+  background: white;
+}
+
+.select-sort:focus {
+  outline: none;
+  border-color: #667eea;
+}
+
+/* Menus Section */
+.menus-section {
+  flex: 1;
+  padding: 2rem;
+  overflow-y: auto;
+  background: #f5f7fa;
 }
 
 .empty-state {
   text-align: center;
-  padding: 3rem 1.5rem;
+  padding: 4rem 2rem;
+  background: white;
+  border-radius: 12px;
+  color: #6c757d;
 }
 
-.form-section-header {
+.empty-state i {
+  font-size: 3rem;
+  color: #e0e0e0;
+  display: block;
+  margin-bottom: 1rem;
+}
+
+.empty-state h3 {
+  font-size: 1.25rem;
+  color: #212529;
+  margin-bottom: 0.5rem;
+}
+
+.tree-container {
+  background: white;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+}
+
+.tree-header {
+  display: grid;
+  grid-template-columns: 1fr 200px 120px 150px;
+  gap: 1rem;
+  padding: 1rem 1.5rem;
+  background: #f8f9fa;
+  border-bottom: 2px solid #e9ecef;
+  font-weight: 600;
+  color: #6c757d;
+  font-size: 0.85rem;
+  position: sticky;
+  top: 0;
+}
+
+/* Modal */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
   display: flex;
   align-items: center;
-  padding-bottom: 0.75rem;
-  margin-bottom: 1rem;
+  justify-content: center;
+  z-index: 1000;
+  padding: 1rem;
+  backdrop-filter: blur(2px);
+}
+
+.modal-box {
+  background: white;
+  border-radius: 12px;
+  width: 100%;
+  max-width: 600px;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+}
+
+.modal-small {
+  max-width: 400px;
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1.5rem;
   border-bottom: 2px solid #e9ecef;
-  color: #495057;
-  font-weight: 600;
-  font-size: 0.95rem;
+  position: sticky;
+  top: 0;
+  background: white;
 }
 
-.form-label {
-  font-weight: 600;
-  font-size: 0.875rem;
-  color: #495057;
-  margin-bottom: 0.5rem;
-  display: block;
+.modal-header h2 {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #212529;
+  margin: 0;
 }
 
-.text-danger {
+.modal-header.danger h2 {
   color: #dc3545;
 }
 
-.modern-input {
-  border: 2px solid #e0e0e0;
-  border-radius: 8px;
-  padding: 0.625rem 0.875rem;
-  transition: all 0.2s;
-  font-size: 0.875rem;
+.btn-close {
+  background: none;
+  border: none;
+  font-size: 1.5rem;
+  cursor: pointer;
+  color: #6c757d;
+  transition: color 0.2s;
 }
 
-.modern-input:focus {
+.btn-close:hover {
+  color: #212529;
+}
+
+.modal-body {
+  padding: 1.5rem;
+}
+
+.danger-text {
+  color: #dc3545;
+  font-weight: 600;
+  margin-top: 0.75rem;
+}
+
+.modal-form {
+  padding: 1.5rem;
+}
+
+.form-section {
+  margin-bottom: 1.75rem;
+  padding-bottom: 1.75rem;
+  border-bottom: 1px solid #e9ecef;
+}
+
+.form-section:last-of-type {
+  border-bottom: none;
+}
+
+.section-title {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #495057;
+  margin-bottom: 1rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.form-col {
+  display: flex;
+  flex-direction: column;
+}
+
+.form-col label {
+  font-weight: 600;
+  color: #212529;
+  margin-bottom: 0.5rem;
+  font-size: 0.9rem;
+}
+
+.input-modern {
+  padding: 0.7rem;
+  border: 2px solid #e0e0e0;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  transition: all 0.2s;
+}
+
+.input-modern:focus {
+  outline: none;
   border-color: #667eea;
   box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
-  outline: none;
 }
 
-.form-hint {
-  display: block;
-  margin-top: 0.375rem;
-  color: #6c757d;
-  font-size: 0.8rem;
+.input-with-button {
+  display: flex;
+  gap: 0.5rem;
 }
 
-.icon-display {
+.input-with-button .input-modern {
+  flex: 1;
+}
+
+.btn-icon {
+  padding: 0.7rem 0.9rem;
+  background: #f0f0f0;
   border: 2px solid #e0e0e0;
   border-radius: 8px;
-  padding: 0.875rem;
+  cursor: pointer;
+}
+
+.btn-icon:hover {
+  background: #e0e0e0;
+}
+
+.icon-preview {
+  padding: 0.75rem;
+  background: #f8f9fa;
+  border: 2px solid #e0e0e0;
+  border-radius: 8px;
   display: flex;
   align-items: center;
   gap: 0.75rem;
-  background: #f8f9fa;
-  font-weight: 500;
-  color: #495057;
 }
 
-.preview-icon {
+.icon-preview i {
   font-size: 1.5rem;
   color: #667eea;
 }
 
-.icon-picker-compact {
+.icon-picker {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(40px, 1fr));
   gap: 0.5rem;
-  padding: 0.75rem;
+  padding: 1rem;
   background: #f8f9fa;
   border-radius: 8px;
-  border: 1px solid #e0e0e0;
+  border: 2px solid #e0e0e0;
 }
 
-.icon-option-small {
+.icon-btn {
   width: 40px;
   height: 40px;
+  border: 2px solid #e0e0e0;
+  background: white;
+  border-radius: 6px;
+  cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 6px;
-  cursor: pointer;
-  transition: all 0.2s;
-  border: 2px solid transparent;
   font-size: 1.25rem;
-}
-
-.icon-option-small:hover {
-  background: white;
-  border-color: #667eea;
   color: #667eea;
+  transition: all 0.2s;
 }
 
-.input-group {
-  display: flex;
-  gap: 0.5rem;
+.icon-btn:hover {
+  border-color: #667eea;
+  background: #f0f0f0;
 }
 
-.input-group button {
-  border-radius: 8px;
-  padding: 0.625rem 1rem;
-}
-
-.form-check-wrapper {
-  margin-top: 1.5rem;
-}
-
-.form-check-modern {
-  display: flex;
-  align-items: center;
+.icon-btn.active {
+  background: #667eea;
+  color: white;
+  border-color: #667eea;
 }
 
 .checkbox-label {
   display: flex;
   align-items: center;
-  margin: 0;
-  font-weight: 500;
-  color: #495057;
+  gap: 0.5rem;
   cursor: pointer;
-}
-
-.modern-btn {
-  border-radius: 8px;
-  padding: 0.625rem 1.25rem;
   font-weight: 600;
-  transition: all 0.2s;
+  margin-top: 0.5rem;
 }
 
-.modern-btn:hover:not(:disabled) {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+.checkbox-label input {
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+  accent-color: #667eea;
 }
 
-:deep(.modal-content) {
-  border-radius: 12px;
+.modal-actions {
+  display: flex;
+  gap: 1rem;
+  justify-content: flex-end;
+  margin-top: 1.5rem;
+  padding-top: 1.5rem;
+  border-top: 2px solid #e9ecef;
+}
+
+.btn-primary,
+.btn-secondary,
+.btn-danger {
+  padding: 0.7rem 1.5rem;
   border: none;
-  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+  border-radius: 8px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-size: 0.9rem;
 }
 
-:deep(.modal-header) {
-  background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
-  border-bottom: 2px solid #dee2e6;
-  border-radius: 12px 12px 0 0;
-  padding: 1.25rem 1.5rem;
+.btn-primary {
+  background: #667eea;
+  color: white;
 }
 
-:deep(.modal-title) {
-  font-weight: 700;
-  font-size: 1.125rem;
-  color: #212529;
+.btn-primary:hover:not(:disabled) {
+  background: #5568d3;
 }
 
-:deep(.modal-body) {
-  padding: 1.5rem;
-  max-height: 70vh;
-  overflow-y: auto;
+.btn-primary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
-:deep(.modal-footer) {
-  border-top: 1px solid #dee2e6;
-  padding: 1rem 1.5rem;
-  background: #f8f9fa;
-  border-radius: 0 0 12px 12px;
+.btn-secondary {
+  background: #e9ecef;
+  color: #495057;
 }
 
-@media (max-width: 767px) {
-  .page-header {
+.btn-secondary:hover {
+  background: #dee2e6;
+}
+
+.btn-danger {
+  background: #dc3545;
+  color: white;
+}
+
+.btn-danger:hover:not(:disabled) {
+  background: #c82333;
+}
+
+/* Responsive */
+@media (max-width: 1024px) {
+  .sidebar {
+    width: 240px;
+  }
+
+  .tree-header {
+    grid-template-columns: 1fr 150px 100px 120px;
+    font-size: 0.8rem;
+    padding: 0.75rem 1rem;
+  }
+}
+
+@media (max-width: 768px) {
+  .btn-sidebar-toggle {
+    display: block;
+  }
+
+  .header-content {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .header-text h1 {
+    font-size: 1.5rem;
+  }
+
+  .header-right {
+    width: 100%;
+    flex-direction: column;
+  }
+
+  .btn-primary-large {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .main-content {
+    height: auto;
+    flex-direction: column;
+  }
+
+  .sidebar {
+    width: 100%;
+    position: fixed;
+    left: -100%;
+    height: 100vh;
+    z-index: 999;
+    transition: left 0.3s;
+  }
+
+  .sidebar.open {
+    left: 0;
+  }
+
+  .btn-close-sidebar {
+    display: block;
+  }
+
+  .menus-section {
     padding: 1rem;
   }
 
-  .icon-picker-compact {
-    grid-template-columns: repeat(auto-fill, minmax(35px, 1fr));
+  .tree-header {
+    grid-template-columns: 1fr 100px 80px;
+    gap: 0.5rem;
+    padding: 0.75rem;
+    font-size: 0.75rem;
   }
 
-  :deep(.modal-body) {
-    max-height: 60vh;
+  .modal-box {
+    max-width: 95vw;
+  }
+
+  .form-row {
+    grid-template-columns: 1fr;
   }
 }
 </style>

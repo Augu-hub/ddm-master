@@ -1,148 +1,75 @@
 <template>
   <div class="phase3-container">
-    <!-- 📊 STATISTIQUES PHASE 3 -->
+    <!-- STAT BAR -->
     <div class="stats-bar mb-3">
-      <div class="stat-item">
-        <span class="stat-label">Plans approuvés:</span>
-        <b-badge bg="info">{{ records.length }}</b-badge>
-      </div>
-      <div class="stat-item">
-        <span class="stat-label">Crit. AVANT:</span>
-        <b-badge :bg="getCriticityColor(avgBefore)">{{ formatCriticity(avgBefore) }}</b-badge>
-      </div>
-      <div class="stat-item">
-        <span class="stat-label">Crit. APRÈS:</span>
-        <b-badge :bg="getCriticityColor(avgAfter)">{{ formatCriticity(avgAfter) }}</b-badge>
-      </div>
-      <div class="stat-item">
-        <span class="stat-label">Amélioration:</span>
-        <b-badge :bg="getImprovementColor(avgImprovement)">{{ formatImprovement(avgImprovement) }}</b-badge>
-      </div>
+      <span><strong>{{ allPhase1Records.length }}</strong> Phase 1</span>
+      <span><strong>{{ allPhase2Records.length }}</strong> Phase 2</span>
+      <span class="ms-auto"><strong>{{ recordsPhase3.length }}</strong> Évaluations</span>
+      <b-button 
+        variant="success" 
+        size="sm" 
+        @click="openModalAddEval"
+        :disabled="allPhase2Records.length === 0"
+        class="ms-2"
+      >
+        <i class="ti ti-plus"></i> Évaluer
+      </b-button>
     </div>
 
-    <!-- 📋 TABLE RÉSULTATS -->
+    <!-- TABLE -->
     <div class="table-wrapper">
-      <table class="excel-table">
+      <table class="table-simple">
         <thead>
           <tr>
-            <th class="col-mode">Mode défaillance</th>
-            <th class="col-plan">Plan d'action réalisé</th>
-            <th class="col-before">Avant</th>
-            <th class="col-gfd">G/F/D</th>
-            <th class="col-after">Après</th>
-            <th class="col-gfd-after">G/F/D</th>
-            <th class="col-improvement">Amélioration</th>
-            <th class="col-status">Statut</th>
-            <th class="col-actions">Actions</th>
+            <th>Mode</th>
+            <th>Activité</th>
+            <th>Crit. Avant</th>
+            <th>Crit. Après</th>
+            <th>Amélioration</th>
+            <th style="width: 80px;">Actions</th>
           </tr>
         </thead>
         <tbody>
-          <tr v-if="records.length === 0" class="row-empty">
-            <td colspan="9" class="text-center text-muted p-4">
-              <i class="ti ti-inbox" style="font-size: 2rem; opacity: 0.3;"></i>
-              <p class="mt-2">Aucun enregistrement Phase 3 — Approuvez des plans en Phase 2</p>
-            </td>
+          <tr v-if="recordsPhase3.length === 0">
+            <td colspan="6" class="text-center text-muted">Aucune évaluation</td>
           </tr>
 
-          <tr v-for="record in records" :key="record.id" class="row-result">
-            <!-- Mode -->
-            <td class="cell-mode">
-              <strong>{{ record.failure_mode }}</strong>
-              <br><small class="text-muted">{{ truncate(record.effects, 35) }}</small>
-            </td>
-
-            <!-- Plan réalisé -->
-            <td class="cell-plan">
-              <span v-if="record.implemented_prevention_measures" class="plan-text">
-                {{ truncate(record.implemented_prevention_measures, 40) }}
-              </span>
-              <span v-else class="text-muted">—</span>
-              <br>
-              <small v-if="record.actual_completion_date" class="text-success fw-bold">
-                ✓ {{ formatDate(record.actual_completion_date) }}
-              </small>
-            </td>
-
-            <!-- Criticité AVANT -->
-            <td class="cell-before">
-              <b-badge
-                v-if="record.criticality_nette_before"
-                :bg="getCriticityColor(record.criticality_nette_before)"
-                class="badge-criticality"
-              >
+          <tr v-for="record in recordsPhase3" :key="record.id">
+            <td><strong>{{ record.failure_mode }}</strong></td>
+            <td><small>{{ getActivityName(record.activity_id) }}</small></td>
+            <td>
+              <b-badge :bg="getCriticityColor(record.criticality_nette_before)">
                 {{ formatCriticity(record.criticality_nette_before) }}
               </b-badge>
             </td>
-
-            <!-- G/F/D AVANT -->
-            <td class="cell-gfd">
-              <div class="gfd-badges">
-                <span class="badge-mini" :style="{ backgroundColor: getGravityColor(record.gravity_before_id) }">
-                  G{{ getGravityDegree(record.gravity_before_id) }}
-                </span>
-                <span class="badge-mini" :style="{ backgroundColor: getFrequencyColor(record.frequency_before_id) }">
-                  F{{ getFrequencyDegree(record.frequency_before_id) }}
-                </span>
-                <span class="badge-mini" :style="{ backgroundColor: getDetectabilityColor(record.detectability_before_id) }">
-                  D{{ getDetectabilityDegree(record.detectability_before_id) }}
-                </span>
-              </div>
-            </td>
-
-            <!-- Criticité APRÈS -->
-            <td class="cell-after">
-              <b-badge
-                v-if="record.criticality_nette_after"
-                :bg="getCriticityColor(record.criticality_nette_after)"
-                class="badge-criticality"
-              >
+            <td>
+              <b-badge :bg="getCriticityColor(record.criticality_nette_after)">
                 {{ formatCriticity(record.criticality_nette_after) }}
               </b-badge>
-              <span v-else class="text-muted">—</span>
             </td>
-
-            <!-- G/F/D APRÈS -->
-            <td class="cell-gfd-after">
-              <div v-if="record.gravity_after_id" class="gfd-badges">
-                <span class="badge-mini" :style="{ backgroundColor: getGravityColor(record.gravity_after_id) }">
-                  G{{ getGravityDegree(record.gravity_after_id) }}
-                </span>
-                <span class="badge-mini" :style="{ backgroundColor: getFrequencyColor(record.frequency_after_id) }">
-                  F{{ getFrequencyDegree(record.frequency_after_id) }}
-                </span>
-                <span class="badge-mini" :style="{ backgroundColor: getDetectabilityColor(record.detectability_after_id) }">
-                  D{{ getDetectabilityDegree(record.detectability_after_id) }}
-                </span>
-              </div>
-              <span v-else class="text-muted">—</span>
+            <td>
+              <span :class="getImprovementClass(record.improvement_percentage)">
+                {{ formatImprovement(record.improvement_percentage) }}
+              </span>
             </td>
-
-            <!-- Amélioration -->
-            <td class="cell-improvement">
-              <div v-if="record.improvement_percentage" class="improvement-display">
-                <b-badge :bg="getImprovementColor(record.improvement_percentage)" class="badge-improvement">
-                  {{ formatImprovement(record.improvement_percentage) }}
-                </b-badge>
-                <small v-if="record.improvement_percentage > 0" class="text-success d-block fw-bold">✓ Amélioré</small>
-                <small v-else-if="record.improvement_percentage < 0" class="text-danger d-block fw-bold">✗ Dégradé</small>
-              </div>
-              <span v-else class="text-muted">—</span>
-            </td>
-
-            <!-- Statut -->
-            <td class="cell-status">
-              <b-badge :bg="getStatusColor(record.action_status)">
-                {{ getStatusLabel(record.action_status) }}
-              </b-badge>
-            </td>
-
-            <!-- Actions -->
-            <td class="cell-actions">
-              <b-button size="sm" variant="info" @click="openModalViewResults(record)" title="Voir détails" class="btn-mini">
-                <i class="ti ti-eye"></i>
-              </b-button>
-              <b-button size="sm" variant="warning" @click="openModalEditResults(record)" title="Modifier" class="btn-mini">
+            <td class="text-center">
+              <b-button 
+                size="sm" 
+                variant="warning" 
+                @click="openModalEditEval(record)"
+                class="btn-action"
+                title="Modifier"
+              >
                 <i class="ti ti-pencil"></i>
+              </b-button>
+              <b-button 
+                size="sm" 
+                variant="danger" 
+                @click="deleteRecord(record)"
+                class="btn-action"
+                title="Supprimer"
+              >
+                <i class="ti ti-trash"></i>
               </b-button>
             </td>
           </tr>
@@ -150,248 +77,217 @@
       </table>
     </div>
 
-    <!-- ═════════════════════════════════════════════════════════════════════
-         🔲 MODAL — VOIR DÉTAILS
-         ═════════════════════════════════════════════════════════════════════ -->
+    <!-- ═══════════════════════════════════════════════════════════════════════ -->
+    <!-- 🔲 MODAL — AJOUTER/MODIFIER ÉVALUATION POST-CORRECTION -->
+    <!-- ═══════════════════════════════════════════════════════════════════════ -->
     <b-modal
-      id="modal-view-results"
-      v-model="showModalView"
-      title="📊 Résultats complets"
+      v-model="showModal"
+      :title="modalMode === 'add' ? 'Évaluation post-correction' : 'Modifier Évaluation'"
       size="lg"
-      @ok="showModalView = false"
-      ok-only
-      ok-title="Fermer"
-    >
-      <div v-if="viewRecord" class="results-view">
-        <!-- MODE -->
-        <div class="view-section">
-          <h6 class="section-title">📋 Mode défaillance</h6>
-          <div class="view-content">
-            <p><strong>Mode:</strong> {{ viewRecord.failure_mode }}</p>
-            <p><strong>Effets:</strong> {{ viewRecord.effects }}</p>
-            <p><strong>Causes:</strong> {{ viewRecord.causes }}</p>
-            <p><strong>Contrôles initiaux:</strong> {{ viewRecord.detection_measures }}</p>
-          </div>
-        </div>
-
-        <!-- PLAN D'ACTION -->
-        <div class="view-section">
-          <h6 class="section-title">🛡️ Plan d'action</h6>
-          <div class="view-content">
-            <p><strong>Mesures prévues:</strong> {{ viewRecord.prevention_measures }}</p>
-            <p><strong>Responsable:</strong> {{ viewRecord.action_responsible }}</p>
-            <p><strong>Délai prévu:</strong> {{ formatDate(viewRecord.action_deadline) }}</p>
-          </div>
-        </div>
-
-        <!-- CRITICITÉ AVANT -->
-        <div class="view-section">
-          <h6 class="section-title">📈 Criticité AVANT correction</h6>
-          <div class="view-content">
-            <div class="criticality-comparison">
-              <div class="comparison-item">
-                <span class="label">NPR:</span>
-                <span class="value">{{ viewRecord.criticality_before }}/125</span>
-              </div>
-              <div class="comparison-item">
-                <span class="label">Criticité nette:</span>
-                <b-badge :bg="getCriticityColor(viewRecord.criticality_nette_before)">
-                  {{ formatCriticity(viewRecord.criticality_nette_before) }}
-                </b-badge>
-              </div>
-              <div class="comparison-item">
-                <span class="label">Norme:</span>
-                <span class="value">{{ getStandardName(getStandardFromCriticality(viewRecord.criticality_nette_before)) }}</span>
-              </div>
-            </div>
-            <div class="gfd-display">
-              <span class="badge-mini" :style="{ backgroundColor: getGravityColor(viewRecord.gravity_before_id) }">
-                G: {{ getGravityLabel(viewRecord.gravity_before_id) }}
-              </span>
-              <span class="badge-mini" :style="{ backgroundColor: getFrequencyColor(viewRecord.frequency_before_id) }">
-                F: {{ getFrequencyLabel(viewRecord.frequency_before_id) }}
-              </span>
-              <span class="badge-mini" :style="{ backgroundColor: getDetectabilityColor(viewRecord.detectability_before_id) }">
-                D: {{ getDetectabilityLabel(viewRecord.detectability_before_id) }}
-              </span>
-            </div>
-          </div>
-        </div>
-
-        <!-- ACTIONS RÉALISÉES -->
-        <div class="view-section">
-          <h6 class="section-title">✅ Actions réalisées</h6>
-          <div class="view-content">
-            <p><strong>Mesures réalisées:</strong> {{ viewRecord.implemented_prevention_measures }}</p>
-            <p><strong>Date réelle:</strong> {{ formatDate(viewRecord.actual_completion_date) }}</p>
-          </div>
-        </div>
-
-        <!-- CRITICITÉ APRÈS -->
-        <div class="view-section">
-          <h6 class="section-title">📉 Criticité APRÈS correction</h6>
-          <div class="view-content">
-            <div class="criticality-comparison">
-              <div class="comparison-item">
-                <span class="label">NPR:</span>
-                <span class="value">{{ viewRecord.criticality_after }}/125</span>
-              </div>
-              <div class="comparison-item">
-                <span class="label">Criticité nette:</span>
-                <b-badge :bg="getCriticityColor(viewRecord.criticality_nette_after)">
-                  {{ formatCriticity(viewRecord.criticality_nette_after) }}
-                </b-badge>
-              </div>
-              <div class="comparison-item">
-                <span class="label">Norme:</span>
-                <span class="value">{{ getStandardName(getStandardFromCriticality(viewRecord.criticality_nette_after)) }}</span>
-              </div>
-            </div>
-            <div class="gfd-display">
-              <span class="badge-mini" :style="{ backgroundColor: getGravityColor(viewRecord.gravity_after_id) }">
-                G: {{ getGravityLabel(viewRecord.gravity_after_id) }}
-              </span>
-              <span class="badge-mini" :style="{ backgroundColor: getFrequencyColor(viewRecord.frequency_after_id) }">
-                F: {{ getFrequencyLabel(viewRecord.frequency_after_id) }}
-              </span>
-              <span class="badge-mini" :style="{ backgroundColor: getDetectabilityColor(viewRecord.detectability_after_id) }">
-                D: {{ getDetectabilityLabel(viewRecord.detectability_after_id) }}
-              </span>
-            </div>
-          </div>
-        </div>
-
-        <!-- AMÉLIORATION -->
-        <div class="view-section alert-info">
-          <h6 class="section-title">🎯 Résultat final</h6>
-          <div class="improvement-result">
-            <div class="result-item">
-              <span class="result-label">Amélioration:</span>
-              <b-badge :bg="getImprovementColor(viewRecord.improvement_percentage)" class="badge-improvement">
-                {{ formatImprovement(viewRecord.improvement_percentage) }}
-              </b-badge>
-            </div>
-            <div class="result-item">
-              <span class="result-label">Statut:</span>
-              <span v-if="viewRecord.improvement_percentage > 0" class="text-success fw-bold">
-                ✓ Efficace - Risque réduit
-              </span>
-              <span v-else-if="viewRecord.improvement_percentage < 0" class="text-danger fw-bold">
-                ✗ Inefficace - Risque augmenté
-              </span>
-              <span v-else class="text-warning fw-bold">
-                → Aucun changement
-              </span>
-            </div>
-          </div>
-        </div>
-      </div>
-    </b-modal>
-
-    <!-- ═════════════════════════════════════════════════════════════════════
-         🔲 MODAL — MODIFIER RÉSULTATS
-         ═════════════════════════════════════════════════════════════════════ -->
-    <b-modal
-      id="modal-edit-results"
-      v-model="showModalEdit"
-      title="✏️ Enregistrer résultats (Phase 3)"
-      size="xl"
-      @ok="handleSaveResults"
-      @cancel="resetModal"
+      @ok="saveEval"
+      @cancel="resetForm"
       ok-title="Enregistrer"
       cancel-title="Annuler"
+      scrollable
     >
-      <b-form v-if="editRecord">
-        <!-- INFOS MODE -->
-        <b-card bg-light class="mb-3" title="📋 Mode & Plan d'action">
-          <b-card-body class="p-3">
-            <b-row>
-              <b-col md="6">
-                <div><strong>Mode:</strong> {{ editRecord.failure_mode }}</div>
-                <div><strong>Plan:</strong> {{ truncate(editRecord.prevention_measures, 50) }}</div>
-              </b-col>
-              <b-col md="6">
-                <div><strong>Crit. AVANT:</strong>
-                  <b-badge :bg="getCriticityColor(editRecord.criticality_nette_before)">
-                    {{ formatCriticity(editRecord.criticality_nette_before) }}
-                  </b-badge>
-                </div>
-              </b-col>
-            </b-row>
-          </b-card-body>
-        </b-card>
-
-        <!-- ACTIONS RÉALISÉES -->
-        <b-card title="✅ Actions réalisées" class="mb-3">
-          <b-card-body>
-            <b-form-group label="Mesures réalisées *" label-class="fw-bold">
-              <b-form-textarea
-                v-model="modalForm.implemented_prevention_measures"
-                placeholder="Décrivez les actions réellement mises en œuvre..."
-                rows="3"
+      <b-form>
+        <!-- ROW 1: Mode sélection -->
+        <b-row class="mb-2">
+          <b-col cols="12">
+            <b-form-group label="Mode défaillance *" label-class="fw-bold" label-cols="12">
+              <b-form-select
+                v-model.number="form.amdec_record_id"
+                :options="modeOptions"
+                :disabled="modalMode === 'edit'"
+                size="sm"
                 required
+                @change="onModeSelected"
               />
+              <small v-if="selectedMode" class="text-info d-block mt-2">
+                <strong>Criticité AVANT:</strong> {{ formatCriticity(selectedMode.criticality_nette_before) }}<br>
+                <strong>Mesures:</strong> {{ selectedMode.prevention_measures }}
+              </small>
             </b-form-group>
+          </b-col>
+        </b-row>
 
-            <b-form-group label="Date réelle d'accomplissement *" label-class="fw-bold">
+        <!-- ROW 2: Données AVANT (lecture seule) -->
+        <b-row class="mb-3">
+          <b-col cols="4">
+            <b-form-group label="Gravité Avant" label-class="fw-bold" label-cols="12">
               <b-form-input
-                v-model="modalForm.actual_completion_date"
-                type="date"
-                required
+                :value="getGravityLabel(selectedMode?.gravity_before_id)"
+                readonly
+                size="sm"
+                class="bg-light"
               />
             </b-form-group>
-          </b-card-body>
-        </b-card>
-
-        <!-- CRITICITÉ APRÈS -->
-        <b-card title="📊 Criticité APRÈS correction" class="mb-3">
-          <b-card-body>
-            <b-form-group label="Gravité nette *" label-class="fw-bold">
-              <b-form-select
-                v-model="modalForm.gravity_after_id"
-                :options="gravityOptions"
-                @change="recalculateAfter"
-                required
+          </b-col>
+          <b-col cols="4">
+            <b-form-group label="Fréquence Avant" label-class="fw-bold" label-cols="12">
+              <b-form-input
+                :value="getFrequencyLabel(selectedMode?.frequency_before_id)"
+                readonly
+                size="sm"
+                class="bg-light"
               />
             </b-form-group>
-
-            <b-form-group label="Fréquence nette *" label-class="fw-bold">
-              <b-form-select
-                v-model="modalForm.frequency_after_id"
-                :options="frequencyOptions"
-                @change="recalculateAfter"
-                required
+          </b-col>
+          <b-col cols="4">
+            <b-form-group label="Détectabilité Avant" label-class="fw-bold" label-cols="12">
+              <b-form-input
+                :value="getDetectabilityLabel(selectedMode?.detectability_before_id)"
+                readonly
+                size="sm"
+                class="bg-light"
               />
             </b-form-group>
+          </b-col>
+        </b-row>
 
-            <b-form-group label="Détectabilité nette *" label-class="fw-bold">
-              <b-form-select
-                v-model="modalForm.detectability_after_id"
-                :options="detectabilityOptions"
-                @change="recalculateAfter"
-                required
-              />
-            </b-form-group>
-
-            <!-- RÉSULTAT CALCULÉ -->
-            <div v-if="modalForm.gravity_after_id && modalForm.frequency_after_id && modalForm.detectability_after_id" class="alert alert-info">
-              <strong>Criticité calculée automatiquement:</strong>
-              <div class="mt-2">
-                <span>NPR: <b-badge bg="dark">{{ modalForm.criticality_after }}/125</b-badge></span>
-                <span class="ms-2">CN%: <b-badge :bg="getCriticityColor(modalForm.criticality_nette_after)">{{ formatCriticity(modalForm.criticality_nette_after) }}</b-badge></span>
-                <span class="ms-2">Amélioration: <b-badge :bg="getImprovementColor(modalForm.improvement_percentage)">{{ formatImprovement(modalForm.improvement_percentage) }}</b-badge></span>
+        <!-- 🤖 SUGGESTIONS IA (générées quand on sélectionne un mode) -->
+        <b-row v-if="aiSuggestions.efficacy_criterion || aiSuggestions.efficacy_measure" class="mb-3">
+          <b-col cols="12">
+            <div class="ai-suggestions-auto">
+              <div class="ai-header">
+                ✨ <strong>Critères d'efficacité suggérés</strong>
+                <small v-if="isAiLoading" class="text-info">
+                  <i class="ti ti-loading"></i> Génération en cours...
+                </small>
               </div>
-            </div>
-          </b-card-body>
-        </b-card>
 
-        <!-- STATUT -->
-        <b-form-group label="Statut d'action" label-class="fw-bold">
-          <b-form-select
-            v-model="modalForm.action_status"
-            :options="statusOptions"
-          />
-        </b-form-group>
+              <!-- Suggestion Critère d'efficacité -->
+              <div v-if="aiSuggestions.efficacy_criterion" class="ai-suggestion">
+                <div class="ai-suggestion-title">📏 Critère d'efficacité</div>
+                <div class="ai-suggestion-text">{{ aiSuggestions.efficacy_criterion }}</div>
+                <div class="ai-suggestion-actions">
+                  <b-button 
+                    size="sm" 
+                    variant="success"
+                    @click="form.efficacy_criterion = aiSuggestions.efficacy_criterion"
+                  >
+                    ✅ Utiliser
+                  </b-button>
+                </div>
+              </div>
+
+              <!-- Suggestion Mesure d'efficacité -->
+              <div v-if="aiSuggestions.efficacy_measure" class="ai-suggestion">
+                <div class="ai-suggestion-title">📊 Mesure d'efficacité</div>
+                <div class="ai-suggestion-text">{{ aiSuggestions.efficacy_measure }}</div>
+                <div class="ai-suggestion-actions">
+                  <b-button 
+                    size="sm" 
+                    variant="success"
+                    @click="form.efficacy_measure = aiSuggestions.efficacy_measure"
+                  >
+                    ✅ Utiliser
+                  </b-button>
+                </div>
+              </div>
+
+              <small v-if="aiError" class="text-danger d-block mt-2">
+                ⚠️ {{ aiError }}
+              </small>
+            </div>
+          </b-col>
+        </b-row>
+
+        <!-- ROW 3: Évaluation APRÈS (Saisie) -->
+        <b-row class="mb-2">
+          <b-col cols="4">
+            <b-form-group label="Gravité Après *" label-class="fw-bold" label-cols="12">
+              <b-form-select
+                v-model.number="form.gravity_after_id"
+                :options="gravityOptions"
+                size="sm"
+                required
+                @change="recalculate"
+              />
+            </b-form-group>
+          </b-col>
+          <b-col cols="4">
+            <b-form-group label="Fréquence Après *" label-class="fw-bold" label-cols="12">
+              <b-form-select
+                v-model.number="form.frequency_after_id"
+                :options="frequencyOptions"
+                size="sm"
+                required
+                @change="recalculate"
+              />
+            </b-form-group>
+          </b-col>
+          <b-col cols="4">
+            <b-form-group label="Détectabilité Après *" label-class="fw-bold" label-cols="12">
+              <b-form-select
+                v-model.number="form.detectability_after_id"
+                :options="detectabilityOptions"
+                size="sm"
+                required
+                @change="recalculate"
+              />
+            </b-form-group>
+          </b-col>
+        </b-row>
+
+        <!-- ROW 4: Résultats (lecture seule) -->
+        <b-row class="mb-3">
+          <b-col cols="4">
+            <b-form-group label="Criticité Après %" label-class="fw-bold" label-cols="12">
+              <b-form-input
+                :value="formatCriticity(form.criticality_nette_after)"
+                readonly
+                size="sm"
+                class="bg-light fw-bold"
+              />
+            </b-form-group>
+          </b-col>
+          <b-col cols="4">
+            <b-form-group label="Amélioration %" label-class="fw-bold" label-cols="12">
+              <b-form-input
+                :value="formatImprovement(form.improvement_percentage)"
+                readonly
+                size="sm"
+                class="bg-light fw-bold"
+                :class="form.improvement_percentage > 0 ? 'text-success' : 'text-danger'"
+              />
+            </b-form-group>
+          </b-col>
+          <b-col cols="4">
+            <b-form-group label="Statut" label-class="fw-bold" label-cols="12">
+              <b-badge 
+                :bg="form.improvement_percentage > 0 ? 'success' : 'warning'"
+                class="d-block text-center"
+              >
+                {{ form.improvement_percentage > 0 ? '✅ Amélioration' : '⚠️ À vérifier' }}
+              </b-badge>
+            </b-form-group>
+          </b-col>
+        </b-row>
+
+        <!-- ROW 5: Critères (optionnels) -->
+        <b-row>
+          <b-col cols="6">
+            <b-form-group label="Critère d'efficacité" label-class="fw-bold" label-cols="12">
+              <b-form-textarea
+                v-model="form.efficacy_criterion"
+                placeholder="Comment mesurer si l'action est efficace?"
+                rows="2"
+                size="sm"
+              />
+            </b-form-group>
+          </b-col>
+          <b-col cols="6">
+            <b-form-group label="Mesure d'efficacité" label-class="fw-bold" label-cols="12">
+              <b-form-textarea
+                v-model="form.efficacy_measure"
+                placeholder="Indicateurs et méthodes de vérification"
+                rows="2"
+                size="sm"
+              />
+            </b-form-group>
+          </b-col>
+        </b-row>
       </b-form>
     </b-modal>
   </div>
@@ -399,114 +295,138 @@
 
 <script setup>
 import { computed, ref } from 'vue'
+import axios from 'axios'
 
 const props = defineProps({
   activities: { type: Array, default: () => [] },
   records: { type: Array, default: () => [] },
-  referentials: { type: Object, default: () => ({ gravities: [], frequencies: [], detectabilities: [] }) },
-  standards: { type: Array, default: () => [] }
+  referentials: { type: Object, default: () => ({
+    gravities: [],
+    frequencies: [],
+    detectabilities: []
+  }) }
 })
 
 const emit = defineEmits(['save-record', 'delete-record'])
 
-const showModalView = ref(false)
-const showModalEdit = ref(false)
-const viewRecord = ref(null)
-const editRecord = ref(null)
+// STATE
+const showModal = ref(false)
+const modalMode = ref('add')
+const isAiLoading = ref(false)
+const aiError = ref('')
+const aiTimeout = ref(null)
 
-const modalForm = ref({
+const form = ref({
   amdec_record_id: null,
-  implemented_prevention_measures: '',
-  actual_completion_date: '',
   gravity_after_id: null,
   frequency_after_id: null,
   detectability_after_id: null,
   criticality_after: null,
   criticality_nette_after: null,
   improvement_percentage: null,
-  action_status: 'pending'
+  efficacy_criterion: '',
+  efficacy_measure: ''
 })
 
-const statusOptions = [
-  { value: 'pending', text: '⏳ En attente' },
-  { value: 'in_progress', text: '🔄 En cours' },
-  { value: 'completed', text: '✅ Terminé' },
-  { value: 'cancelled', text: '❌ Annulé' }
-]
+const aiSuggestions = ref({
+  efficacy_criterion: null,
+  efficacy_measure: null
+})
 
 // ═══════════════════════════════════════════════════════════════════════════
-// COMPUTED - PAS DE WATCHERS!
+// COMPUTED
 // ═══════════════════════════════════════════════════════════════════════════
+
+const allPhase1Records = computed(() => {
+  if (!props.records) return []
+  return props.records.filter(r => r.phase === 'PHASE1')
+})
+
+const allPhase2Records = computed(() => {
+  if (!props.records) return []
+  return props.records.filter(r => r.phase === 'PHASE2')
+})
 
 const recordsPhase3 = computed(() => {
+  if (!props.records) return []
   return props.records.filter(r => r.phase === 'PHASE3')
+})
+
+const selectedMode = computed(() => {
+  if (!form.value.amdec_record_id) return null
+  return allPhase1Records.value.find(r => r.id === form.value.amdec_record_id)
+})
+
+const modeOptions = computed(() => {
+  return [
+    { value: null, text: '-- Sélectionnez --' },
+    ...allPhase1Records.value.map(m => ({
+      value: m.id,
+      text: `${m.failure_mode}`
+    }))
+  ]
 })
 
 const gravityOptions = computed(() => [
   { value: null, text: '— Sélectionnez —' },
-  ...props.referentials.gravities.map(g => ({ value: g.id, text: `G${g.degree} — ${g.label}` }))
+  ...props.referentials.gravities.map(g => ({
+    value: g.id,
+    text: `${g.degree} - ${g.label}`
+  }))
 ])
 
 const frequencyOptions = computed(() => [
   { value: null, text: '— Sélectionnez —' },
-  ...props.referentials.frequencies.map(f => ({ value: f.id, text: `F${f.degree} — ${f.label}` }))
+  ...props.referentials.frequencies.map(f => ({
+    value: f.id,
+    text: `${f.degree} - ${f.label}`
+  }))
 ])
 
 const detectabilityOptions = computed(() => [
   { value: null, text: '— Sélectionnez —' },
-  ...props.referentials.detectabilities.map(d => ({ value: d.id, text: `D${d.degree} — ${d.label}` }))
+  ...props.referentials.detectabilities.map(d => ({
+    value: d.id,
+    text: `${d.degree} - ${d.label}`
+  }))
 ])
-
-const avgBefore = computed(() => {
-  if (recordsPhase3.value.length === 0) return 0
-  const sum = recordsPhase3.value.reduce((acc, r) => acc + (r.criticality_nette_before || 0), 0)
-  return sum / recordsPhase3.value.length
-})
-
-const avgAfter = computed(() => {
-  if (recordsPhase3.value.length === 0) return 0
-  const sum = recordsPhase3.value.reduce((acc, r) => acc + (r.criticality_nette_after || 0), 0)
-  return sum / recordsPhase3.value.length
-})
-
-const avgImprovement = computed(() => {
-  if (recordsPhase3.value.length === 0) return 0
-  const sum = recordsPhase3.value.reduce((acc, r) => acc + (r.improvement_percentage || 0), 0)
-  return sum / recordsPhase3.value.length
-})
 
 // ═══════════════════════════════════════════════════════════════════════════
 // HELPERS
 // ═══════════════════════════════════════════════════════════════════════════
 
-const getGravityLabel = (id) => props.referentials.gravities?.find(g => g.id === id)?.label || '—'
-const getGravityDegree = (id) => props.referentials.gravities?.find(g => g.id === id)?.degree || '—'
-const getGravityColor = (id) => props.referentials.gravities?.find(g => g.id === id)?.color || '#ccc'
+const getActivityName = (id) => {
+  if (!id || !props.activities) return '—'
+  const act = props.activities.find(a => a.id === id)
+  return act ? act.name : '—'
+}
 
-const getFrequencyLabel = (id) => props.referentials.frequencies?.find(f => f.id === id)?.label || '—'
-const getFrequencyDegree = (id) => props.referentials.frequencies?.find(f => f.id === id)?.degree || '—'
-const getFrequencyColor = (id) => props.referentials.frequencies?.find(f => f.id === id)?.color || '#ccc'
+const getGravityLabel = (id) => {
+  if (!id) return '—'
+  const g = props.referentials.gravities?.find(g => g.id === id)
+  return g ? `${g.degree} - ${g.label}` : '—'
+}
 
-const getDetectabilityLabel = (id) => props.referentials.detectabilities?.find(d => d.id === id)?.label || '—'
-const getDetectabilityDegree = (id) => props.referentials.detectabilities?.find(d => d.id === id)?.degree || '—'
-const getDetectabilityColor = (id) => props.referentials.detectabilities?.find(d => d.id === id)?.color || '#ccc'
+const getFrequencyLabel = (id) => {
+  if (!id) return '—'
+  const f = props.referentials.frequencies?.find(f => f.id === id)
+  return f ? `${f.degree} - ${f.label}` : '—'
+}
 
-const getStandardName = (id) => props.standards?.find(s => s.id === id)?.name || '—'
-const getStandardFromCriticality = (crit) => {
-  if (!crit && crit !== 0) return null
-  return props.standards?.find(s => crit >= s.min_criticality && crit <= s.max_criticality)?.id || null
+const getDetectabilityLabel = (id) => {
+  if (!id) return '—'
+  const d = props.referentials.detectabilities?.find(d => d.id === id)
+  return d ? `${d.degree} - ${d.label}` : '—'
 }
 
 const formatCriticity = (value) => {
   if (!value && value !== 0) return '—'
-  if (typeof value !== 'number') return '—'
-  return value.toFixed(1) + '%'
+  return typeof value === 'number' ? value.toFixed(0) + '%' : '—'
 }
 
 const formatImprovement = (value) => {
   if (!value && value !== 0) return '—'
-  if (typeof value !== 'number') return '—'
-  return (value > 0 ? '+' : '') + value.toFixed(1) + '%'
+  return typeof value === 'number' ? value.toFixed(1) + '%' : '—'
 }
 
 const getCriticityColor = (value) => {
@@ -518,128 +438,184 @@ const getCriticityColor = (value) => {
   return 'dark'
 }
 
-const getImprovementColor = (value) => {
-  if (!value && value !== 0) return 'secondary'
-  if (value > 30) return 'success'
-  if (value > 0) return 'info'
-  if (value < -30) return 'danger'
-  if (value < 0) return 'warning'
-  return 'secondary'
+const getImprovementClass = (value) => {
+  if (!value && value !== 0) return 'text-muted'
+  return value > 0 ? 'text-success fw-bold' : 'text-warning'
 }
 
-const getStatusColor = (status) => {
-  const colors = { pending: 'warning', in_progress: 'primary', completed: 'success', cancelled: 'secondary' }
-  return colors[status] || 'secondary'
-}
-
-const getStatusLabel = (status) => {
-  const labels = { pending: '⏳ En attente', in_progress: '🔄 En cours', completed: '✅ Terminé', cancelled: '❌ Annulé' }
-  return labels[status] || status
-}
-
-const formatDate = (date) => {
-  if (!date) return '—'
-  return new Date(date).toLocaleDateString('fr-FR')
-}
-
-const truncate = (text, length) => {
-  if (!text) return '—'
-  return text.length > length ? text.substring(0, length) + '…' : text
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
-// METHODS
-// ═══════════════════════════════════════════════════════════════════════════
-
-const openModalViewResults = (record) => {
-  viewRecord.value = record
-  showModalView.value = true
-}
-
-const openModalEditResults = (record) => {
-  editRecord.value = record
-  modalForm.value = {
-    amdec_record_id: record.id,
-    implemented_prevention_measures: record.implemented_prevention_measures || '',
-    actual_completion_date: record.actual_completion_date || '',
-    gravity_after_id: record.gravity_after_id,
-    frequency_after_id: record.frequency_after_id,
-    detectability_after_id: record.detectability_after_id,
-    criticality_after: record.criticality_after || null,
-    criticality_nette_after: record.criticality_nette_after || null,
-    improvement_percentage: record.improvement_percentage || null,
-    action_status: record.action_status || 'pending'
-  }
-  showModalEdit.value = true
-}
-
-const recalculateAfter = () => {
-  if (!modalForm.value.gravity_after_id || !modalForm.value.frequency_after_id || !modalForm.value.detectability_after_id) {
-    modalForm.value.criticality_after = null
-    modalForm.value.criticality_nette_after = null
-    modalForm.value.improvement_percentage = null
+const recalculate = () => {
+  if (!form.value.gravity_after_id || !form.value.frequency_after_id || !form.value.detectability_after_id) {
+    form.value.criticality_after = null
+    form.value.criticality_nette_after = null
+    form.value.improvement_percentage = null
     return
   }
 
-  const gravity = props.referentials.gravities.find(g => g.id === modalForm.value.gravity_after_id)
-  const frequency = props.referentials.frequencies.find(f => f.id === modalForm.value.frequency_after_id)
-  const detectability = props.referentials.detectabilities.find(d => d.id === modalForm.value.detectability_after_id)
+  const gravity = props.referentials.gravities?.find(g => g.id === form.value.gravity_after_id)
+  const frequency = props.referentials.frequencies?.find(f => f.id === form.value.frequency_after_id)
+  const detectability = props.referentials.detectabilities?.find(d => d.id === form.value.detectability_after_id)
 
   if (gravity && frequency && detectability) {
-    modalForm.value.criticality_after = gravity.degree * frequency.degree * detectability.degree
-    modalForm.value.criticality_nette_after = (modalForm.value.criticality_after / 125) * 100
+    form.value.criticality_after = gravity.degree * frequency.degree * detectability.degree
+    form.value.criticality_nette_after = (form.value.criticality_after / 125) * 100
 
-    // Calcul amélioration
-    if (editRecord.value?.criticality_nette_before && editRecord.value.criticality_nette_before > 0) {
-      modalForm.value.improvement_percentage = 
-        ((editRecord.value.criticality_nette_before - modalForm.value.criticality_nette_after) / editRecord.value.criticality_nette_before) * 100
+    // Calculer l'amélioration
+    if (selectedMode.value?.criticality_nette_before && selectedMode.value.criticality_nette_before > 0) {
+      form.value.improvement_percentage = (
+        (selectedMode.value.criticality_nette_before - form.value.criticality_nette_after) /
+        selectedMode.value.criticality_nette_before
+      ) * 100
     }
   }
 }
 
-const resetModal = () => {
-  modalForm.value = {
+// ═══════════════════════════════════════════════════════════════════════════
+// 🤖 MODE SÉLECTIONNÉ — Générer les suggestions IA
+// ═══════════════════════════════════════════════════════════════════════════
+
+const onModeSelected = () => {
+  if (!selectedMode.value) {
+    aiSuggestions.value = { efficacy_criterion: null, efficacy_measure: null }
+    aiError.value = ''
+    return
+  }
+
+  if (aiTimeout.value) clearTimeout(aiTimeout.value)
+  
+  aiTimeout.value = setTimeout(() => {
+    generatePhase3Suggestions()
+  }, 500)
+}
+
+/**
+ * 🤖 GÉNÉRER LES SUGGESTIONS PHASE 3 PAR IA
+ */
+const generatePhase3Suggestions = async () => {
+  if (!selectedMode.value) return
+
+  isAiLoading.value = true
+  aiError.value = ''
+  aiSuggestions.value = { efficacy_criterion: null, efficacy_measure: null }
+
+  try {
+    console.log('🔍 Generating Phase3 suggestions for:', selectedMode.value.failure_mode)
+
+    const res = await axios.post(route('process.core.amdec.ai.suggest'), {
+      phase: 'PHASE3',
+      payload: {
+        failure_mode: selectedMode.value.failure_mode,
+        activity_name: getActivityName(selectedMode.value.activity_id),
+        prevention_measures: selectedMode.value.prevention_measures
+      }
+    })
+
+    console.log('📥 Phase3 response:', res.data)
+
+    if (res.data.success && res.data.suggestions) {
+      aiSuggestions.value = {
+        efficacy_criterion: res.data.suggestions.efficacy_criterion || null,
+        efficacy_measure: res.data.suggestions.efficacy_measure || null
+      }
+      console.log('✅ Phase3 suggestions generated:', aiSuggestions.value)
+    } else {
+      aiError.value = res.data.error || 'Erreur génération'
+    }
+
+  } catch (err) {
+    console.error('❌ Erreur Phase3:', err)
+    aiError.value = 'Erreur connexion IA'
+  } finally {
+    isAiLoading.value = false
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// MODAL MANAGEMENT
+// ═══════════════════════════════════════════════════════════════════════════
+
+const openModalAddEval = () => {
+  if (allPhase1Records.value.length === 0) {
+    alert('⚠️ Créez d\'abord des modes de défaillance (PHASE 1)')
+    return
+  }
+  modalMode.value = 'add'
+  resetForm()
+  showModal.value = true
+}
+
+const openModalEditEval = (record) => {
+  modalMode.value = 'edit'
+  form.value = {
+    amdec_record_id: record.id,
+    gravity_after_id: record.gravity_after_id,
+    frequency_after_id: record.frequency_after_id,
+    detectability_after_id: record.detectability_after_id,
+    criticality_after: record.criticality_after,
+    criticality_nette_after: record.criticality_nette_after,
+    improvement_percentage: record.improvement_percentage,
+    efficacy_criterion: record.efficacy_criterion || '',
+    efficacy_measure: record.efficacy_measure || ''
+  }
+  aiSuggestions.value = { efficacy_criterion: null, efficacy_measure: null }
+  aiError.value = ''
+  showModal.value = true
+}
+
+const resetForm = () => {
+  if (aiTimeout.value) clearTimeout(aiTimeout.value)
+  
+  form.value = {
     amdec_record_id: null,
-    implemented_prevention_measures: '',
-    actual_completion_date: '',
     gravity_after_id: null,
     frequency_after_id: null,
     detectability_after_id: null,
     criticality_after: null,
     criticality_nette_after: null,
     improvement_percentage: null,
-    action_status: 'pending'
+    efficacy_criterion: '',
+    efficacy_measure: ''
   }
-  editRecord.value = null
+  aiSuggestions.value = { efficacy_criterion: null, efficacy_measure: null }
+  aiError.value = ''
+  isAiLoading.value = false
 }
 
-const handleSaveResults = () => {
-  if (!modalForm.value.implemented_prevention_measures?.trim()) {
-    alert('⚠️ Mesures réalisées requises')
+const saveEval = () => {
+  if (!form.value.amdec_record_id) {
+    alert('⚠️ Sélectionnez un mode')
     return
   }
-  if (!modalForm.value.actual_completion_date) {
-    alert('⚠️ Date réelle requise')
+  if (!form.value.gravity_after_id) {
+    alert('⚠️ Sélectionnez la gravité après')
     return
   }
-  if (!modalForm.value.gravity_after_id || !modalForm.value.frequency_after_id || !modalForm.value.detectability_after_id) {
-    alert('⚠️ G, F, D nettes requises')
+  if (!form.value.frequency_after_id) {
+    alert('⚠️ Sélectionnez la fréquence après')
+    return
+  }
+  if (!form.value.detectability_after_id) {
+    alert('⚠️ Sélectionnez la détectabilité après')
     return
   }
 
   emit('save-record', {
     phase: 'PHASE3',
-    amdec_record_id: modalForm.value.amdec_record_id,
-    implemented_prevention_measures: modalForm.value.implemented_prevention_measures,
-    actual_completion_date: modalForm.value.actual_completion_date,
-    gravity_after_id: modalForm.value.gravity_after_id,
-    frequency_after_id: modalForm.value.frequency_after_id,
-    detectability_after_id: modalForm.value.detectability_after_id,
-    action_status: modalForm.value.action_status
+    amdec_record_id: form.value.amdec_record_id,
+    gravity_after_id: form.value.gravity_after_id,
+    frequency_after_id: form.value.frequency_after_id,
+    detectability_after_id: form.value.detectability_after_id,
+    efficacy_criterion: form.value.efficacy_criterion,
+    efficacy_measure: form.value.efficacy_measure
   })
 
-  showModalEdit.value = false
-  resetModal()
+  showModal.value = false
+  resetForm()
+}
+
+const deleteRecord = (record) => {
+  if (confirm('⚠️ Êtes-vous sûr de supprimer cette évaluation ?')) {
+    emit('delete-record', record.id)
+  }
 }
 </script>
 
@@ -652,234 +628,166 @@ const handleSaveResults = () => {
 .stats-bar {
   display: flex;
   gap: 1rem;
+  align-items: center;
   padding: 0.75rem;
   background: #f8f9fa;
   border-left: 3px solid #198754;
   border-radius: 0.3rem;
-  align-items: center;
+  font-size: 0.9rem;
+  margin-bottom: 1rem;
   flex-wrap: wrap;
 }
 
-.stat-item {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
+.ms-auto {
+  margin-left: auto;
 }
 
-.stat-label {
-  font-weight: 600;
-  color: #495057;
-  font-size: 0.85rem;
+.ms-2 {
+  margin-left: 0.5rem;
 }
+
+.mb-3 { margin-bottom: 1rem; }
+.mb-2 { margin-bottom: 0.5rem; }
+.mt-2 { margin-top: 0.5rem; }
+.d-block { display: block; }
+
+.text-center { text-align: center; }
+.text-muted { color: #6c757d; font-size: 0.85rem; }
+.text-info { color: #0dcaf0; font-size: 0.85rem; }
+.text-danger { color: #dc3545; font-size: 0.85rem; }
+.text-success { color: #198754; }
+.text-warning { color: #ffc107; }
+.fw-bold { font-weight: 600; }
 
 /* TABLE */
 .table-wrapper {
   border: 1px solid #dee2e6;
   border-radius: 0.3rem;
-  overflow-x: auto;
+  overflow: auto;
 }
 
-.excel-table {
+.table-simple {
   width: 100%;
   border-collapse: collapse;
-  font-size: 0.8rem;
+  font-size: 0.85rem;
   background: white;
 }
 
-.excel-table thead {
+.table-simple thead {
   background: #198754;
   color: white;
   font-weight: 600;
   position: sticky;
   top: 0;
+  z-index: 10;
 }
 
-.excel-table th {
-  padding: 0.5rem;
+.table-simple th {
+  padding: 0.75rem;
+  border: 1px solid #dee2e6;
   text-align: left;
-  border: 1px solid #dee2e6;
   white-space: nowrap;
+  font-size: 0.8rem;
 }
 
-.excel-table td {
-  padding: 0.5rem;
+.table-simple td {
+  padding: 0.75rem;
   border: 1px solid #dee2e6;
+  text-align: left;
 }
 
-.excel-table tbody tr {
-  border-bottom: 1px solid #dee2e6;
+.table-simple tbody tr:nth-child(odd) {
+  background: #fafbfc;
 }
 
-.excel-table tbody tr:nth-child(odd) {
-  background: #f8fff9;
+.table-simple tbody tr:hover {
+  background: #e8f5e9;
 }
 
-.excel-table tbody tr:hover {
-  background: #d4edda;
-}
-
-/* COLONNES */
-.col-mode { width: 120px; }
-.col-plan { width: 130px; }
-.col-before { width: 70px; text-align: center; }
-.col-gfd { width: 90px; text-align: center; }
-.col-after { width: 70px; text-align: center; }
-.col-gfd-after { width: 90px; text-align: center; }
-.col-improvement { width: 90px; text-align: center; }
-.col-status { width: 80px; text-align: center; }
-.col-actions { width: 70px; text-align: center; }
-
-/* CELLS */
-.cell-mode {
-  font-weight: 500;
-  background: #f0f8f5;
-}
-
-.cell-before,
-.cell-after,
-.cell-gfd,
-.cell-gfd-after,
-.cell-improvement,
-.cell-status,
-.cell-actions {
-  text-align: center;
-}
-
-/* BADGES */
-.badge-mini {
-  display: inline-block;
-  padding: 0.2rem 0.4rem;
-  border-radius: 0.2rem;
-  color: white;
-  font-weight: 600;
-  font-size: 0.6rem;
-  margin: 0.1rem;
-}
-
-.badge-criticality {
-  font-size: 0.75rem;
-  padding: 0.3rem 0.5rem;
-  font-weight: 600;
-  min-width: 50px;
-}
-
-.badge-improvement {
-  font-size: 0.75rem;
-  padding: 0.3rem 0.5rem;
-  font-weight: 600;
-  min-width: 55px;
-}
-
-.gfd-badges,
-.gfd-display {
-  display: flex;
-  gap: 0.3rem;
-  flex-wrap: wrap;
-  justify-content: center;
-}
-
-/* MODAL */
-.view-section {
-  border-left: 3px solid #198754;
+/* 🤖 IA SUGGESTIONS */
+.ai-suggestions-auto {
+  background: linear-gradient(135deg, #e8f5e9 0%, #f1f8e9 100%);
+  border: 2px solid #4caf50;
+  border-radius: 0.4rem;
   padding: 1rem;
   margin-bottom: 1rem;
-  background: #f8f9fa;
-  border-radius: 0.3rem;
 }
 
-.section-title {
-  color: #198754;
+.ai-header {
   font-weight: 600;
-  margin-bottom: 0.5rem;
+  color: #2e7d32;
+  margin-bottom: 1rem;
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
 }
 
-.view-content p {
+.ai-suggestion {
+  background: white;
+  border: 1px solid #c8e6c9;
+  border-left: 4px solid #4caf50;
+  border-radius: 0.3rem;
+  padding: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.ai-suggestion-title {
+  font-weight: 600;
+  color: #2e7d32;
   margin-bottom: 0.5rem;
   font-size: 0.9rem;
 }
 
-.view-content p strong {
-  color: #198754;
-}
-
-.criticality-comparison {
-  display: flex;
-  gap: 1.5rem;
-  flex-wrap: wrap;
-  margin-bottom: 0.5rem;
-}
-
-.comparison-item {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-.comparison-item .label {
-  font-weight: 600;
-  color: #495057;
-  font-size: 0.85rem;
-}
-
-.comparison-item .value {
-  font-weight: 600;
-  color: #198754;
-}
-
-.improvement-result {
-  display: flex;
-  gap: 2rem;
-  flex-wrap: wrap;
-}
-
-.result-item {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-.result-label {
-  font-weight: 600;
-  color: #495057;
-}
-
-.improvement-display {
-  text-align: center;
-}
-
-.row-empty td {
-  padding: 2rem !important;
-}
-
-.alert-info {
-  border-left-color: #0d6efd !important;
-  background-color: #e7f3ff !important;
-}
-
-/* BUTTONS */
-.btn-mini {
-  padding: 0.25rem 0.4rem;
-  font-size: 0.7rem;
+.ai-suggestion-text {
+  background: #fafbfc;
+  padding: 0.75rem;
   border-radius: 0.2rem;
-  margin-right: 0.2rem;
+  font-size: 0.85rem;
+  color: #495057;
+  margin-bottom: 0.75rem;
+  line-height: 1.5;
+  max-height: 120px;
+  overflow-y: auto;
+}
+
+.ai-suggestion-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.ai-suggestion-actions button {
+  font-size: 0.75rem;
+}
+
+.bg-light {
+  background-color: #f8f9fa !important;
+}
+
+.btn-action {
+  padding: 0.25rem 0.5rem;
+  font-size: 0.7rem;
+  margin-right: 0.25rem;
 }
 
 /* RESPONSIVE */
-@media (max-width: 1200px) {
-  .excel-table { font-size: 0.75rem; }
-  .col-mode { width: 100px; }
-  .col-plan { width: 100px; }
-}
-
 @media (max-width: 768px) {
   .stats-bar {
     flex-direction: column;
     align-items: flex-start;
   }
-  
-  .col-mode { width: 80px; }
-  .col-plan { width: 80px; }
-  .col-gfd { width: 70px; }
-  .col-gfd-after { width: 70px; }
+
+  .ms-auto {
+    margin-left: 0;
+    margin-top: 0.5rem;
+  }
+
+  .table-simple {
+    font-size: 0.75rem;
+  }
+
+  .table-simple th,
+  .table-simple td {
+    padding: 0.5rem;
+  }
 }
 </style>

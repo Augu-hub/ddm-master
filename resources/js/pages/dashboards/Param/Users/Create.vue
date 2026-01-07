@@ -2,7 +2,7 @@
   <VerticalLayout>
     <Head title="Ajouter un Utilisateur" />
 
-    <!-- Header avec breadcrumb -->
+    <!-- Header -->
     <div class="page-header-form">
       <div class="d-flex align-items-center justify-content-between">
         <div>
@@ -28,19 +28,34 @@
       </div>
     </div>
 
-    <!-- Message d'info sur le mot de passe -->
+    <!-- Info Alert -->
     <b-alert show variant="info" class="modern-alert mb-4">
       <div class="d-flex align-items-start gap-3">
         <i class="ti ti-info-circle fs-4"></i>
         <div>
-          <h5 class="alert-heading mb-2">📧 Envoi automatique des identifiants</h5>
+          <h5 class="alert-heading mb-2">🔐 Synchronisation Master → Tenant</h5>
           <p class="mb-2">
-            Un <strong>mot de passe sécurisé</strong> sera généré automatiquement et envoyé par email 
-            à l'utilisateur avec ses identifiants de connexion.
+            L'utilisateur sera créé en tenant avec synchronisation automatique des <strong>fonctions</strong> 
+            depuis la base Master.
           </p>
           <small class="text-muted">
-            Le mot de passe contient : majuscules, minuscules, chiffres et symboles (12 caractères minimum)
+            Un <strong>mot de passe sécurisé</strong> sera généré automatiquement
           </small>
+        </div>
+      </div>
+    </b-alert>
+
+    <!-- Alert erreurs globales -->
+    <b-alert v-if="hasErrors" show variant="danger" class="mb-4">
+      <div class="d-flex align-items-start gap-3">
+        <i class="ti ti-alert-circle fs-4"></i>
+        <div>
+          <h5 class="alert-heading mb-2">❌ Erreurs de validation</h5>
+          <ul class="mb-0">
+            <li v-for="(messages, field) in errors" :key="field">
+              <strong>{{ field }}:</strong> {{ Array.isArray(messages) ? messages.join(', ') : messages }}
+            </li>
+          </ul>
         </div>
       </div>
     </b-alert>
@@ -77,7 +92,7 @@
 
           <b-col md="4">
             <label class="form-label-modern">
-              Matricule <small class="text-muted">(auto-généré si vide)</small>
+              Matricule <small class="text-muted">(auto)</small>
             </label>
             <b-form-input
               v-model="form.matricule"
@@ -101,7 +116,7 @@
               <b-form-input
                 v-model="form.email"
                 type="email"
-                placeholder="jean.dupont@exemple.com"
+                placeholder="jean@exemple.com"
                 class="input-modern"
                 :class="{ 'is-invalid': errors.email }"
                 required
@@ -123,57 +138,46 @@
                 type="tel"
                 placeholder="+229 XX XX XX XX"
                 class="input-modern"
-                :class="{ 'is-invalid': errors.phone }"
               />
             </b-input-group>
-            <div class="invalid-feedback" v-if="errors.phone">{{ errors.phone }}</div>
           </b-col>
 
           <b-col md="12">
             <label class="form-label-modern">Poste / Titre</label>
             <b-form-input
               v-model="form.job_title"
-              placeholder="Ex: Responsable Qualité, Directeur des Opérations..."
+              placeholder="Ex: Responsable Qualité"
               class="input-modern"
-              :class="{ 'is-invalid': errors.job_title }"
             />
-            <div class="invalid-feedback" v-if="errors.job_title">{{ errors.job_title }}</div>
-          </b-col>
-
-          <b-col md="12">
-            <label class="form-label-modern">Biographie</label>
-            <b-form-textarea
-              v-model="form.bio"
-              rows="3"
-              placeholder="Quelques mots sur l'utilisateur..."
-              class="input-modern"
-              :class="{ 'is-invalid': errors.bio }"
-            />
-            <div class="invalid-feedback" v-if="errors.bio">{{ errors.bio }}</div>
           </b-col>
         </b-row>
       </div>
 
-      <!-- Section Affectation -->
+      <!-- Section Affectation & Entité -->
       <div class="form-section">
         <div class="section-header">
           <div class="section-icon">
             <i class="ti ti-building"></i>
           </div>
           <div>
-            <h4 class="section-title">Affectation</h4>
-            <p class="section-description">Entité de rattachement de l'utilisateur</p>
+            <h4 class="section-title">Affectation à l'entité</h4>
+            <p class="section-description">Entité de rattachement et fonctions associées</p>
           </div>
         </div>
 
         <b-row class="g-3">
-          <b-col md="12">
-            <label class="form-label-modern">Entité</label>
+          <!-- Sélection de l'entité -->
+          <b-col md="6">
+            <label class="form-label-modern">
+              Entité <span class="text-danger">*</span>
+            </label>
             <b-form-select
               v-model="form.entity_id"
               :options="entityOptions"
               class="input-modern"
               :class="{ 'is-invalid': errors.entity_id }"
+              @change="onEntitySelected"
+              required
             >
               <template #first>
                 <b-form-select-option :value="null" disabled>
@@ -181,28 +185,10 @@
                 </b-form-select-option>
               </template>
             </b-form-select>
-            <small class="form-hint">
-              <i class="ti ti-info-circle me-1"></i>
-              L'entité peut être modifiée ultérieurement
-            </small>
             <div class="invalid-feedback" v-if="errors.entity_id">{{ errors.entity_id }}</div>
           </b-col>
-        </b-row>
-      </div>
 
-      <!-- Section Statut et Options -->
-      <div class="form-section">
-        <div class="section-header">
-          <div class="section-icon">
-            <i class="ti ti-toggle-right"></i>
-          </div>
-          <div>
-            <h4 class="section-title">Statut et Options</h4>
-            <p class="section-description">Configuration du compte utilisateur</p>
-          </div>
-        </div>
-
-        <b-row class="g-3">
+          <!-- Statut -->
           <b-col md="6">
             <label class="form-label-modern">
               Statut <span class="text-danger">*</span>
@@ -216,52 +202,124 @@
             />
             <div class="invalid-feedback" v-if="errors.status">{{ errors.status }}</div>
           </b-col>
+        </b-row>
 
-          <b-col md="6">
+        <!-- Fonctions disponibles pour l'entité sélectionnée -->
+        <div v-if="form.entity_id && availableFunctions.length > 0" class="mt-4">
+          <label class="form-label-modern">
+            <i class="ti ti-tools me-2"></i>
+            Fonctions à assigner
+            <small class="text-muted">(depuis le Master)</small>
+          </label>
+
+          <div class="functions-grid">
+            <div 
+              v-for="fn in availableFunctions" 
+              :key="fn.id" 
+              class="function-card"
+              :class="{ 'selected': isSelectedFunction(fn.id) }"
+              @click="toggleFunction(fn)"
+            >
+              <div class="function-checkbox">
+                <input 
+                  type="checkbox" 
+                  :checked="isSelectedFunction(fn.id)"
+                  @change="toggleFunction(fn)"
+                  class="form-check-input"
+                />
+              </div>
+              <div class="function-content">
+                <h6 class="function-name">{{ fn.name }}</h6>
+                <!-- ✅ CORRIGÉ: Utiliser fn.character au lieu de fn.code -->
+                <p class="function-code">{{ fn.character }}</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Statut chargement fonctions -->
+          <small v-if="loadingFunctions" class="text-info d-block mt-2">
+            <i class="ti ti-loading"></i> Chargement des fonctions...
+          </small>
+        </div>
+
+        <div v-else-if="form.entity_id && !loadingFunctions && availableFunctions.length === 0" class="alert alert-warning mt-3">
+          <i class="ti ti-alert-triangle me-2"></i>
+          Aucune fonction disponible pour cette entité
+        </div>
+
+        <div v-else-if="!form.entity_id" class="alert alert-info mt-3">
+          <i class="ti ti-info-circle me-2"></i>
+          Sélectionnez une entité pour voir les fonctions disponibles
+        </div>
+      </div>
+
+      <!-- Section Options -->
+      <div class="form-section">
+        <div class="section-header">
+          <div class="section-icon">
+            <i class="ti ti-toggle-right"></i>
+          </div>
+          <div>
+            <h4 class="section-title">Options</h4>
+            <p class="section-description">Configuration supplémentaire</p>
+          </div>
+        </div>
+
+        <b-row class="g-3">
+          <!-- Avatar -->
+          <b-col md="12">
             <label class="form-label-modern">Photo de profil</label>
             <b-form-file
               v-model="form.avatar"
               accept="image/*"
               placeholder="Choisir une image..."
               class="input-modern"
-              :class="{ 'is-invalid': errors.avatar }"
             />
             <small class="form-hint">Format: JPG, PNG, GIF (Max: 2MB)</small>
-            <div class="invalid-feedback" v-if="errors.avatar">{{ errors.avatar }}</div>
+          </b-col>
+
+          <!-- Biographie -->
+          <b-col md="12">
+            <label class="form-label-modern">Biographie</label>
+            <b-form-textarea
+              v-model="form.bio"
+              rows="3"
+              placeholder="Quelques informations sur l'utilisateur..."
+              class="input-modern"
+            />
+          </b-col>
+
+          <!-- Avatar preview -->
+          <b-col v-if="avatarPreview" md="12">
+            <label class="form-label-modern">Prévisualisation</label>
+            <div class="avatar-preview">
+              <img :src="avatarPreview" alt="Prévisualisation" />
+            </div>
+          </b-col>
+
+          <!-- Email option -->
+          <b-col md="12" class="mt-3">
+            <div class="email-option-card">
+              <b-form-checkbox
+                v-model="form.send_email"
+                class="form-check-modern"
+              >
+                <div class="checkbox-content">
+                  <div class="d-flex align-items-center gap-2 mb-1">
+                    <i class="ti ti-mail text-primary fs-5"></i>
+                    <strong>Envoyer l'email de bienvenue</strong>
+                  </div>
+                  <small class="text-muted d-block">
+                    L'utilisateur recevra ses identifiants par email
+                  </small>
+                </div>
+              </b-form-checkbox>
+            </div>
           </b-col>
         </b-row>
-
-        <!-- Prévisualisation de l'avatar -->
-        <div v-if="avatarPreview" class="mt-3">
-          <label class="form-label-modern">Prévisualisation</label>
-          <div class="avatar-preview">
-            <img :src="avatarPreview" alt="Prévisualisation" />
-          </div>
-        </div>
-
-        <!-- Option d'envoi d'email -->
-        <div class="mt-4">
-          <div class="email-option-card">
-            <b-form-checkbox
-              v-model="form.send_email"
-              class="form-check-modern"
-            >
-              <div class="checkbox-content">
-                <div class="d-flex align-items-center gap-2 mb-1">
-                  <i class="ti ti-mail text-primary fs-5"></i>
-                  <strong>Envoyer l'email de bienvenue</strong>
-                </div>
-                <small class="text-muted d-block">
-                  L'utilisateur recevra un email avec ses identifiants de connexion 
-                  (email + mot de passe généré automatiquement)
-                </small>
-              </div>
-            </b-form-checkbox>
-          </div>
-        </div>
       </div>
 
-      <!-- Actions du formulaire -->
+      <!-- Actions -->
       <div class="form-actions">
         <b-button 
           variant="light" 
@@ -280,7 +338,7 @@
         >
           <b-spinner v-if="loading" small class="me-2"></b-spinner>
           <i v-else class="ti ti-check me-2"></i>
-          {{ loading ? 'Création en cours...' : 'Créer l\'utilisateur' }}
+          {{ loading ? 'Création...' : 'Créer l\'utilisateur' }}
         </b-button>
       </div>
     </b-form>
@@ -289,8 +347,9 @@
 
 <script setup>
 import { Head, router } from '@inertiajs/vue3'
-import { ref, watch } from 'vue'
+import { ref, watch, computed } from 'vue'
 import VerticalLayout from '@/layoutsparam/VerticalLayout.vue'
+import axios from 'axios'
 
 const props = defineProps({
   entities: Array,
@@ -308,13 +367,18 @@ const form = ref({
   entity_id: null,
   avatar: null,
   send_email: true,
+  function_assignments: [],
 })
 
 const loading = ref(false)
 const avatarPreview = ref(null)
 const errors = ref(props.errors || {})
+const availableFunctions = ref([])
+const loadingFunctions = ref(false)
 
-const entityOptions = props.entities.map(e => ({ value: e.id, text: e.name }))
+const entityOptions = computed(() =>
+  props.entities.map(e => ({ value: e.id, text: e.name }))
+)
 
 const statusOptions = [
   { value: 'active', text: '✅ Actif' },
@@ -322,6 +386,61 @@ const statusOptions = [
   { value: 'suspended', text: '🚫 Suspendu' },
 ]
 
+const hasErrors = computed(() => Object.keys(errors.value).length > 0)
+
+// ✅ Quand on change l'entité, charger les fonctions
+const onEntitySelected = async () => {
+  availableFunctions.value = []
+  form.value.function_assignments = []
+
+  if (!form.value.entity_id) return
+
+  loadingFunctions.value = true
+
+  try {
+    // ✅ CORRIGÉ: Utiliser la bonne route nommée
+    const response = await axios.get(route('param.projects.users.functions-for-entity'), {
+      params: { entity_id: form.value.entity_id }
+    })
+
+    console.log('✅ Fonctions reçues:', response.data)
+
+    if (response.data.success) {
+      availableFunctions.value = response.data.functions
+    }
+  } catch (error) {
+    console.error('❌ Erreur chargement fonctions:', error)
+  } finally {
+    loadingFunctions.value = false
+  }
+}
+
+// ✅ Vérifier si une fonction est sélectionnée
+const isSelectedFunction = (functionId) => {
+  return form.value.function_assignments.some(f => f.function_id === functionId)
+}
+
+// ✅ Toggle fonction
+const toggleFunction = (fn) => {
+  const index = form.value.function_assignments.findIndex(
+    f => f.function_id === fn.id
+  )
+
+  if (index > -1) {
+    form.value.function_assignments.splice(index, 1)
+  } else {
+    form.value.function_assignments.push({
+      function_id: fn.id,
+      entity_id: form.value.entity_id,
+      is_primary: form.value.function_assignments.length === 0, // 1ère fonction = primaire
+      role_label: null
+    })
+  }
+
+  console.log('✅ Fonctions sélectionnées:', form.value.function_assignments)
+}
+
+// ✅ Prévisualisation avatar
 watch(() => form.value.avatar, (newAvatar) => {
   if (newAvatar) {
     const reader = new FileReader()
@@ -334,24 +453,50 @@ watch(() => form.value.avatar, (newAvatar) => {
   }
 })
 
+// ✅ Submit formulaire - CORRIGÉ
 function submitForm() {
   loading.value = true
-  
+
   const formData = new FormData()
-  
+
   Object.keys(form.value).forEach(key => {
-    if (form.value[key] !== null && form.value[key] !== '') {
-      formData.append(key, form.value[key])
+    const value = form.value[key]
+
+    if (key === 'function_assignments') {
+      // ✅ CORRIGÉ: Envoyer function_assignments comme array FormData
+      // function_assignments[0][function_id] = 1
+      // function_assignments[0][entity_id] = 2
+      // etc.
+      value.forEach((fn, index) => {
+        formData.append(`function_assignments[${index}][function_id]`, fn.function_id)
+        formData.append(`function_assignments[${index}][entity_id]`, fn.entity_id || '')
+        formData.append(`function_assignments[${index}][is_primary]`, fn.is_primary ? '1' : '0')
+        formData.append(`function_assignments[${index}][role_label]`, fn.role_label || '')
+      })
+    } else if (key === 'send_email') {
+      // ✅ CORRIGÉ: Envoyer send_email comme "0" ou "1"
+      formData.append(key, value ? '1' : '0')
+    } else if (key === 'avatar') {
+      // ✅ CORRIGÉ: Avatar est un File, l'envoyer directement
+      if (value) {
+        formData.append(key, value)
+      }
+    } else if (value !== null && value !== '') {
+      formData.append(key, value)
     }
   })
 
+  console.log('📤 FormData envoyée:', {
+    function_assignments: form.value.function_assignments,
+    send_email: form.value.send_email
+  })
+
+  // ✅ CORRIGÉ: Utiliser la bonne route nommée
   router.post(route('param.projects.users.store'), formData, {
-    onSuccess: () => {
-      // Redirection gérée par le contrôleur
-    },
     onError: (err) => {
       errors.value = err
       loading.value = false
+      console.error('❌ Erreur validation:', err)
     },
     onFinish: () => {
       loading.value = false
@@ -386,10 +531,6 @@ function submitForm() {
   color: white;
 }
 
-.modern-breadcrumb :deep(.breadcrumb-item + .breadcrumb-item::before) {
-  color: rgba(255, 255, 255, 0.5);
-}
-
 .page-title {
   font-size: 1.75rem;
   font-weight: 700;
@@ -401,11 +542,6 @@ function submitForm() {
   border-radius: 12px;
   background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%);
   border-left: 4px solid #2196f3;
-}
-
-.modern-alert .alert-heading {
-  color: #0d47a1;
-  font-weight: 700;
 }
 
 .form-container-modern {
@@ -489,30 +625,6 @@ function submitForm() {
   border-color: #dc3545;
 }
 
-.input-group-modern .input-group-text {
-  background: #f8f9fa;
-  border: 2px solid #e9ecef;
-  border-right: none;
-  border-radius: 10px 0 0 10px;
-  color: #6c757d;
-}
-
-.input-group-modern .input-modern {
-  border-left: none;
-  border-radius: 0 10px 10px 0;
-}
-
-.input-group-modern .input-modern:focus {
-  border-left: 2px solid #667eea;
-}
-
-.form-hint {
-  display: block;
-  margin-top: 0.375rem;
-  font-size: 0.8125rem;
-  color: #6c757d;
-}
-
 .invalid-feedback {
   display: block;
   margin-top: 0.375rem;
@@ -520,19 +632,69 @@ function submitForm() {
   color: #dc3545;
 }
 
-.avatar-preview {
-  width: 120px;
-  height: 120px;
-  border-radius: 12px;
-  overflow: hidden;
-  border: 3px solid #e9ecef;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+/* FUNCTIONS GRID */
+.functions-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 1rem;
+  margin-top: 1rem;
 }
 
-.avatar-preview img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
+.function-card {
+  border: 2px solid #e9ecef;
+  border-radius: 12px;
+  padding: 1.25rem;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  gap: 1rem;
+  align-items: flex-start;
+}
+
+.function-card:hover {
+  border-color: #667eea;
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.1);
+}
+
+.function-card.selected {
+  background: linear-gradient(135deg, #f0f4ff 0%, #e8eeff 100%);
+  border-color: #667eea;
+  box-shadow: 0 4px 16px rgba(102, 126, 234, 0.2);
+}
+
+.function-checkbox {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+}
+
+.function-checkbox .form-check-input {
+  cursor: pointer;
+  width: 20px;
+  height: 20px;
+  border-radius: 4px;
+}
+
+.function-content {
+  flex: 1;
+}
+
+.function-name {
+  font-weight: 600;
+  margin: 0 0 0.25rem 0;
+  color: #212529;
+  font-size: 0.95rem;
+}
+
+.function-code {
+  margin: 0.25rem 0 0.5rem 0;
+  color: #667eea;
+  font-family: 'Courier New', monospace;
+  font-size: 0.8rem;
+  font-weight: 600;
 }
 
 .email-option-card {
@@ -550,6 +712,21 @@ function submitForm() {
 .checkbox-content {
   flex: 1;
   margin-left: 0.5rem;
+}
+
+.avatar-preview {
+  width: 120px;
+  height: 120px;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 3px solid #e9ecef;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.avatar-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .form-actions {
@@ -574,12 +751,8 @@ function submitForm() {
 }
 
 @media (max-width: 767px) {
-  .form-container-modern {
-    padding: 1rem;
-  }
-
-  .form-section {
-    padding: 1rem;
+  .functions-grid {
+    grid-template-columns: 1fr;
   }
 
   .form-actions {

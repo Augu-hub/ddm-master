@@ -1,370 +1,155 @@
 <template>
   <VerticalLayout>
-    <Head title="Contrat d'interfaces" />
+    <Head title="Contrats d'Interfaces" />
 
-    <!-- ============ HEADER MODERNE AVEC NOTIFICATIONS ============ -->
-    <b-card class="shadow-sm mb-3 p-3 bg-gradient-primary">
-      <div class="d-flex justify-content-between align-items-center">
-        <div>
-          <h2 class="fw-bold text-white mb-0" style="font-size: 1.3rem;">
-            <i class="ti ti-file-text me-2"></i>
-            Contrat d'Interfaces
-          </h2>
-          <p class="text-white-50 small mb-0" style="font-size: 0.75rem;">Gestion complète des interfaces processus</p>
-        </div>
+    <!-- HEADER SIMPLE -->
+    <div class="p-3 mb-3 rounded bg-primary text-white">
+      <h3 class="fw-bold mb-0"><i class="ti ti-file-text me-2"></i>Contrats d'Interfaces</h3>
+    </div>
 
-        <div class="d-flex align-items-center gap-3">
-          <!-- 🔔 CLOCHE NOTIFICATIONS -->
-          <div class="position-relative">
-            <button @click="showNotifs = !showNotifs" class="btn btn-link text-white p-0" style="font-size: 1.8rem; position: relative;">
-              <i class="ti ti-bell-ringing"></i>
-              <span v-if="unreadCount > 0" class="badge bg-danger position-absolute top-0 start-100 translate-middle" style="font-size: 0.7rem;">
-                {{ unreadCount }}
-              </span>
-            </button>
-
-            <!-- PANEL NOTIFICATIONS -->
-            <div v-if="showNotifs" class="notification-dropdown shadow-lg rounded" style="position: absolute; right: 0; top: calc(100% + 10px); width: 420px; max-height: 600px; background: white; z-index: 1050; overflow-y: auto;">
-              
-              <!-- Header -->
-              <div class="d-flex justify-content-between align-items-center p-3 border-bottom bg-light" style="font-weight: 600;">
-                <span><i class="ti ti-bell me-2"></i>Notifications ({{ notifsList.length }})</span>
-                <button @click="showNotifs = false" class="btn btn-sm btn-link p-0 text-muted">
-                  <i class="ti ti-x"></i>
-                </button>
-              </div>
-
-              <!-- Liste Notifications -->
-              <div v-if="notifsList.length > 0">
-                <div v-for="n in notifsList" :key="n.id" 
-                     @click="markNotifRead(n.id)"
-                     :class="['p-3', 'border-bottom', 'cursor-pointer', !n.read_at ? 'bg-info' : 'bg-white']"
-                     style="transition: 0.2s; font-size: 0.9rem;">
-                  
-                  <!-- Badge statut -->
-                  <div class="mb-2">
-                    <span v-if="!n.read_at" class="badge bg-danger me-2">⚠️ Non-lu</span>
-                    <span v-else class="badge bg-secondary">✓ Lu</span>
-                  </div>
-
-                  <!-- Titre -->
-                  <h6 class="mb-2 fw-bold">📋 {{ n.process_name }}</h6>
-
-                  <!-- Détails -->
-                  <small class="d-block text-muted mb-1">
-                    <i class="ti ti-code"></i> {{ n.process_code }}
-                  </small>
-                  <small class="d-block text-dark mb-2">
-                    <strong>Sortie :</strong> {{ n.output_label }}
-                  </small>
-                  <small class="d-block text-dark mb-2">
-                    <strong>Fonction :</strong> {{ n.function_name }}<br>
-                    <strong>Utilisateur :</strong> {{ n.user_name }}
-                  </small>
-                  <small v-if="n.expectations" class="d-block text-muted mb-2">
-                    <strong>Attentes :</strong> {{ n.expectations }}
-                  </small>
-                  <small class="text-muted" style="font-size: 0.8rem;">
-                    {{ formatDate(n.created_at) }}
-                  </small>
-                </div>
-
-                <!-- Action -->
-                <div class="p-3 bg-light border-top d-flex gap-2">
-                  <button @click="markAllNotifsRead" class="btn btn-sm btn-outline-primary flex-grow-1">
-                    <i class="ti ti-check-all me-1"></i> Tout marquer lu
-                  </button>
-                </div>
-              </div>
-
-              <!-- Vide -->
-              <div v-else class="p-4 text-center text-muted">
-                <i class="ti ti-inbox" style="font-size: 3rem; opacity: 0.3;"></i>
-                <p class="mt-2">Aucune notification</p>
-              </div>
-            </div>
-
-            <!-- Overlay fermeture -->
-            <div v-if="showNotifs" @click="showNotifs = false" style="position: fixed; inset: 0; z-index: 1049;"></div>
-          </div>
-
-          <!-- User Info -->
-          <div class="text-end text-white" style="font-size: 0.85rem;">
-            <strong>{{ user?.name }}</strong><br />
-            <small style="font-size: 0.7rem;">{{ link?.function_name }} — {{ link?.entity_name }}</small>
-          </div>
-        </div>
-      </div>
-    </b-card>
-
-    <!-- ============ SÉLECTION PROCESSUS ============ -->
-    <b-card class="shadow-sm mb-3 p-2">
-      <h6 class="fw-bold mb-2" style="font-size: 0.9rem;">
-        <i class="ti ti-list-check text-primary me-2"></i>
-        Sélectionner un Processus
-      </h6>
-
+    <!-- SÉLECTION SIMPLE -->
+    <b-card class="shadow-sm mb-3">
       <b-row class="g-2">
         <b-col md="4">
-          <label class="fw-bold small text-muted text-uppercase" style="font-size: 0.65rem;">Entité</label>
-          <div class="input-group input-group-sm">
-            <span class="input-group-text bg-light" style="font-size: 0.8rem;">
-              <i class="ti ti-building text-muted"></i>
-            </span>
-            <input class="form-control form-control-sm" :value="link?.entity_name" disabled />
-          </div>
+          <label class="fw-bold small d-block mb-1">Entité</label>
+          <input class="form-control form-control-sm" :value="link?.entity_name" disabled />
         </b-col>
-
         <b-col md="4">
-          <label class="fw-bold small text-muted text-uppercase" style="font-size: 0.65rem;">Fonction</label>
-          <div class="input-group input-group-sm">
-            <span class="input-group-text bg-light" style="font-size: 0.8rem;">
-              <i class="ti ti-briefcase text-muted"></i>
-            </span>
-            <input class="form-control form-control-sm" :value="link?.function_name" disabled />
-          </div>
+          <label class="fw-bold small d-block mb-1">Fonction</label>
+          <input class="form-control form-control-sm" :value="link?.function_name" disabled />
         </b-col>
-
         <b-col md="4">
-          <label class="fw-bold small text-muted text-uppercase" style="font-size: 0.65rem;">Processus</label>
-          <div class="input-group input-group-sm">
-            <span class="input-group-text bg-light" style="font-size: 0.8rem;">
-              <i class="ti ti-flow-switch text-muted"></i>
-            </span>
-            <select v-model="selectedProcess" @change="loadContract" class="form-select form-select-sm">
-              <option value="">📋 Choisir un processus...</option>
-              <option v-for="p in processes" :key="p.id" :value="p.id">
-                {{ p.code }} — {{ p.name }}
-              </option>
-            </select>
-          </div>
+          <label class="fw-bold small d-block mb-1">Processus</label>
+          <select v-model="selectedProcess" @change="loadContract" class="form-select form-select-sm">
+            <option value="">— Choisir —</option>
+            <option v-for="p in processes" :key="p.id" :value="p.id">{{ p.code }} - {{ p.name }}</option>
+          </select>
         </b-col>
       </b-row>
     </b-card>
 
-    <!-- ============ LISTE CONTRATS EXISTANTS ============ -->
-    <template v-if="contracts.length > 0">
-      <b-card class="shadow-sm mb-3 p-2">
-        <h6 class="fw-bold mb-2" style="font-size: 0.9rem;">
-          <i class="ti ti-inbox text-primary me-2"></i>
-          Contrats Existants ({{ contracts.length }})
-        </h6>
-
-        <div class="table-responsive">
-          <table class="table table-hover align-middle table-sm" style="font-size: 0.85rem; margin-bottom: 0;">
-            <thead class="table-light">
-              <tr style="height: 30px;">
-                <th style="width: 180px; padding: 0.4rem 0.5rem;">
-                  <i class="ti ti-code me-1"></i> Processus
-                </th>
-                <th style="padding: 0.4rem 0.5rem;">
-                  <i class="ti ti-user me-1"></i> Propriétaire
-                </th>
-                <th style="width: 60px; padding: 0.4rem 0.5rem;">
-                  <i class="ti ti-arrow-up me-1"></i> Sorties
-                </th>
-                <th style="width: 70px; padding: 0.4rem 0.5rem;">Statut</th>
-                <th style="width: 80px; padding: 0.4rem 0.5rem;">Modifié</th>
-                <th style="width: 50px; padding: 0.4rem 0.5rem;">Action</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="contract in contracts" :key="contract.id" class="cursor-pointer" 
-                  @click="viewContract(contract)" style="height: 32px;">
-                <td style="padding: 0.4rem 0.5rem;">
-                  <strong class="text-primary" style="font-size: 0.85rem;">{{ contract.process_code }}</strong><br />
-                  <small class="text-muted" style="font-size: 0.7rem;">{{ contract.process_name }}</small>
-                </td>
-                <td style="padding: 0.4rem 0.5rem; font-size: 0.85rem;">{{ contract.owner || '—' }}</td>
-                <td style="padding: 0.4rem 0.5rem;">
-                  <span class="badge bg-info-soft text-info" style="font-size: 0.7rem; padding: 0.3rem 0.4rem;">
-                    {{ contract.outputs_count }}
-                  </span>
-                </td>
-                <td style="padding: 0.4rem 0.5rem;">
-                  <span v-if="contract.status === 'active'" class="badge bg-success-soft text-success" style="font-size: 0.7rem; padding: 0.3rem 0.4rem;">
-                    ✓ Actif
-                  </span>
-                  <span v-else class="badge bg-secondary-soft text-secondary" style="font-size: 0.7rem; padding: 0.3rem 0.4rem;">
-                    {{ contract.status }}
-                  </span>
-                </td>
-                <td style="padding: 0.4rem 0.5rem;">
-                  <small class="text-muted" style="font-size: 0.7rem;">{{ contract.updated_at }}</small>
-                </td>
-                <td style="padding: 0.4rem 0.5rem;">
-                  <b-button size="sm" variant="outline-primary" @click.stop="loadContractById(contract.id)" style="padding: 0.3rem 0.5rem; font-size: 0.75rem;">
-                    <i class="ti ti-pencil"></i>
-                  </b-button>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </b-card>
-    </template>
-
-    <!-- ============ CONTRAT EN ÉDITION ============ -->
+    <!-- CONTRAT EN ÉDITION -->
     <template v-if="currentContract">
 
-      <!-- HEADER PROCESSUS -->
-      <b-card class="shadow-sm mb-3 p-2 border-primary border-2 bg-light-primary">
-        <div class="row align-items-center">
-          <div class="col">
-            <h5 class="fw-bold text-primary mb-1" style="font-size: 1rem;">
-              <i class="ti ti-flow-switch me-2"></i>
-              {{ currentContract.process.code }} — {{ currentContract.process.name }}
-            </h5>
-            <p class="text-muted mb-0" style="font-size: 0.75rem;">
-              <i class="ti ti-quote me-1"></i>
-              {{ currentContract.purpose || 'Aucune finalité définie' }}
-            </p>
-          </div>
-          <div class="col-auto text-end" style="font-size: 0.8rem;">
-            <div class="small text-muted mb-1">Propriétaire</div>
-            <strong>{{ currentContract.owner || '—' }}</strong>
-          </div>
-        </div>
+      <!-- INFO PROCESSUS -->
+      <b-card class="shadow-sm mb-3 border-primary border-2 p-3">
+        <h5 class="fw-bold text-primary mb-1">{{ currentContract.process.code }} — {{ currentContract.process.name }}</h5>
+        <p class="text-muted small mb-2">{{ currentContract.purpose || 'Pas de finalité' }}</p>
+        <small><strong>Propriétaire:</strong> {{ currentContract.owner || '—' }}</small>
       </b-card>
 
       <!-- ONGLETS -->
-      <b-card class="shadow-sm mb-3">
-        <b-tabs>
+      <b-card class="shadow-sm">
+        <b-tabs nav-class="bg-light">
 
-          <!-- TAB 1: CONTRAT -->
+          <!-- TAB: DONNÉES & INDICATEURS -->
           <b-tab title="📋 Contrat" active>
-            <div class="p-2">
+            <div class="p-3">
 
-              <!-- ========== INFOS GÉNÉRALES ========== -->
-              <div class="mb-3">
-                <h6 class="fw-bold mb-2" style="font-size: 0.85rem;">
-                  <i class="ti ti-info-circle text-primary me-2"></i>
-                  Informations Générales
-                </h6>
-
-                <b-row class="g-1">
+              <!-- Infos Générales -->
+              <div class="mb-4 pb-3 border-bottom">
+                <h6 class="fw-bold mb-2">Propriétaire & Finalité</h6>
+                <b-row class="g-2">
                   <b-col md="6">
-                    <label class="fw-bold small text-muted text-uppercase" style="font-size: 0.65rem;">Propriétaire</label>
-                    <input v-model="currentContract.owner" type="text" class="form-control form-control-sm" 
-                           placeholder="Nom du propriétaire" style="font-size: 0.8rem;" />
+                    <input v-model="currentContract.owner" class="form-control form-control-sm" placeholder="Propriétaire" />
                   </b-col>
-
                   <b-col md="6">
-                    <label class="fw-bold small text-muted text-uppercase" style="font-size: 0.65rem;">Finalité</label>
-                    <textarea v-model="currentContract.purpose" class="form-control form-control-sm" 
-                              rows="1" placeholder="Objectif du processus" style="font-size: 0.8rem;"></textarea>
+                    <textarea v-model="currentContract.purpose" class="form-control form-control-sm" rows="1" placeholder="Finalité"></textarea>
                   </b-col>
                 </b-row>
               </div>
 
-              <!-- ========== DONNÉES DE SORTIE AVEC NOTIFICATIONS ========== -->
-              <div class="mb-3">
-                <h6 class="fw-bold mb-2" style="font-size: 0.85rem;">
-                  <i class="ti ti-arrow-up-circle text-info me-2"></i>
-                  Données de Sortie
-                </h6>
-
-                <div class="table-responsive" style="max-height: 500px; overflow-y: auto;">
-                  <table class="table table-sm table-bordered align-middle mb-0" style="font-size: 0.78rem;">
+              <!-- TABLEAU SORTIE -->
+              <div class="mb-4">
+                <h6 class="fw-bold mb-2">Données de Sortie</h6>
+                <div class="table-responsive" style="max-height: 600px; overflow-y: auto; border: 1px solid #dee2e6; border-radius: 0.375rem;">
+                  <table class="table table-sm table-bordered align-middle mb-0">
                     <thead class="table-light sticky-top">
-                      <tr style="height: 30px;">
-                        <th style="width: 35px; padding: 0.3rem;" class="text-center">#</th>
-                        <th style="width: 140px; padding: 0.3rem;">Sortie</th>
-                        <th style="width: 120px; padding: 0.3rem;">
-                          <i class="ti ti-briefcase me-1"></i> Fonction
-                        </th>
-                        <th style="width: 110px; padding: 0.3rem;">
-                          <i class="ti ti-user me-1"></i> Utilisateur
-                        </th>
-                        <th style="padding: 0.3rem;">Attentes</th>
-                        <th style="width: 90px; padding: 0.3rem;">Document</th>
-                        <th style="width: 70px; padding: 0.3rem;" class="text-center">
-                          <i class="ti ti-send me-1"></i> Notifier
-                        </th>
+                      <tr style="font-size: 0.8rem;">
+                        <th style="width: 30px;">#</th>
+                        <th style="width: 120px;">Sortie</th>
+                        <th style="width: 100px;">Fonction</th>
+                        <th style="width: 90px;">Utilisateur</th>
+                        <th style="width: 110px;">Attentes</th>
+                        <th style="width: 180px; background: #fff3cd;">🤖 Suggestions IA</th>
+                        <th style="width: 60px;">Doc</th>
                       </tr>
                     </thead>
                     <tbody>
-                      <tr v-for="(item, idx) in currentContract.outputs" :key="item.id" 
-                          :class="{ 'table-light': idx % 2 === 0 }" style="height: 32px;">
-                        <td style="padding: 0.3rem;" class="text-center fw-bold text-muted">{{ idx + 1 }}</td>
+                      <tr v-for="(item, idx) in currentContract.outputs" :key="item.id" :class="idx % 2 === 0 ? 'table-light' : ''">
+                        <td class="fw-bold">{{ idx + 1 }}</td>
+                        <td><strong>{{ item.label }}</strong></td>
                         
-                        <td style="padding: 0.3rem;">
-                          <span class="fw-bold text-dark" style="font-size: 0.78rem;">{{ item.label }}</span>
-                        </td>
-
-                        <!-- FONCTION -->
-                        <td style="padding: 0.3rem;">
-                          <select v-model="item.actor_function_id"
-                                  @change="updateActorFromFunction(idx)"
-                                  class="form-select form-select-sm"
-                                  style="font-size: 0.75rem; padding: 0.3rem;">
-                            <option value="">— Pas de fonction</option>
-                            <option v-for="fn in currentContract.functions" :key="fn.id" :value="fn.id">
-                              {{ fn.name }}
-                            </option>
+                        <!-- FONCTION (Trigger de la génération) -->
+                        <td>
+                          <select v-model="item.actor_function_id" @change="updateActorFromFunction(idx)" class="form-select form-select-sm" style="font-size: 0.7rem;">
+                            <option value="">—</option>
+                            <option v-for="fn in currentContract.functions" :key="fn.id" :value="fn.id">{{ fn.name }}</option>
                           </select>
                         </td>
+                        
+                        <!-- UTILISATEUR (Auto-rempli SEULEMENT si fonction choisie) -->
+                        <td>
+                          <span v-if="item.user_name" class="badge bg-primary" style="font-size: 0.65rem;">{{ item.user_name }}</span>
+                          <small v-else class="text-muted">—</small>
+                        </td>
+                        
+                        <!-- ATTENTES (Spécifiques à la fonction) -->
+                        <td>
+                          <textarea v-model="item.expectations" class="form-control form-control-sm" rows="1" style="font-size: 0.7rem;"></textarea>
+                        </td>
 
-                        <!-- UTILISATEUR AUTO-REMPLI -->
-                        <td style="padding: 0.3rem;">
-                          <div v-if="item.user_name" class="d-flex align-items-center gap-1">
-                            <span class="badge bg-primary-soft text-primary" style="font-size: 0.65rem; padding: 0.2rem 0.4rem;">
-                              <i class="ti ti-user"></i> {{ item.user_name }}
-                            </span>
+                        <!-- SUGGESTIONS IA (Basées sur fonction choisie) -->
+                        <td style="background: #fff3cd;">
+                          <!-- Si suggestions disponibles -->
+                          <div v-if="item.aisu?.expectations?.length > 0" style="font-size: 0.65rem; max-height: 200px; overflow-y: auto;">
+                            <div class="mb-2">
+                              <strong class="d-block">Attentes:</strong>
+                              <div v-for="(e, i) in item.aisu.expectations.slice(0, 2)" :key="i" class="small">✓ {{ e }}</div>
+                            </div>
+                            <div v-if="item.aisu.activity_indicators?.length > 0" class="mb-2 p-1 bg-primary bg-opacity-10 rounded">
+                              <strong class="d-block">📊 Activité:</strong>
+                              <div v-for="(ind, i) in item.aisu.activity_indicators.slice(0, 2)" :key="'a-'+i" class="small">✓ {{ ind }}</div>
+                            </div>
+                            <div v-if="item.aisu.performance_indicators?.length > 0" class="mb-2 p-1 bg-success bg-opacity-10 rounded">
+                              <strong class="d-block">🎯 Perf:</strong>
+                              <div v-for="(ind, i) in item.aisu.performance_indicators.slice(0, 2)" :key="'p-'+i" class="small">✓ {{ ind }}</div>
+                            </div>
+                            <div class="d-flex gap-1">
+                              <button @click="applySuggestions(item)" class="btn btn-sm btn-warning flex-grow-1" style="font-size: 0.6rem;">Appliquer</button>
+                              <button @click="clearSuggestions(item)" class="btn btn-sm btn-outline-secondary" style="font-size: 0.6rem;">Reset</button>
+                            </div>
                           </div>
-                          <small v-else class="text-muted" style="font-size: 0.7rem;">
-                            —
-                          </small>
+
+                          <!-- En cours de génération -->
+                          <div v-else-if="loadingSuggestions[item.id]" class="text-center p-1">
+                            <b-spinner small variant="warning"></b-spinner>
+                            <small class="d-block">Génération...</small>
+                          </div>
+
+                          <!-- Bouton générer (SEULEMENT si fonction choisie) -->
+                          <button v-else-if="item.actor_function_id" @click="generateAISuggestions(item, idx)" class="btn btn-sm btn-outline-warning w-100" style="font-size: 0.65rem;">
+                            <i class="ti ti-robot"></i> Générer
+                          </button>
+
+                          <!-- Message si pas de fonction -->
+                          <small v-else class="text-muted d-block text-center">Sélect. fonction</small>
                         </td>
 
-                        <!-- ATTENTES -->
-                        <td style="padding: 0.3rem;">
-                          <input v-model="item.expectations" type="text" 
-                                 class="form-control form-control-sm" 
-                                 placeholder="Détail attentes" 
-                                 style="font-size: 0.75rem; padding: 0.3rem;" />
-                        </td>
-
-                        <!-- DOCUMENT -->
-                        <td style="padding: 0.3rem;" class="text-center">
-                          <div class="btn-group btn-group-sm" role="group">
-                            <label class="btn btn-outline-primary" title="Uploader" style="padding: 0.25rem 0.4rem; font-size: 0.75rem;">
+                        <!-- Document -->
+                        <td class="text-center">
+                          <div class="btn-group btn-group-sm">
+                            <label class="btn btn-outline-primary" style="cursor: pointer; font-size: 0.65rem; padding: 0.25rem;">
                               <i class="ti ti-upload"></i>
-                              <input type="file" style="display:none" 
-                                     @change="uploadFile($event, idx)" />
+                              <input type="file" style="display:none" @change="uploadFile($event, idx)" />
                             </label>
-
-                            <button v-if="item.document_path" 
-                                    @click="downloadFile(idx)"
-                                    class="btn btn-outline-success" title="Télécharger"
-                                    style="padding: 0.25rem 0.4rem; font-size: 0.75rem;">
+                            <button v-if="item.document_path" @click="downloadFile(idx)" class="btn btn-outline-success" style="font-size: 0.65rem; padding: 0.25rem;">
                               <i class="ti ti-download"></i>
                             </button>
-
-                            <button v-if="item.document_path"
-                                    @click="deleteFile(idx)"
-                                    class="btn btn-outline-danger" title="Supprimer"
-                                    style="padding: 0.25rem 0.4rem; font-size: 0.75rem;">
+                            <button v-if="item.document_path" @click="deleteFile(idx)" class="btn btn-outline-danger" style="font-size: 0.65rem; padding: 0.25rem;">
                               <i class="ti ti-trash"></i>
                             </button>
                           </div>
-
-                          <small v-if="item.file_name" class="d-block text-muted mt-1" style="font-size: 0.65rem;">
-                            <i class="ti ti-paperclip me-1"></i> {{ item.file_name }}
-                          </small>
-                        </td>
-
-                        <!-- NOTIFIER -->
-                        <td style="padding: 0.3rem;" class="text-center">
-                          <button 
-                            v-if="item.actor_function_id && item.user_name"
-                            @click="sendNotif(idx)"
-                            class="btn btn-sm btn-outline-primary"
-                            title="Envoyer notification"
-                            style="padding: 0.25rem 0.4rem; font-size: 0.75rem;">
-                            <i class="ti ti-send"></i>
-                          </button>
-                          <span v-else class="text-muted small">—</span>
                         </td>
                       </tr>
                     </tbody>
@@ -372,85 +157,127 @@
                 </div>
               </div>
 
-              <!-- ========== INDICATEURS ========== -->
-              <div class="mb-3">
-                <h6 class="fw-bold mb-2" style="font-size: 0.85rem;">
-                  <i class="ti ti-chart-bar text-info me-2"></i>
-                  Indicateurs
-                </h6>
-
-                <b-row class="g-1">
-                  <b-col md="6">
-                    <label class="fw-bold small text-muted text-uppercase" style="font-size: 0.65rem;">Activité</label>
-                    <textarea v-model="indicatorsActivity" class="form-control form-control-sm" rows="2"
-                              placeholder="1. Délai moyen&#10;2. Volume..." style="font-size: 0.8rem;"></textarea>
+              <!-- INDICATEURS SIMPLES -->
+              <div class="mb-4">
+                <h6 class="fw-bold mb-3">Indicateurs</h6>
+                <b-row class="g-3">
+                  <!-- Activité -->
+                  <b-col lg="6">
+                    <div class="p-3 border rounded" style="background: #f0f7ff;">
+                      <div class="d-flex justify-content-between align-items-center mb-2">
+                        <h6 class="fw-bold mb-0">📊 Activité</h6>
+                        <span class="badge bg-primary">{{ activityList.length }}</span>
+                      </div>
+                      <div class="mb-2">
+                        <div class="input-group input-group-sm">
+                          <input v-model="newActivity" type="text" class="form-control" placeholder="Ajouter..." @keyup.enter="addActivity" />
+                          <button @click="addActivity" class="btn btn-primary"><i class="ti ti-plus"></i></button>
+                        </div>
+                      </div>
+                      <div v-if="activityList.length > 0" class="list-group list-group-sm">
+                        <div v-for="(item, idx) in activityList" :key="idx" class="list-group-item d-flex justify-content-between align-items-center">
+                          <small><strong>[{{ idx + 1 }}]</strong> {{ item }}</small>
+                          <button @click="removeActivity(idx)" class="btn btn-sm btn-outline-danger" style="font-size: 0.65rem;">
+                            <i class="ti ti-trash"></i>
+                          </button>
+                        </div>
+                      </div>
+                      <div v-else class="alert alert-info mb-0" style="font-size: 0.75rem;">Aucun indicateur</div>
+                    </div>
                   </b-col>
 
-                  <b-col md="6">
-                    <label class="fw-bold small text-muted text-uppercase" style="font-size: 0.65rem;">Performance</label>
-                    <textarea v-model="indicatorsPerf" class="form-control form-control-sm" rows="2"
-                              placeholder="1. Taux de satisfaction&#10;2. Coûts..." style="font-size: 0.8rem;"></textarea>
+                  <!-- Performance -->
+                  <b-col lg="6">
+                    <div class="p-3 border rounded" style="background: #f0fff4;">
+                      <div class="d-flex justify-content-between align-items-center mb-2">
+                        <h6 class="fw-bold mb-0">🎯 Performance</h6>
+                        <span class="badge bg-success">{{ perfList.length }}</span>
+                      </div>
+                      <div class="mb-2">
+                        <div class="input-group input-group-sm">
+                          <input v-model="newPerf" type="text" class="form-control" placeholder="Ajouter..." @keyup.enter="addPerf" />
+                          <button @click="addPerf" class="btn btn-success"><i class="ti ti-plus"></i></button>
+                        </div>
+                      </div>
+                      <div v-if="perfList.length > 0" class="list-group list-group-sm">
+                        <div v-for="(item, idx) in perfList" :key="idx" class="list-group-item d-flex justify-content-between align-items-center">
+                          <small><strong>[{{ idx + 1 }}]</strong> {{ item }}</small>
+                          <button @click="removePerf(idx)" class="btn btn-sm btn-outline-danger" style="font-size: 0.65rem;">
+                            <i class="ti ti-trash"></i>
+                          </button>
+                        </div>
+                      </div>
+                      <div v-else class="alert alert-info mb-0" style="font-size: 0.75rem;">Aucun indicateur</div>
+                    </div>
                   </b-col>
                 </b-row>
               </div>
 
-              <!-- ========== ACTIONS ========== -->
-              <div class="d-flex justify-content-between gap-1 flex-wrap">
-                <b-button variant="secondary" @click="closeContract" class="px-2" size="sm" style="font-size: 0.8rem;">
+              <!-- STATS -->
+              <div class="mb-4">
+                <b-row class="g-2">
+                  <b-col sm="6" lg="3">
+                    <div class="text-center p-3 bg-light rounded">
+                      <div style="font-size: 1.5rem; font-weight: bold; color: #0d6efd;">{{ activityList.length }}</div>
+                      <small class="text-muted">Activité</small>
+                    </div>
+                  </b-col>
+                  <b-col sm="6" lg="3">
+                    <div class="text-center p-3 bg-light rounded">
+                      <div style="font-size: 1.5rem; font-weight: bold; color: #198754;">{{ perfList.length }}</div>
+                      <small class="text-muted">Performance</small>
+                    </div>
+                  </b-col>
+                  <b-col sm="6" lg="3">
+                    <div class="text-center p-3 bg-light rounded">
+                      <div style="font-size: 1.5rem; font-weight: bold; color: #ffc107;">{{ activityList.length + perfList.length }}</div>
+                      <small class="text-muted">Total</small>
+                    </div>
+                  </b-col>
+                  <b-col sm="6" lg="3">
+                    <div class="text-center p-3 bg-light rounded">
+                      <div style="font-size: 1.5rem; font-weight: bold; color: #dc3545;">{{ currentContract.outputs.length }}</div>
+                      <small class="text-muted">Sorties</small>
+                    </div>
+                  </b-col>
+                </b-row>
+              </div>
+
+              <!-- BOUTONS -->
+              <div class="d-flex justify-content-between gap-2 flex-wrap">
+                <b-button variant="secondary" @click="closeContract" size="sm">
                   <i class="ti ti-x me-1"></i> Fermer
                 </b-button>
-
-                <div class="d-flex gap-1 flex-wrap">
-                  <b-button variant="outline-info" @click="exportExcel" :disabled="saving" size="sm" style="font-size: 0.8rem;">
+                <div class="d-flex gap-2">
+                  <b-button variant="outline-info" @click="exportExcel" size="sm">
                     <i class="ti ti-file-spreadsheet me-1"></i> Excel
                   </b-button>
-
-                  <b-button variant="outline-danger" @click="exportPdf" :disabled="saving" size="sm" style="font-size: 0.8rem;">
-                    <i class="ti ti-file-pdf me-1"></i> PDF
-                  </b-button>
-
-                  <b-button variant="success" @click="printContract" size="sm" style="font-size: 0.8rem;">
+                  <b-button variant="success" @click="printContract" size="sm">
                     <i class="ti ti-printer me-1"></i> Imprimer
                   </b-button>
-
-                  <b-button variant="primary" @click="saveContract" :disabled="saving" size="sm" style="font-size: 0.8rem;">
-                    <i class="ti ti-device-floppy me-1"></i>
-                    {{ saving ? 'Enr...' : 'Enregistrer' }}
+                  <b-button variant="primary" @click="saveContract" :disabled="saving" size="sm">
+                    <i class="ti ti-device-floppy me-1"></i> {{ saving ? 'Enr...' : 'Enregistrer' }}
                   </b-button>
                 </div>
               </div>
             </div>
           </b-tab>
 
-          <!-- TAB 2: HISTORIQUE -->
+          <!-- TAB: HISTORIQUE -->
           <b-tab title="📜 Historique">
-            <div class="p-2">
+            <div class="p-3">
               <div v-if="histories.length > 0">
-                <div v-for="(h, idx) in histories" :key="idx" class="d-flex gap-2 mb-2 pb-2 border-bottom" style="font-size: 0.8rem;">
-                  <div class="flex-shrink-0">
-                    <span :class="['avatar-sm', getActionColor(h.action)]" 
-                          style="width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; border-radius: 50%;">
-                      <i :class="getActionIcon(h.action)" style="font-size: 0.9rem;"></i>
-                    </span>
+                <div v-for="h in histories" :key="h.id" class="d-flex gap-2 mb-2 pb-2 border-bottom" style="font-size: 0.8rem;">
+                  <div class="p-2 rounded bg-light" style="min-width: 35px; text-align: center;">
+                    <i :class="getActionIcon(h.action)"></i>
                   </div>
-
                   <div class="flex-grow-1">
-                    <h6 class="fw-bold mb-0" style="font-size: 0.8rem;">{{ h.action_label }}</h6>
-                    <small class="text-muted d-block mb-1" style="font-size: 0.7rem;">
-                      <i class="ti ti-user me-1"></i> {{ h.user_name }} • {{ h.created_at }}
-                    </small>
-                    <p v-if="h.description" class="mb-0 small" style="font-size: 0.75rem;">{{ h.description }}</p>
-                    <p v-if="h.file_name" class="mb-0 small text-info" style="font-size: 0.75rem;">
-                      <i class="ti ti-paperclip me-1"></i> {{ h.file_name }}
-                    </p>
+                    <strong class="d-block">{{ h.action_label }}</strong>
+                    <small class="text-muted d-block">{{ h.user_name }} • {{ h.created_at }}</small>
                   </div>
                 </div>
               </div>
-
-              <div v-else class="alert alert-info text-center" style="padding: 1rem 0.5rem; font-size: 0.8rem;">
-                <i class="ti ti-info-circle me-2"></i>
-                Aucun historique
-              </div>
+              <div v-else class="alert alert-info mb-0">Aucun historique</div>
             </div>
           </b-tab>
 
@@ -459,11 +286,11 @@
 
     </template>
 
-    <!-- MESSAGE VIDE -->
-    <div v-else class="alert alert-info text-center p-3 rounded-lg" style="font-size: 0.85rem;">
-      <i class="ti ti-info-circle display-5 text-info mb-2 d-block"></i>
-      <h5 class="fw-bold" style="font-size: 1rem;">Aucun contrat sélectionné</h5>
-      <p class="text-muted mb-0">Sélectionnez un processus pour afficher ou créer son contrat d'interfaces.</p>
+    <!-- VIDE -->
+    <div v-else class="alert alert-info text-center p-5">
+      <i class="ti ti-inbox display-4 mb-3 d-block" style="opacity: 0.5;"></i>
+      <h5>Aucun contrat</h5>
+      <p class="text-muted">Sélectionnez un processus</p>
     </div>
 
   </VerticalLayout>
@@ -471,115 +298,82 @@
 
 <script setup>
 import { Head } from "@inertiajs/vue3"
-import VerticalLayout from "@/layoutsparam/VerticalLayout.vue"
-import { ref, onMounted } from "vue"
-import axios from "axios"
+import VerticalLayout from "@/layouts/VerticalLayout.vue"
+import { ref, onMounted, computed } from "vue"
 
-const props = defineProps({
-  user: Object,
-  link: Object,
-  processes: Array,
-  contracts: Array,
-})
+const props = defineProps({ user: Object, link: Object, processes: Array, contracts: Array })
 
-const API_BASE = (() => {
-  const path = window.location.pathname
-  if (path.includes('/m/process.core')) {
-    return '/m/process.core/process/contracts'
-  } else if (path.includes('/admin')) {
-    return '/admin/process/contracts'
-  } else {
-    return '/process/contracts'
-  }
-})()
-
-// ========== STATE ==========
 const selectedProcess = ref("")
 const currentContract = ref(null)
 const contractId = ref(null)
 const saving = ref(false)
-const histories = ref([])
-const indicatorsActivity = ref("")
-const indicatorsPerf = ref("")
 const functionUserMap = ref({})
+const loadingSuggestions = ref({})
+const histories = ref([])
+const activityText = ref("")
+const perfText = ref("")
+const newActivity = ref("")
+const newPerf = ref("")
 
-// ========== NOTIFICATIONS ==========
-const showNotifs = ref(false)
-const notifsList = ref([])
-const unreadCount = ref(0)
+const activityList = computed(() => activityText.value.split('\n').map(i => i.trim()).filter(i => i.length > 0))
+const perfList = computed(() => perfText.value.split('\n').map(i => i.trim()).filter(i => i.length > 0))
 
-onMounted(() => {
-  loadNotifs()
-  setInterval(loadNotifs, 30000)
-})
+function addActivity() {
+  if (!newActivity.value.trim()) return
+  activityText.value = activityText.value.trim() ? activityText.value + '\n' + newActivity.value.trim() : newActivity.value.trim()
+  newActivity.value = ""
+}
 
-// Charger notifications
-async function loadNotifs() {
-  try {
-    const res = await axios.get(`${API_BASE}/notifications`)
-    notifsList.value = res.data.notifications || []
-    unreadCount.value = res.data.unread_count || 0
-  } catch (e) {
-    console.error('Erreur notifs:', e)
+function removeActivity(idx) {
+  const items = activityList.value
+  items.splice(idx, 1)
+  activityText.value = items.join('\n')
+}
+
+function addPerf() {
+  if (!newPerf.value.trim()) return
+  perfText.value = perfText.value.trim() ? perfText.value + '\n' + newPerf.value.trim() : newPerf.value.trim()
+  newPerf.value = ""
+}
+
+function removePerf(idx) {
+  const items = perfList.value
+  items.splice(idx, 1)
+  perfText.value = items.join('\n')
+}
+
+async function secureRequest(url, data = {}, method = 'POST') {
+  const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content
+  if (!csrfToken) throw new Error('CSRF token manquant')
+  const options = {
+    method,
+    headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrfToken, 'Accept': 'application/json' }
   }
+  if (method !== 'GET') options.body = JSON.stringify(data)
+  const response = await fetch(url, options)
+  if (!response.ok) throw new Error(`HTTP ${response.status}`)
+  return await response.json()
 }
-
-// Marquer comme lu
-async function markNotifRead(id) {
-  try {
-    await axios.post(`${API_BASE}/notifications/${id}/read`)
-    loadNotifs()
-  } catch (e) {
-    console.error('Erreur:', e)
-  }
-}
-
-// Marquer tout comme lu
-async function markAllNotifsRead() {
-  try {
-    await axios.post(`${API_BASE}/notifications/read-all`)
-    loadNotifs()
-  } catch (e) {
-    console.error('Erreur:', e)
-  }
-}
-
-// Formater date
-function formatDate(d) {
-  if (!d) return '—'
-  return new Date(d).toLocaleDateString('fr-FR', {
-    year: 'numeric', month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit'
-  })
-}
-
-// ========== CONTRATS ==========
 
 async function loadContract() {
-  if (!selectedProcess.value) {
-    currentContract.value = null
-    return
-  }
-
+  if (!selectedProcess.value) { currentContract.value = null; return }
   try {
     saving.value = true
-    const res = await axios.get(`${API_BASE}/load`, {
-      params: { process_id: selectedProcess.value }
+    const response = await fetch(route('process.core.process.contracts.load') + '?process_id=' + selectedProcess.value, {
+      headers: { 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content, 'Accept': 'application/json' }
     })
-
-    contractId.value = res.data.contract_id
-    currentContract.value = res.data.data
-
-    indicatorsActivity.value = (res.data.data.activity_indicators || []).join("\n")
-    indicatorsPerf.value = (res.data.data.performance_indicators || []).join("\n")
-
-    loadHistory()
-
-    if (currentContract.value.functions && currentContract.value.functions.length > 0) {
-      loadFunctionUsers()
+    if (!response.ok) throw new Error(`HTTP ${response.status}`)
+    const result = await response.json()
+    if (result.success) {
+      contractId.value = result.contract_id
+      currentContract.value = result.data
+      activityText.value = (result.data.activity_indicators || []).join("\n")
+      perfText.value = (result.data.performance_indicators || []).join("\n")
+      loadHistory()
+      if (currentContract.value.functions?.length > 0) await loadFunctionUsers()
     }
-  } catch (e) {
-    console.error('Erreur loadContract:', e.message)
-    alert("Erreur: " + e.message)
+  } catch (error) {
+    alert(`Erreur: ${error.message}`)
   } finally {
     saving.value = false
   }
@@ -589,311 +383,202 @@ async function loadFunctionUsers() {
   try {
     const functionIds = currentContract.value.functions.map(f => f.id)
     if (functionIds.length === 0) return
-
-    const res = await axios.post(`${API_BASE}/function-users`, {
-      function_ids: functionIds
-    })
-
-    if (res.data.users_map) {
-      functionUserMap.value = res.data.users_map
-    }
-  } catch (e) {
-    console.error('Erreur loadFunctionUsers:', e.message)
-  }
+    const result = await secureRequest(route('process.core.process.contracts.function-users'), { function_ids: functionIds })
+    if (result.success && result.users_map) functionUserMap.value = result.users_map
+  } catch (e) {}
 }
 
+// 🔑 CLÉMENT: updateActorFromFunction - Déclenche la génération IA SEULEMENT si fonction choisie
 function updateActorFromFunction(outputIdx) {
   const output = currentContract.value.outputs[outputIdx]
   
+  // Si pas de fonction: réinitialiser tout
   if (!output.actor_function_id) {
     output.user_name = ''
-    output.actor = ''
+    output.user_id = null
+    output.aisu = null
+    output.expectations = ''
     return
   }
 
+  // Si fonction choisie: remplir l'utilisateur ET générer les suggestions
   const userInfo = functionUserMap.value[output.actor_function_id]
   if (userInfo) {
     output.user_name = userInfo.name
-    output.actor = userInfo.name
+    output.user_id = userInfo.id
+  }
+
+  // Générer les suggestions IA basées sur la fonction
+  if (!output.aisu) {
+    generateAISuggestions(output, outputIdx)
   }
 }
 
-async function sendNotif(idx) {
-  const o = currentContract.value.outputs[idx]
+// 🤖 Générer suggestions IA (BASÉES sur fonction choisie)
+async function generateAISuggestions(row, outputIdx) {
+  if (!row.actor_function_id) return
   
-  if (!o.actor_function_id || !o.user_name) {
-    alert('❌ Aucun utilisateur')
-    return
-  }
-
-  if (!confirm(`Notifier ${o.user_name} ?`)) return
-
+  loadingSuggestions.value[row.id] = true
   try {
-    const u = functionUserMap.value[o.actor_function_id]
-    const fn = currentContract.value.functions.find(f => f.id === o.actor_function_id)?.name
+    const functionName = currentContract.value.functions.find(f => f.id === row.actor_function_id)?.name
 
-    const res = await axios.post(`${API_BASE}/notify`, {
-      contract_id: contractId.value,
-      output_id: o.id,
-      output_label: o.label,
-      function_id: o.actor_function_id,
-      function_name: fn,
-      user_id: u.id,
-      user_name: u.name,
-      user_email: u.email,
-      expectations: o.expectations,
-      process_code: currentContract.value.process.code,
-      process_name: currentContract.value.process.name
+    const result = await secureRequest(route('process.core.process.contracts.ai-suggestions'), {
+      function_id: row.actor_function_id,
+      function_name: functionName,
+      process_id: currentContract.value.process.id,
+      process_name: currentContract.value.process.name,
+      output_id: row.id,
+      output_label: row.label
     })
 
-    if (res.data.success) {
-      alert(`✅ Notification envoyée à ${o.user_name}`)
-      loadNotifs()
+    if (result.success) {
+      // Stocker les suggestions
+      row.aisu = result.suggestions
+      
+      // Auto-remplir les ATTENTES (Expectations) spécifiques à la fonction
+      if (result.suggestions?.expectations?.length > 0) {
+        row.expectations = result.suggestions.expectations.join('\n')
+      }
+
+      // Auto-remplir les INDICATEURS en bas
+      if (result.suggestions?.activity_indicators?.length > 0) {
+        const newActivityIndicators = result.suggestions.activity_indicators
+        activityText.value = activityText.value ? activityText.value + '\n' + newActivityIndicators.join('\n') : newActivityIndicators.join('\n')
+      }
+      if (result.suggestions?.performance_indicators?.length > 0) {
+        const newPerfIndicators = result.suggestions.performance_indicators
+        perfText.value = perfText.value ? perfText.value + '\n' + newPerfIndicators.join('\n') : newPerfIndicators.join('\n')
+      }
+    } else {
+      throw new Error(result.error || 'Erreur IA')
     }
-  } catch (e) {
-    alert('❌ Erreur: ' + e.message)
+  } catch (error) {
+    alert(`Erreur IA: ${error.message}`)
+  } finally {
+    loadingSuggestions.value[row.id] = false
   }
 }
 
+// Appliquer les suggestions
+function applySuggestions(row) {
+  if (!row.aisu) return
+  if (row.aisu.expectations?.length > 0) row.expectations = row.aisu.expectations.join('\n')
+}
+
+// Réinitialiser les suggestions
+function clearSuggestions(row) {
+  if (!confirm('Réinitialiser?')) return
+  row.aisu = null
+}
+
+// Upload fichier
 async function uploadFile(event, outputIdx) {
   const file = event.target.files?.[0]
   if (!file) return
-
-  const form = new FormData()
-  form.append('contract_id', contractId.value)
-  form.append('output_id', currentContract.value.outputs[outputIdx].id)
-  form.append('file', file)
-
+  const formData = new FormData()
+  formData.append('contract_id', contractId.value)
+  formData.append('output_id', currentContract.value.outputs[outputIdx].id)
+  formData.append('file', file)
   try {
-    const res = await axios.post(`${API_BASE}/upload`, form, {
-      headers: {'Content-Type': 'multipart/form-data'}
+    const response = await fetch(route('process.core.process.contracts.upload'), {
+      method: 'POST',
+      headers: { 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content, 'Accept': 'application/json' },
+      body: formData
     })
-    currentContract.value.outputs[outputIdx].document_path = res.data.path
-    currentContract.value.outputs[outputIdx].file_name = file.name
-    alert("✅ Fichier uploadé")
-  } catch (e) {
-    alert("Erreur: " + e.message)
-  }
+    if (!response.ok) throw new Error(`HTTP ${response.status}`)
+    const result = await response.json()
+    if (result.success) {
+      currentContract.value.outputs[outputIdx].document_path = result.path
+      currentContract.value.outputs[outputIdx].file_name = result.file_name || file.name
+    }
+  } catch (e) { alert(`Erreur: ${e.message}`) }
+  event.target.value = ''
 }
 
+// Download fichier
 async function downloadFile(outputIdx) {
   try {
-    const res = await axios.get(`${API_BASE}/download`, {
-      params: {
-        contract_id: contractId.value,
-        output_id: currentContract.value.outputs[outputIdx].id
-      },
-      responseType: 'blob'
+    const response = await fetch(route('process.core.process.contracts.download'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content, 'Accept': 'application/json' },
+      body: JSON.stringify({ contract_id: contractId.value, output_id: currentContract.value.outputs[outputIdx].id })
     })
-    const url = URL.createObjectURL(res.data)
+    if (!response.ok) throw new Error(`HTTP ${response.status}`)
+    const blob = await response.blob()
+    const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = currentContract.value.outputs[outputIdx].file_name
+    a.download = currentContract.value.outputs[outputIdx].file_name || 'download'
+    document.body.appendChild(a)
     a.click()
-  } catch (e) {
-    alert("Erreur: " + e.message)
-  }
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+  } catch (e) { alert(`Erreur: ${e.message}`) }
 }
 
+// Delete fichier
 async function deleteFile(outputIdx) {
-  if (!confirm("Supprimer ?")) return
-  
+  if (!confirm("Supprimer?")) return
   try {
-    await axios.post(`${API_BASE}/file/delete`, {
-      contract_id: contractId.value,
-      output_id: currentContract.value.outputs[outputIdx].id
+    const result = await secureRequest(route('process.core.process.contracts.file.delete'), {
+      contract_id: contractId.value, output_id: currentContract.value.outputs[outputIdx].id
     })
-    currentContract.value.outputs[outputIdx].document_path = null
-    currentContract.value.outputs[outputIdx].file_name = null
-    alert("✅ Supprimé")
-  } catch (e) {
-    alert("Erreur: " + e.message)
-  }
+    if (result.success) {
+      currentContract.value.outputs[outputIdx].document_path = null
+      currentContract.value.outputs[outputIdx].file_name = null
+    }
+  } catch (e) { alert(`Erreur: ${e.message}`) }
 }
 
+// Sauvegarder le contrat
 async function saveContract() {
   if (!contractId.value) return
-
   saving.value = true
-
   try {
-    await axios.post(`${API_BASE}/save`, {
+    const result = await secureRequest(route('process.core.process.contracts.save'), {
       contract_id: contractId.value,
       owner: currentContract.value.owner,
       purpose: currentContract.value.purpose,
       outputs: currentContract.value.outputs,
-      activity_indicators: indicatorsActivity.value.split('\n').filter(i => i.trim()),
-      performance_indicators: indicatorsPerf.value.split('\n').filter(i => i.trim())
+      activity_indicators: activityList.value,
+      performance_indicators: perfList.value
     })
-
-    alert("✅ Enregistré")
-    loadHistory()
-  } catch (e) {
-    alert("Erreur: " + e.message)
-  } finally {
-    saving.value = false
-  }
+    if (result.success) { alert("Enregistré!"); loadHistory() }
+  } catch (e) { alert(`Erreur: ${e.message}`) } finally { saving.value = false }
 }
 
-async function exportExcel() {
-  try {
-    saving.value = true
-    const response = await axios.get(`${API_BASE}/export-excel`, {
-      params: { contract_id: contractId.value },
-      responseType: 'blob'
-    })
-
-    const url = URL.createObjectURL(response.data)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `contrat_${contractId.value}.xlsx`
-    a.click()
-
-    alert("✅ Excel généré")
-  } catch (e) {
-    alert("Erreur: " + e.message)
-  } finally {
-    saving.value = false
-  }
+// Export Excel
+function exportExcel() {
+  if (!contractId.value) return alert('Aucun contrat')
+  window.location.href = route('process.core.process.contracts.export.excel', { contract_id: contractId.value })
 }
 
-async function exportPdf() {
-  try {
-    saving.value = true
-    const response = await axios.get(`${API_BASE}/export-pdf`, {
-      params: { contract_id: contractId.value },
-      responseType: 'blob'
-    })
-
-    const url = URL.createObjectURL(response.data)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `contrat_${contractId.value}.pdf`
-    a.click()
-
-    alert("✅ PDF généré")
-  } catch (e) {
-    alert("Erreur: " + e.message)
-  } finally {
-    saving.value = false
-  }
-}
-
+// Historique
 async function loadHistory() {
   try {
-    const res = await axios.get(`${API_BASE}/history`, {
-      params: { contract_id: contractId.value }
-    })
-    histories.value = res.data.histories
-  } catch (e) {
-    console.error('Erreur:', e)
-  }
+    const result = await secureRequest(route('process.core.process.contracts.history'), { contract_id: contractId.value })
+    histories.value = result.histories || []
+  } catch (e) {}
 }
 
-function printContract() {
-  window.print()
-}
-
-function closeContract() {
-  currentContract.value = null
-  contractId.value = null
-  selectedProcess.value = ""
-}
-
-function viewContract(contract) {
-  selectedProcess.value = contract.process_id
-  loadContractById(contract.id)
-}
+// Print
+function printContract() { window.print() }
+function closeContract() { currentContract.value = null; contractId.value = null; selectedProcess.value = "" }
+function viewContract(c) { selectedProcess.value = c.process_id; loadContractById(c.id) }
 
 async function loadContractById(id) {
   contractId.value = id
-  const contract = props.contracts.find(c => c.id === id)
-  if (contract) {
-    selectedProcess.value = contract.process_id
-    await loadContract()
-  }
-}
-
-function getActionColor(action) {
-  const colors = {
-    created: 'bg-success-soft text-success',
-    updated_outputs: 'bg-primary-soft text-primary',
-    updated_indicators: 'bg-info-soft text-info',
-    file_uploaded: 'bg-warning-soft text-warning',
-    file_deleted: 'bg-danger-soft text-danger',
-    archived: 'bg-secondary-soft text-secondary',
-    restored: 'bg-success-soft text-success'
-  }
-  return colors[action] || 'bg-secondary-soft text-secondary'
+  const c = props.contracts.find(x => x.id === id)
+  if (c) { selectedProcess.value = c.process_id; await loadContract() }
 }
 
 function getActionIcon(action) {
-  const icons = {
-    created: 'ti ti-plus',
-    updated_outputs: 'ti ti-pencil',
-    updated_indicators: 'ti ti-chart-bar',
-    file_uploaded: 'ti ti-upload',
-    file_deleted: 'ti ti-trash',
-    archived: 'ti ti-box',
-    restored: 'ti ti-arrow-back'
-  }
+  const icons = { created: 'ti ti-plus', updated_outputs: 'ti ti-pencil', updated_indicators: 'ti ti-chart-bar', file_uploaded: 'ti ti-upload', file_deleted: 'ti ti-trash', notification_sent: 'ti ti-send', archived: 'ti ti-box', restored: 'ti ti-arrow-back' }
   return icons[action] || 'ti ti-info-circle'
 }
 </script>
 
 <style scoped>
-.bg-gradient-primary {
-  background: linear-gradient(135deg, #2E75B6 0%, #1F4E78 100%);
-}
-
-.bg-light-primary {
-  background-color: #E7F1F8;
-}
-
-.bg-primary-soft {
-  background-color: #D6E7F5 !important;
-}
-
-.bg-success-soft {
-  background-color: #D4EDDA !important;
-}
-
-.bg-danger-soft {
-  background-color: #F8D7DA !important;
-}
-
-.bg-info-soft {
-  background-color: #D1ECF1 !important;
-}
-
-.bg-info {
-  background-color: #e7f3ff !important;
-}
-
-.bg-warning-soft {
-  background-color: #FFF3CD !important;
-}
-
-.bg-secondary-soft {
-  background-color: #E2E3E5 !important;
-}
-
-.cursor-pointer {
-  cursor: pointer;
-}
-
-.notification-dropdown {
-  border: 1px solid #dee2e6;
-}
-
-@media print {
-  .btn, .input-group-text, select, input, textarea {
-    border: none !important;
-    background: transparent !important;
-    color: #000 !important;
-  }
-
-  .btn { display: none; }
-  input, textarea { border-bottom: 1px solid #000 !important; }
-}
+.list-group-item { padding: 0.5rem 0.75rem; }
+@media print { .btn { display: none; } }
 </style>

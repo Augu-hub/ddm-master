@@ -1,6 +1,6 @@
 <template>
   <VerticalLayout>
-    <Head title="Administration — Clients" />
+    <Head title="Administration — Projects" />
 
     <!-- Header avec gradient -->
     <div class="page-header mb-4">
@@ -10,7 +10,7 @@
             <i class="ti ti-building-store fs-3"></i>
           </div>
           <div>
-            <h3 class="mb-1 fw-bold">Gestion des Clients</h3>
+            <h3 class="mb-1 fw-bold">Gestion des Projects</h3>
             <p class="text-muted mb-0 small">Administration multi-tenant</p>
           </div>
         </div>
@@ -26,7 +26,7 @@
           </div>
           <div class="stat-content">
             <h3 class="stat-value">{{ tenants.length }}</h3>
-            <p class="stat-label">Clients Total</p>
+            <p class="stat-label">Projects Total</p>
           </div>
         </div>
       </b-col>
@@ -61,7 +61,7 @@
           <div class="panel-header">
             <div class="d-flex align-items-center gap-2">
               <i class="ti ti-plus-circle text-primary"></i>
-              <h5 class="mb-0 fw-semibold">Nouveau Client</h5>
+              <h5 class="mb-0 fw-semibold">Nouveau Project</h5>
             </div>
           </div>
 
@@ -70,7 +70,7 @@
               <div class="form-section">
                 <label class="form-label">
                   <i class="ti ti-building me-1"></i>
-                  Nom du client
+                  Nom du Project
                 </label>
                 <b-form-input
                   v-model="tenantForm.name"
@@ -96,7 +96,7 @@
                   required
                   :state="tenantForm.errors.code ? false : null"
                 />
-                <small class="form-hint">Identifiant unique du client</small>
+                <small class="form-hint">Identifiant unique du Project</small>
                 <div v-if="tenantForm.errors.code" class="error-feedback">
                   {{ tenantForm.errors.code }}
                 </div>
@@ -151,24 +151,24 @@
                 :disabled="tenantForm.processing"
               >
                 <i class="ti ti-check me-2"></i>
-                {{ tenantForm.processing ? 'Création en cours...' : 'Créer le Client' }}
+                {{ tenantForm.processing ? 'Création en cours...' : 'Créer le Project' }}
               </b-button>
             </b-form>
           </div>
         </div>
       </b-col>
 
-      <!-- Liste des clients -->
+      <!-- Liste des Projects -->
       <b-col lg="8">
         <div class="tenants-panel">
           <div class="panel-header">
             <div class="d-flex align-items-center justify-content-between">
               <div class="d-flex align-items-center gap-2">
                 <i class="ti ti-list-check text-primary"></i>
-                <h5 class="mb-0 fw-semibold">Clients Existants</h5>
+                <h5 class="mb-0 fw-semibold">Projects Existants</h5>
               </div>
               <div class="badge bg-primary-subtle text-primary">
-                {{ tenants.length }} client(s)
+                {{ tenants.length }} Project(s)
               </div>
             </div>
           </div>
@@ -176,8 +176,8 @@
           <div class="panel-body">
             <div v-if="tenants.length === 0" class="empty-state">
               <i class="ti ti-building-store fs-1 text-muted mb-3"></i>
-              <p class="text-muted mb-0">Aucun client configuré</p>
-              <small class="text-muted">Créez votre premier client pour commencer</small>
+              <p class="text-muted mb-0">Aucun Project configuré</p>
+              <small class="text-muted">Créez votre premier Project pour commencer</small>
             </div>
 
             <div v-else class="tenants-list">
@@ -224,7 +224,7 @@
                         variant="outline-primary"
                         class="action-btn"
                         @click="editTenant(tenant)"
-                        v-b-tooltip.hover="'Modifier le client'"
+                        v-b-tooltip.hover="'Modifier le Project'"
                       >
                         <i class="ti ti-edit"></i>
                       </b-button>
@@ -283,7 +283,7 @@
                     </div>
                     <div v-else class="no-users">
                       <i class="ti ti-user-off me-2"></i>
-                      <span>Aucun utilisateur associé à ce client</span>
+                      <span>Aucun utilisateur associé à ce Project</span>
                     </div>
                   </div>
                 </div>
@@ -297,7 +297,7 @@
     <!-- Modal d'édition -->
     <b-modal
       v-model="editModal.show"
-      :title="`Modifier le client — ${editModal.tenant?.name}`"
+      :title="`Modifier le Project — ${editModal.tenant?.name}`"
       size="lg"
       @hidden="resetEditModal"
       centered
@@ -306,7 +306,7 @@
         <div class="form-section">
           <label class="form-label">
             <i class="ti ti-building me-1"></i>
-            Nom du client
+            Nom du Project
           </label>
           <b-form-input
             v-model="editModal.form.name"
@@ -546,7 +546,7 @@ function addUsersToTenant() {
 }
 
 function removeUserFromTenant(tenant, user) {
-  if (confirm(`Retirer l'utilisateur "${user.name}" du client "${tenant.name}" ?`)) {
+  if (confirm(`Retirer l'utilisateur "${user.name}" du Project "${tenant.name}" ?`)) {
     router.post(`/admin/tenants/${tenant.id}/remove-user`, {
       user_id: user.id
     }, {
@@ -560,16 +560,16 @@ function removeUserFromTenant(tenant, user) {
 
 function confirmDelete(tenant) {
   if (tenant.id === 1) {
-    alert('Impossible de supprimer le client principal')
+    alert('Impossible de supprimer le Project principal')
     return
   }
 
   if (tenant.users_count > 0) {
-    alert('Veuillez retirer tous les utilisateurs avant de supprimer le client')
+    alert('Veuillez retirer tous les utilisateurs avant de supprimer le Project')
     return
   }
 
-  if (confirm(`Êtes-vous sûr de vouloir supprimer le client "${tenant.name}" ?\n\nCette action est irréversible.`)) {
+  if (confirm(`Êtes-vous sûr de vouloir supprimer le Project "${tenant.name}" ?\n\nCette action est irréversible.`)) {
     router.delete(`/admin/tenants/${tenant.id}`, {
       preserveScroll: true,
       onSuccess: () => {
@@ -580,9 +580,9 @@ function confirmDelete(tenant) {
 }
 
 function getDeleteTooltip(tenant) {
-  if (tenant.id === 1) return 'Impossible de supprimer le client principal'
+  if (tenant.id === 1) return 'Impossible de supprimer le Project principal'
   if (tenant.users_count > 0) return 'Retirez d\'abord tous les utilisateurs'
-  return 'Supprimer ce client'
+  return 'Supprimer ce Project'
 }
 
 function resetEditModal() {

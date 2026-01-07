@@ -113,7 +113,7 @@ class ModuleEntryController extends Controller
         // Configuration des layouts par module
         $layoutMap = [
             'param.projects' => 'Layouts/ParamLayout',
-            'audit.core' => 'Layouts/AuditLayout',
+            //'audit.core' => 'Layouts/AuditLayout',
             'risk.core' => 'Layouts/RiskLayout',
             'process.core' => 'Layouts/ProcessLayout',
         ];

@@ -2,14 +2,20 @@
 
 namespace App\Models\Tenant;
 
+use App\Models\Param\Fonction;
 use App\Models\Param\Entite;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Support\Facades\Hash;
 
 class User extends Model
 {
     use HasFactory;
+
+    protected $table = 'users';
+    protected $connection = 'tenant';
 
     protected $fillable = [
         'name',
@@ -61,7 +67,121 @@ class User extends Model
     }
 
     /**
-     * Générer un matricule unique
+     * ✅ Relation : Entité de rattachement
+     */
+    public function entity(): BelongsTo
+    {
+        return $this->belongsTo(Entite::class);
+    }
+
+    /**
+     * ✅ Relation : Créateur (autre User)
+     */
+    public function creator(): BelongsTo
+    {
+        return $this->belongsTo(self::class, 'created_by');
+    }
+
+    /**
+     * ✅ Relation : Fonctions attribuées
+     * ✅ CORRECTION : Utiliser Fonction (avec accent) de App\Models\Param
+     */
+    public function functions(): BelongsToMany
+    {
+        return $this->belongsToMany(
+            Fonction::class,  // ✅ App\Models\Param\Fonction (avec accent)
+            'user_functions',
+            'user_id',
+            'function_id'
+        )
+            ->withPivot('entity_id', 'is_primary', 'role_label', 'assigned_at', 'revoked_at')
+            ->wherePivotNull('revoked_at') // Seulement les fonctions actives
+            ->withTimestamps();
+    }
+
+    /**
+     * ✅ Fonctions actives par entité
+     */
+    public function functionsByEntity($entityId = null): BelongsToMany
+    {
+        $query = $this->functions();
+
+        if ($entityId) {
+            $query->wherePivot('entity_id', $entityId);
+        }
+
+        return $query;
+    }
+
+    /**
+     * ✅ Fonction principale
+     */
+    public function primaryFunction()
+    {
+        return $this->functions()
+            ->wherePivot('is_primary', true)
+            ->first();
+    }
+
+    /**
+     * ✅ Fonction principale pour une entité donnée
+     */
+    public function primaryFunctionForEntity($entityId)
+    {
+        return $this->functionsByEntity($entityId)
+            ->wherePivot('is_primary', true)
+            ->first();
+    }
+
+    /**
+     * ✅ Assigner une fonction à l'utilisateur
+     */
+    public function assignFunction(
+        $functionId,
+        $entityId = null,
+        $isPrimary = false,
+        $roleLabel = null
+    ): void {
+        $this->functions()->syncWithoutDetaching([
+            $functionId => [
+                'entity_id' => $entityId,
+                'is_primary' => $isPrimary,
+                'role_label' => $roleLabel,
+                'assigned_at' => now(),
+            ]
+        ]);
+
+        // Si on assigne en tant que primaire, retirer les autres primaires pour cette entité
+        if ($isPrimary && $entityId) {
+            $this->functions()
+                ->wherePivot('entity_id', $entityId)
+                ->wherePivot('function_id', '!=', $functionId)
+                ->wherePivot('is_primary', true)
+                ->update(['user_functions.is_primary' => false]);
+        }
+    }
+
+    /**
+     * ✅ Révoquer une fonction
+     */
+    public function revokeFunction($functionId, $entityId = null): void
+    {
+        if ($entityId) {
+            \DB::table('user_functions')
+                ->where('user_id', $this->id)
+                ->where('function_id', $functionId)
+                ->where('entity_id', $entityId)
+                ->update(['revoked_at' => now()]);
+        } else {
+            \DB::table('user_functions')
+                ->where('user_id', $this->id)
+                ->where('function_id', $functionId)
+                ->update(['revoked_at' => now()]);
+        }
+    }
+
+    /**
+     * ✅ Générer un matricule unique
      */
     public static function generateMatricule(): string
     {
@@ -82,7 +202,7 @@ class User extends Model
     }
 
     /**
-     * Générer un mot de passe aléatoire sécurisé
+     * ✅ Générer un mot de passe aléatoire sécurisé
      */
     public static function generateRandomPassword(int $length = 12): string
     {
@@ -90,23 +210,23 @@ class User extends Model
         $lowercase = 'abcdefghijklmnopqrstuvwxyz';
         $numbers = '0123456789';
         $special = '!@#$%^&*()-_=+';
-        
+
         $password = '';
         $password .= $uppercase[random_int(0, strlen($uppercase) - 1)];
         $password .= $lowercase[random_int(0, strlen($lowercase) - 1)];
         $password .= $numbers[random_int(0, strlen($numbers) - 1)];
         $password .= $special[random_int(0, strlen($special) - 1)];
-        
+
         $allChars = $uppercase . $lowercase . $numbers . $special;
         for ($i = 4; $i < $length; $i++) {
             $password .= $allChars[random_int(0, strlen($allChars) - 1)];
         }
-        
+
         return str_shuffle($password);
     }
 
     /**
-     * Hash le mot de passe avant sauvegarde
+     * ✅ Hash le mot de passe avant sauvegarde
      */
     public function setPasswordAttribute($value)
     {
@@ -116,23 +236,7 @@ class User extends Model
     }
 
     /**
-     * Relation avec l'entité
-     */
-    public function entity()
-    {
-        return $this->belongsTo(Entite::class);
-    }
-
-    /**
-     * Relation avec le créateur
-     */
-    public function creator()
-    {
-        return $this->belongsTo(\App\Models\User::class, 'created_by');
-    }
-
-    /**
-     * URL de l'avatar
+     * ✅ URL de l'avatar
      */
     public function getAvatarUrlAttribute(): string
     {
@@ -144,11 +248,11 @@ class User extends Model
     }
 
     /**
-     * Badge de statut
+     * ✅ Badge de statut
      */
     public function getStatusBadgeAttribute(): array
     {
-        return match($this->status) {
+        return match ($this->status) {
             'active' => ['text' => 'Actif', 'variant' => 'success'],
             'inactive' => ['text' => 'Inactif', 'variant' => 'secondary'],
             'suspended' => ['text' => 'Suspendu', 'variant' => 'danger'],
@@ -157,7 +261,7 @@ class User extends Model
     }
 
     /**
-     * Initiales de l'utilisateur
+     * ✅ Initiales de l'utilisateur
      */
     public function getInitialsAttribute(): string
     {
@@ -169,7 +273,7 @@ class User extends Model
     }
 
     /**
-     * Vérifier si l'utilisateur est actif
+     * ✅ Vérifier si l'utilisateur est actif
      */
     public function isActive(): bool
     {
@@ -177,7 +281,7 @@ class User extends Model
     }
 
     /**
-     * Activer l'utilisateur
+     * ✅ Activer l'utilisateur
      */
     public function activate(): bool
     {
@@ -186,7 +290,7 @@ class User extends Model
     }
 
     /**
-     * Désactiver l'utilisateur
+     * ✅ Désactiver l'utilisateur
      */
     public function deactivate(): bool
     {
@@ -195,7 +299,7 @@ class User extends Model
     }
 
     /**
-     * Suspendre l'utilisateur
+     * ✅ Suspendre l'utilisateur
      */
     public function suspend(): bool
     {
@@ -204,7 +308,7 @@ class User extends Model
     }
 
     /**
-     * Mettre à jour la dernière connexion
+     * ✅ Mettre à jour la dernière connexion
      */
     public function updateLastLogin(): bool
     {
@@ -213,26 +317,30 @@ class User extends Model
     }
 
     /**
-     * Scope pour les utilisateurs actifs
+     * ✅ Scopes
      */
     public function scopeActive($query)
     {
         return $query->where('status', 'active');
     }
 
-    /**
-     * Scope pour les utilisateurs d'une entité
-     */
     public function scopeByEntity($query, $entityId)
     {
         return $query->where('entity_id', $entityId);
     }
 
-    /**
-     * Scope pour les utilisateurs créés par un utilisateur spécifique
-     */
     public function scopeCreatedBy($query, $userId)
     {
         return $query->where('created_by', $userId);
+    }
+
+    public function scopeWithFunction($query, $functionId, $entityId = null)
+    {
+        return $query->whereHas('functions', function ($q) use ($functionId, $entityId) {
+            $q->where('function_id', $functionId);
+            if ($entityId) {
+                $q->where('entity_id', $entityId);
+            }
+        });
     }
 }

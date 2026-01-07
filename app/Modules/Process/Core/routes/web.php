@@ -2,82 +2,6 @@
 
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Process\Evaluations\ProcessEvaluationController;
-/*
-|--------------------------------------------------------------------------
-| ROUTE OFFICIELLE - DIADDEM PROCESS EVALUATIONS
-|--------------------------------------------------------------------------
-|
-| Architecture : Route::prefix('process')->name('process.core.')
-| Sous-groupe : prefix('evaluations')->name('evaluations.')
-|
-| Important : Les noms de route utilisent les slashes "/" pas les points
-| Exemple : route('process.core.evaluations.index') → /process/evaluations/
-|
-*/
-
-// Route::prefix('process')
-//     ->name('process.core.')
-//     ->group(function () {
-
-//         Route::view('/', 'modules.process.core.home')
-//             ->name('home');
-
-//         Route::prefix('evaluations')
-//             ->name('evaluations.')
-//             ->group(function () {
-
-//                 // PAGE PRINCIPALE
-//                 Route::get('/', [ProcessEvaluationController::class, 'index'])
-//                     ->name('index');
-
-//                 // RÉCUPÉRER TOUS LES SCORES POUR AFFICHAGE STATS
-//                 Route::get('get-all-scores', [ProcessEvaluationController::class, 'getAllScores'])
-//                     ->name('get-all-scores');
-
-//                 // SESSIONS PAR PROCESSUS
-//                 Route::get('sessions', [ProcessEvaluationController::class, 'getSessions'])
-//                     ->name('sessions');
-
-//                 // CRÉER SESSION
-//                 Route::post('sessions/create', [ProcessEvaluationController::class, 'createSession'])
-//                     ->name('sessions.create');
-
-//                 // CLÔTURER SESSION
-//                 Route::post('sessions/close', [ProcessEvaluationController::class, 'closeSession'])
-//                     ->name('sessions.close');
-
-//                 // DUPLIQUER SESSION
-//                 Route::post('sessions/duplicate', [ProcessEvaluationController::class, 'duplicateSession'])
-//                     ->name('sessions.duplicate');
-
-//                 // SUPPRIMER SESSION
-//                 Route::post('sessions/delete', [ProcessEvaluationController::class, 'deleteSession'])
-//                     ->name('sessions.delete');
-
-//                 // CHARGER ÉVALUATIONS EXISTANTES
-//                 Route::get('load', [ProcessEvaluationController::class, 'loadEvaluations'])
-//                     ->name('load');
-
-//                 // ENREGISTRER MATURITÉ
-//                 Route::post('maturity/save', [ProcessEvaluationController::class, 'saveMaturity'])
-//                     ->name('maturity.save');
-
-//                 // ENREGISTRER AXES (motricité, transversalité, stratégique)
-//                 Route::post('axis/save', [ProcessEvaluationController::class, 'saveAxis'])
-//                     ->name('axis.save');
-//             });
-//     });
-
-
-/*
-|--------------------------------------------------------------------------
-| DIADDEM PROCESS EVALUATIONS - ROUTES OFFICIELLES
-|--------------------------------------------------------------------------
-|
-| Architecture complète sans duplication
-| Middleware : auth:sanctum, tenant (injecter le contexte locataire)
-|
-*/
 
 
 Route::prefix('process')
@@ -104,73 +28,27 @@ Route::prefix('process')
 
 use App\Http\Controllers\Process\ProcessContractController;
 
-/**
- * ==========================================
- * 📌 ROUTES CONTRATS D'INTERFACES
- * ==========================================
- * 
- * Middleware: auth, verified
- * Base: /process/contracts
- * 
- */
 
-Route::middleware(['auth', 'verified'])->group(function () {
-    Route::prefix('process/contracts')->group(function () {
-        
-        // ========== GESTION CONTRATS ==========
-        
-      
-        Route::get('/', [ProcessContractController::class, 'index'])
-            ->name('process.contracts.index');
 
-       
-       
-        Route::get('/load', [ProcessContractController::class, 'load'])
-            ->name('process.contracts.load');
+// ========== GESTION CONTRATS D'INTERFACES ==========
 
-       
-        Route::post('/function-users', [ProcessContractController::class, 'getFunctionUsers'])
-            ->name('process.contracts.function-users');
-
-       
-        Route::post('/save', [ProcessContractController::class, 'save'])
-            ->name('process.contracts.save');
-
-       
-        Route::post('/upload', [ProcessContractController::class, 'uploadFile'])
-            ->name('process.contracts.upload');
-
-       
-        Route::get('/download', [ProcessContractController::class, 'downloadFile'])
-            ->name('process.contracts.download');
-
-       
-        Route::post('/file/delete', [ProcessContractController::class, 'deleteFile'])
-            ->name('process.contracts.file.delete');
-
-      
-        Route::get('/export-excel', [ProcessContractController::class, 'exportExcel'])
-            ->name('process.contracts.export.excel');
-
-       
-        Route::get('/export-pdf', [ProcessContractController::class, 'exportPdf'])
-            ->name('process.contracts.export.pdf');
-
-        
-        Route::get('/history', [ProcessContractController::class, 'getHistory'])
-            ->name('process.contracts.history');
-
-       
-        Route::get('/function-user', [ProcessContractController::class, 'getFunctionUser'])
-            ->name('process.contracts.function.user');
-
-       
-        Route::post('/archive', [ProcessContractController::class, 'archive'])
-            ->name('process.contracts.archive');
-
-        Route::post('/restore', [ProcessContractController::class, 'restore'])
-            ->name('process.contracts.restore');
-    });
+Route::prefix('process/contracts')->name('process.contracts.')->group(function () {
+    
+    Route::get('/', [ProcessContractController::class, 'index'])->name('index');
+    Route::get('/load', [ProcessContractController::class, 'load'])->name('load');
+    Route::post('/save', [ProcessContractController::class, 'save'])->name('save');
+    Route::post('/function-users', [ProcessContractController::class, 'getFunctionUsers'])->name('function-users');
+    Route::post('/ai-suggestions', [ProcessContractController::class, 'generateAISuggestions'])->name('ai-suggestions');
+    Route::post('/send-notification', [ProcessContractController::class, 'sendNotification'])->name('send-notification');
+    Route::post('/notifications', [ProcessContractController::class, 'getNotifications'])->name('notifications');
+    Route::post('/upload', [ProcessContractController::class, 'uploadFile'])->name('upload');
+    Route::get('/download', [ProcessContractController::class, 'downloadFile'])->name('download');
+    Route::post('/file/delete', [ProcessContractController::class, 'deleteFile'])->name('file.delete');
+    Route::get('/export-excel', [ProcessContractController::class, 'exportExcel'])->name('export.excel');
+    Route::get('/export-pdf', [ProcessContractController::class, 'exportPdf'])->name('export.pdf');
+    Route::get('/history', [ProcessContractController::class, 'getHistory'])->name('history');
+    Route::post('/archive', [ProcessContractController::class, 'archive'])->name('archive');
+    Route::post('/restore', [ProcessContractController::class, 'restore'])->name('restore');
 });
 
 use App\Http\Controllers\Process\ProcessRaciController;
@@ -228,15 +106,7 @@ Route::prefix('process/evaluations')
     ->name('.')
     ->group(function () {
 
-        // ========================================================================
-        // 📋 GESTION DES SESSIONS (SessionController)
-        // ========================================================================
-        
-       
-        // ========================================================================
-        // 📊 ÉVALUATIONS - CRITICITÉ / MATURITÉ
-        // ========================================================================
-        
+     
         Route::prefix('criticality')
             ->name('evaluations.criticality.')
             ->group(function () {
@@ -278,10 +148,7 @@ Route::prefix('process/evaluations')
                     ->name('report.save');
             });
 
-        // ========================================================================
-        // PAGE PRINCIPALE ÉVALUATION (pas de sessions ici, juste évaluation)
-        // ========================================================================
-        
+      
         Route::get('/', [ProcessEvaluationController::class, 'index'])
             ->name('evaluations.index');
 
@@ -302,7 +169,7 @@ Route::prefix('process/evaluations')
     });
 
 
-Route::prefix('sessions')
+Route::prefix('evaluations/sessions')
     ->name('sessions.')
     ->group(function () {
         
@@ -338,13 +205,11 @@ Route::prefix('sessions')
         Route::get('active', [ProcessEvaluationSessionController::class, 'getActiveSession'])
             ->name('active');
     });
-Route::prefix('raci')
+Route::prefix('evaluations/raci')
     ->name('raci.')
     ->group(function () {
         
-        // PAGE PRINCIPALE - MATRICE RACI
-        // route('process.core.raci.index')
-        // GET /process/evaluations/raci
+    
         Route::get('/', [ProcessRaciController::class, 'index'])
             ->name('index');
 
@@ -366,11 +231,8 @@ Route::prefix('raci')
         Route::get('export-excel', [ProcessRaciController::class, 'exportExcel'])
             ->name('export-excel');
     });
-// ========================================================================
-// 📊 ÉVALUATIONS - CRITICITÉ / MATURITÉ
-// ========================================================================
 
-Route::prefix('criticality')
+Route::prefix('evaluations/criticality')
     ->name('evaluations.criticality.')
     ->group(function () {
         
@@ -413,13 +275,11 @@ Route::prefix('criticality')
 
 use App\Http\Controllers\Process\Evaluations\ProcessIdeaController;
 
-Route::prefix('process/evaluations/idea')
-    ->name('process.core.idea.')  // ← FIX: Ajouter le préfixe complet avec le point
+Route::prefix('evaluations/idea')
+    ->name('idea.')  // ← FIX: Ajouter le préfixe complet avec le point
     ->group(function () {
         
-        // PAGE PRINCIPALE - MATRICE IDEA
-        // route('process.core.idea.index')
-        // GET /process/evaluations/idea
+        
         Route::get('/', [ProcessIdeaController::class, 'index'])
             ->name('index');
 
@@ -443,7 +303,7 @@ Route::prefix('process/evaluations/idea')
     });
 
 
-    Route::prefix('idea')
+    Route::prefix('evaluations/idea')
     ->name('idea.')
     ->group(function () {
         
@@ -467,10 +327,16 @@ Route::prefix('process/evaluations/idea')
 use App\Http\Controllers\Process\Evaluations\ProcessAMDECController;
   
 Route::middleware(['auth', 'verified'])
-    ->prefix('process/evaluations/amdec')
+    ->prefix('evaluations/amdec')
     ->name('amdec.')
     ->group(function () {
-        
+        Route::post('/ai/suggest', [ProcessAMDECController::class, 'aiSuggest'])
+    ->name('ai.suggest');
+    Route::post('ai/suggest-failure-modes', [ProcessAMDECController::class, 'aiSuggestFailureModes'])
+        ->name('ai.suggest-failure-modes');
+
+
+
         // 📄 PAGE PRINCIPALE — Affiche la vue Inertia avec les tabs
         Route::get('/', [ProcessAMDECController::class, 'index'])
             ->name('index');

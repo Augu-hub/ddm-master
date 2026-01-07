@@ -53,7 +53,59 @@ Route::resource('mpa', MacroProcessusController::class)->names([
     'update'  => 'mpa.update',
     'destroy' => 'mpa.destroy',
 ]);
+Route::post('/param/mpa/ai/suggest-processus', [MacroProcessusController::class, 'aiSuggestProcessus'])
+    ->middleware(['web', 'auth'])
+    ->name('mpa.ai.suggest-processus');
 
+Route::post('/param/mpa/ai/suggest-data', [MacroProcessusController::class, 'aiSuggestData'])
+    ->middleware(['web', 'auth'])
+    ->name('mpa.ai.suggest-data');
+
+Route::post('/param/mpa/ai/suggest-activites', [MacroProcessusController::class, 'aiSuggestActivites'])
+    ->middleware(['web', 'auth'])
+    ->name('mpa.ai.suggest-activites');
+
+
+Route::prefix('projects')->name('projects.')->group(function () {
+    
+    // ─────────────────────────────────────────────────────────────────
+    // 🤖 IA ENDPOINTS
+    // ─────────────────────────────────────────────────────────────────
+
+    
+    // ─────────────────────────────────────────────────────────────────
+    // 🏢 GESTION MACRO
+    // ─────────────────────────────────────────────────────────────────
+    
+
+    
+    // ─────────────────────────────────────────────────────────────────
+    // 📝 GESTION PROCESSUS
+    // ─────────────────────────────────────────────────────────────────
+    
+    Route::post('processus', [MacroProcessusController::class, 'storeProcessus'])
+        ->name('processus.store');
+    
+    Route::put('processus/{processus}', [MacroProcessusController::class, 'updateProcessus'])
+        ->name('processus.update');
+    
+    Route::delete('processus/{processus}', [MacroProcessusController::class, 'destroyProcessus'])
+        ->name('processus.destroy');
+    
+    // ─────────────────────────────────────────────────────────────────
+    // 📝 GESTION ACTIVITÉ
+    // ─────────────────────────────────────────────────────────────────
+    
+    Route::post('activites', [MacroProcessusController::class, 'storeActivite'])
+        ->name('activites.store');
+    
+    Route::put('activites/{activite}', [MacroProcessusController::class, 'updateActivite'])
+        ->name('activites.update');
+    
+    Route::delete('activites/{activite}', [MacroProcessusController::class, 'destroyActivite'])
+        ->name('activites.destroy');
+    
+});
 /* ✅ Validation des macros par défaut ====== */
 Route::post('macro/validate-defaults', [MacroProcessusController::class, 'validateDefaults'])
      ->name('macro.validate');
@@ -199,4 +251,107 @@ use App\Http\Controllers\Param\UsersController;
             Route::post('/{user}/resend-email', [UsersController::class, 'resendWelcomeEmail'])->name('resend-email');
         });
 
-    
+
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // ⚠️ ORDRE TRÈS IMPORTANT !
+    // Les routes SPÉCIFIQUES doivent être AVANT les routes PARAMÉTRÉES
+    // ═══════════════════════════════════════════════════════════════════════
+
+    // ─────────────────────────────────────────────────────────────────────
+    // 1️⃣ ROUTES SPÉCIFIQUES (sans paramètre)
+    // ─────────────────────────────────────────────────────────────────────
+
+    /**
+     * GET /param/projects/users
+     * Afficher la liste des utilisateurs
+     */
+    Route::get('users', [UsersController::class, 'index'])
+        ->name('users.index');
+
+    /**
+     * GET /param/projects/users/create
+     * Afficher le formulaire de création
+     */
+    Route::get('users/create', [UsersController::class, 'create'])
+        ->name('users.create');
+
+    /**
+     * POST /param/projects/users
+     * Enregistrer un nouvel utilisateur
+     */
+    Route::post('users', [UsersController::class, 'store'])
+        ->name('users.store');
+
+    /**
+     * GET /param/projects/users/export
+     * Exporter les utilisateurs
+     */
+    Route::get('users/export', [UsersController::class, 'export'])
+        ->name('users.export');
+
+    // ─────────────────────────────────────────────────────────────────────
+    // 2️⃣ ROUTES API (prefixe api/ pour éviter les conflits)
+    // ─────────────────────────────────────────────────────────────────────
+
+    /**
+     * GET /param/projects/users/api/functions-for-entity?entity_id=1
+     * ✅ IMPORTANT: Placer AVANT les routes {user}
+     * Récupérer les fonctions pour une entité
+     */
+    Route::get('users/api/functions-for-entity', [UsersController::class, 'getFunctionsForEntity'])
+        ->name('users.functions-for-entity');
+
+    // ─────────────────────────────────────────────────────────────────────
+    // 3️⃣ ROUTES PARAMÉTRÉES (avec paramètre {user})
+    // ─────────────────────────────────────────────────────────────────────
+
+    /**
+     * GET /param/projects/users/{user}
+     * Afficher les détails d'un utilisateur
+     */
+    Route::get('users/{user}', [UsersController::class, 'show'])
+        ->name('users.show');
+
+    /**
+     * GET /param/projects/users/{user}/edit
+     * Afficher le formulaire d'édition
+     */
+    Route::get('users/{user}/edit', [UsersController::class, 'edit'])
+        ->name('users.edit');
+
+    /**
+     * PUT /param/projects/users/{user}
+     * Mettre à jour un utilisateur
+     */
+    Route::put('users/{user}', [UsersController::class, 'update'])
+        ->name('users.update');
+
+    /**
+     * DELETE /param/projects/users/{user}
+     * Supprimer un utilisateur
+     */
+    Route::delete('users/{user}', [UsersController::class, 'destroy'])
+        ->name('users.destroy');
+
+    /**
+     * PATCH /param/projects/users/{user}/status
+     * Changer le statut d'un utilisateur
+     */
+    Route::patch('users/{user}/status', [UsersController::class, 'changeStatus'])
+        ->name('users.changeStatus');
+
+    /**
+     * POST /param/projects/users/{user}/assign-function
+     * Assigner une fonction à un utilisateur
+     */
+    Route::post('users/{user}/assign-function', [UsersController::class, 'assignFunction'])
+        ->name('users.assign-function');
+
+    /**
+     * POST /param/projects/users/{user}/revoke-function
+     * Révoquer une fonction
+     */
+    Route::post('users/{user}/revoke-function', [UsersController::class, 'revokeFunction'])
+        ->name('users.revoke-function');
+

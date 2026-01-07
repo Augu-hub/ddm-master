@@ -167,22 +167,23 @@
     </div>
 
     <!-- ═════════════════════════════════════════════════════════════════════ -->
-    <!-- 🔲 MODAL — AJOUTER/MODIFIER (LARGE + COMPACT) -->
+    <!-- 🔲 MODAL — AJOUTER/MODIFIER AVEC IA AUTOMATIQUE -->
     <!-- ═════════════════════════════════════════════════════════════════════ -->
     <b-modal
       id="modal-phase1-amdec"
       v-model="showModal"
       :title="modalMode === 'add' ? 'Ajouter mode défaillance' : 'Modifier mode défaillance'"
-      size="lg"
+      size="xl"
       @ok="handleSave"
       @cancel="resetModal"
       ok-title="Enregistrer"
       cancel-title="Annuler"
+      scrollable
     >
       <b-form>
-        <!-- ROW 1: Activité + Mode défaillance -->
+        <!-- ROW 1: Activité -->
         <b-row class="mb-2">
-          <b-col cols="6">
+          <b-col cols="12">
             <b-form-group label="Activité *" label-class="fw-bold" label-cols="12">
               <b-form-select 
                 v-model.number="form.activity_id" 
@@ -190,30 +191,156 @@
                 :disabled="modalMode === 'edit'"
                 size="sm"
                 required
+                @change="onActivityChange"
               />
             </b-form-group>
           </b-col>
-          <b-col cols="6">
+        </b-row>
+
+        <!-- 🤖 SUGGESTIONS MODES PAR IA (générées par activité) -->
+        <b-row v-if="failureModeSuggestions.length > 0" class="mb-3">
+          <b-col cols="12">
+            <div class="ai-suggestions-auto">
+              <div class="ai-header">
+                ✨ <strong>Modes de défaillance suggérés par IA</strong>
+                <small class="text-muted">(cliquez pour sélectionner)</small>
+              </div>
+
+              <div class="suggestion-chips">
+                <b-badge
+                  v-for="(modeName, idx) in failureModeSuggestions"
+                  :key="idx"
+                  bg="info"
+                  class="suggestion-chip"
+                  @click="selectFailureModeSuggestion(modeName)"
+                  role="button"
+                  title="Cliquez pour sélectionner"
+                >
+                  <i class="ti ti-click me-1"></i>{{ modeName }}
+                </b-badge>
+              </div>
+
+              <small v-if="aiError" class="text-danger d-block mt-2">
+                ⚠️ {{ aiError }}
+              </small>
+            </div>
+          </b-col>
+        </b-row>
+
+        <!-- ROW 2: Mode défaillance (INPUT + SELECT existants) -->
+        <b-row class="mb-2">
+          <b-col cols="12">
             <b-form-group label="Mode défaillance *" label-class="fw-bold" label-cols="12">
+              <!-- Afficher les modes existants comme selecteur OU input perso -->
+              <b-form-select
+                v-if="failureModeOptions.length > 1"
+                v-model.number="form.failure_mode_id"
+                :options="failureModeOptions"
+                size="sm"
+                @change="onFailureModeSelected"
+              />
               <b-form-input 
+                v-else
                 v-model="form.failure_mode" 
                 placeholder="Ex: Infos fausses"
                 size="sm"
                 maxlength="255"
                 required
               />
+              <!-- 🤖 INDICATOR IA EN TEMPS RÉEL -->
+              <small v-if="isAiLoadingFailureModes" class="text-info d-block mt-2">
+                <i class="ti ti-loading"></i> OpenAI génère modes...
+              </small>
             </b-form-group>
           </b-col>
         </b-row>
 
-        <!-- ROW 2: Effets (full width) -->
+        <!-- 🤖 AFFICHAGE SUGGESTIONS IA POUR EFFETS/CAUSES/CONTRÔLES -->
+        <b-row v-if="(form.failure_mode || form.failure_mode_id > 0) && (aiSuggestions.effects || aiSuggestions.causes || aiSuggestions.current_controls)" class="mb-3">
+          <b-col cols="12">
+            <div class="ai-suggestions-auto">
+              <div class="ai-header">
+                ✨ <strong>Suggestions détails</strong> 
+                <small class="text-muted">(générées automatiquement)</small>
+              </div>
+
+              <!-- Suggestion Effets -->
+              <div v-if="aiSuggestions.effects" class="ai-suggestion">
+                <div class="ai-suggestion-title">📌 Effets</div>
+                <div class="ai-suggestion-text">{{ aiSuggestions.effects }}</div>
+                <div class="ai-suggestion-actions">
+                  <b-button 
+                    size="sm" 
+                    variant="success"
+                    @click="form.effects = aiSuggestions.effects"
+                  >
+                    ✅ Utiliser
+                  </b-button>
+                  <b-button 
+                    size="sm" 
+                    variant="outline-secondary"
+                    @click="aiSuggestions.effects = null"
+                  >
+                    ✕ Ignorer
+                  </b-button>
+                </div>
+              </div>
+
+              <!-- Suggestion Causes -->
+              <div v-if="aiSuggestions.causes" class="ai-suggestion">
+                <div class="ai-suggestion-title">🔍 Causes</div>
+                <div class="ai-suggestion-text">{{ aiSuggestions.causes }}</div>
+                <div class="ai-suggestion-actions">
+                  <b-button 
+                    size="sm" 
+                    variant="success"
+                    @click="form.causes = aiSuggestions.causes"
+                  >
+                    ✅ Utiliser
+                  </b-button>
+                  <b-button 
+                    size="sm" 
+                    variant="outline-secondary"
+                    @click="aiSuggestions.causes = null"
+                  >
+                    ✕ Ignorer
+                  </b-button>
+                </div>
+              </div>
+
+              <!-- Suggestion Contrôles -->
+              <div v-if="aiSuggestions.current_controls" class="ai-suggestion">
+                <div class="ai-suggestion-title">🛡️ Contrôles</div>
+                <div class="ai-suggestion-text">{{ aiSuggestions.current_controls }}</div>
+                <div class="ai-suggestion-actions">
+                  <b-button 
+                    size="sm" 
+                    variant="success"
+                    @click="form.current_controls = aiSuggestions.current_controls"
+                  >
+                    ✅ Utiliser
+                  </b-button>
+                  <b-button 
+                    size="sm" 
+                    variant="outline-secondary"
+                    @click="aiSuggestions.current_controls = null"
+                  >
+                    ✕ Ignorer
+                  </b-button>
+                </div>
+              </div>
+            </div>
+          </b-col>
+        </b-row>
+
+        <!-- ROW 3: Effets (full width) -->
         <b-row class="mb-2">
           <b-col cols="12">
             <b-form-group label="Effets *" label-class="fw-bold" label-cols="12">
               <b-form-textarea 
                 v-model="form.effects" 
                 placeholder="Effets..."
-                rows="1"
+                rows="2"
                 size="sm"
                 required
               />
@@ -221,7 +348,7 @@
           </b-col>
         </b-row>
 
-        <!-- ROW 3: Gravité + Causes -->
+        <!-- ROW 4: Gravité + Causes -->
         <b-row class="mb-2">
           <b-col cols="6">
             <b-form-group label="Gravité *" label-class="fw-bold" label-cols="12">
@@ -239,7 +366,7 @@
               <b-form-textarea 
                 v-model="form.causes" 
                 placeholder="Causes..."
-                rows="1"
+                rows="2"
                 size="sm"
                 required
               />
@@ -247,7 +374,7 @@
           </b-col>
         </b-row>
 
-        <!-- ROW 4: Fréquence + Contrôles -->
+        <!-- ROW 5: Fréquence + Contrôles -->
         <b-row class="mb-2">
           <b-col cols="6">
             <b-form-group label="Fréquence *" label-class="fw-bold" label-cols="12">
@@ -265,7 +392,7 @@
               <b-form-textarea 
                 v-model="form.current_controls" 
                 placeholder="Contrôles actuels..."
-                rows="1"
+                rows="2"
                 size="sm"
                 required
               />
@@ -273,7 +400,7 @@
           </b-col>
         </b-row>
 
-        <!-- ROW 5: Détectabilité + Criticité -->
+        <!-- ROW 6: Détectabilité + Criticité -->
         <b-row>
           <b-col cols="6">
             <b-form-group label="Détectabilité *" label-class="fw-bold" label-cols="12">
@@ -301,11 +428,13 @@
         </b-row>
       </b-form>
     </b-modal>
+
   </div>
 </template>
 
 <script setup>
 import { computed, ref } from 'vue'
+import axios from 'axios'
 
 const props = defineProps({
   activities: { type: Array, default: () => [] },
@@ -323,9 +452,14 @@ const emit = defineEmits(['save-record', 'delete-record'])
 
 const showModal = ref(false)
 const modalMode = ref('add')
+const isAiLoadingFailureModes = ref(false)
+const aiError = ref('')
+const aiTimeout = ref(null)
+const failureModeSuggestions = ref([])
 
 const form = ref({
   activity_id: null,
+  failure_mode_id: null,
   failure_mode: '',
   effects: '',
   gravity_before_id: null,
@@ -336,6 +470,12 @@ const form = ref({
   criticality_before: null,
   criticality_nette_before: null,
   amdec_record_id: null
+})
+
+const aiSuggestions = ref({
+  effects: null,
+  causes: null,
+  current_controls: null
 })
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -383,6 +523,25 @@ const activityOptions = computed(() => [
   }))
 ])
 
+// ✨ Modes de défaillance existants pour l'activité sélectionnée
+const failureModeOptions = computed(() => {
+  if (!form.value.activity_id) {
+    return []
+  }
+
+  const modesForActivity = recordsByPhase.value.filter(r => r.activity_id === form.value.activity_id)
+  
+  const options = [
+    { value: -1, text: '➕ Créer nouveau mode' },
+    ...modesForActivity.map(m => ({
+      value: m.id,
+      text: `${m.failure_mode}`
+    }))
+  ]
+
+  return options.length > 1 ? options : [{ value: -1, text: '➕ Créer nouveau mode' }]
+})
+
 const gravityOptions = computed(() => [
   { value: null, text: '— Sélectionnez —' },
   ...props.referentials.gravities.map(g => ({
@@ -412,15 +571,12 @@ const detectabilityOptions = computed(() => [
 // ═══════════════════════════════════════════════════════════════════════════
 
 const formatActivityName = (fullName) => {
-  // "A01P01D — A1A02P01D — A2" → "A1A02P01D — A2"
-  // Enlever "AC" et garder le reste
   if (!fullName) return '—'
   const cleaned = fullName.replace(/^AC\s*/, '').trim()
   return cleaned || fullName
 }
 
 const getActivityCode = (fullName) => {
-  // Extraire juste "A1" ou "A2"
   const match = fullName?.match(/A\d+/)
   return match ? match[0] : '—'
 }
@@ -428,11 +584,6 @@ const getActivityCode = (fullName) => {
 const getActivityName = (id) => {
   const act = props.activities?.find(a => a.id === id)
   return act?.name || '—'
-}
-
-const getGravityLabel = (id) => {
-  const g = props.referentials.gravities?.find(g => g.id === id)
-  return g?.label || '—'
 }
 
 const getGravityDegree = (id) => {
@@ -445,11 +596,6 @@ const getGravityColor = (id) => {
   return g?.color || '#ccc'
 }
 
-const getFrequencyLabel = (id) => {
-  const f = props.referentials.frequencies?.find(f => f.id === id)
-  return f?.label || '—'
-}
-
 const getFrequencyDegree = (id) => {
   const f = props.referentials.frequencies?.find(f => f.id === id)
   return f?.degree || '—'
@@ -458,11 +604,6 @@ const getFrequencyDegree = (id) => {
 const getFrequencyColor = (id) => {
   const f = props.referentials.frequencies?.find(f => f.id === id)
   return f?.color || '#ccc'
-}
-
-const getDetectabilityLabel = (id) => {
-  const d = props.referentials.detectabilities?.find(d => d.id === id)
-  return d?.label || '—'
 }
 
 const getDetectabilityDegree = (id) => {
@@ -518,7 +659,163 @@ const recalculate = () => {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// METHODS
+// 🤖 ACTIVITÉ CHANGE — IA GÉNÈRE MODES DE DÉFAILLANCE
+// ═══════════════════════════════════════════════════════════════════════════
+
+const onActivityChange = async () => {
+  failureModeSuggestions.value = []
+  form.value.failure_mode_id = null
+  form.value.failure_mode = ''
+  aiSuggestions.value = { effects: null, causes: null, current_controls: null }
+  aiError.value = ''
+
+  if (!form.value.activity_id) {
+    return
+  }
+
+  // 🤖 APPELER L'IA POUR GÉNÉRER LES MODES
+  await generateFailureModesSuggestions()
+}
+
+/**
+ * 🤖 GÉNÉRER LES MODES DE DÉFAILLANCE PAR IA
+ * Appelle la nouvelle route dédiée
+ */
+const generateFailureModesSuggestions = async () => {
+  if (!form.value.activity_id) return
+
+  isAiLoadingFailureModes.value = true
+  aiError.value = ''
+  failureModeSuggestions.value = []
+
+  try {
+    const activityName = getActivityName(form.value.activity_id)
+
+    console.log('🎯 Generating modes for activity:', activityName)
+
+    // 🚀 APPEL À LA NOUVELLE ROUTE DÉDIÉE
+    const res = await axios.post(route('process.core.amdec.ai.suggest-failure-modes'), {
+      activity_name: activityName
+    })
+
+    console.log('📥 Response:', res.data)
+
+    if (res.data.success && res.data.failure_modes && Array.isArray(res.data.failure_modes)) {
+      // Filtrer les modes vides
+      const modes = res.data.failure_modes
+        .map(m => typeof m === 'string' ? m.trim() : '')
+        .filter(m => m.length > 3)
+        .slice(0, 12) // Limiter à 12 suggestions
+
+      console.log('✅ Modes generated:', modes)
+      
+      if (modes.length > 0) {
+        failureModeSuggestions.value = modes
+      } else {
+        aiError.value = 'Aucun mode valide généré'
+      }
+    } else {
+      aiError.value = res.data.message || res.data.error || 'Erreur génération'
+      console.warn('⚠️ Response format incorrect:', res.data)
+    }
+
+  } catch (err) {
+    console.error('❌ Erreur IA modes:', err)
+    aiError.value = 'Erreur connexion IA: ' + (err.response?.data?.error || err.message)
+  } finally {
+    isAiLoadingFailureModes.value = false
+  }
+}
+
+/**
+ * 🎯 SÉLECTIONNER UN MODE SUGGÉRÉ
+ */
+const selectFailureModeSuggestion = (modeName) => {
+  form.value.failure_mode = modeName
+  form.value.failure_mode_id = -1
+  
+  // Déclencher génération suggestions détails (effects/causes/controls)
+  if (aiTimeout.value) clearTimeout(aiTimeout.value)
+  
+  aiTimeout.value = setTimeout(() => {
+    generateDetailsSuggestions()
+  }, 500)
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// MODE DÉFAILLANCE SÉLECTIONNÉ — Charger les données
+// ═══════════════════════════════════════════════════════════════════════════
+
+const onFailureModeSelected = () => {
+  if (form.value.failure_mode_id === -1) {
+    // Créer nouveau mode
+    form.value.failure_mode = ''
+    form.value.effects = ''
+    form.value.causes = ''
+    form.value.current_controls = ''
+    form.value.gravity_before_id = null
+    form.value.frequency_before_id = null
+    form.value.detectability_before_id = null
+    aiSuggestions.value = { effects: null, causes: null, current_controls: null }
+    return
+  }
+
+  if (!form.value.failure_mode_id) {
+    return
+  }
+
+  // Charger le mode existant
+  const selectedMode = recordsByPhase.value.find(r => r.id === form.value.failure_mode_id)
+  
+  if (selectedMode) {
+    form.value.failure_mode = selectedMode.failure_mode
+    form.value.effects = selectedMode.effects || ''
+    form.value.causes = selectedMode.causes || ''
+    form.value.current_controls = selectedMode.current_controls || ''
+    form.value.gravity_before_id = selectedMode.gravity_before_id
+    form.value.frequency_before_id = selectedMode.frequency_before_id
+    form.value.detectability_before_id = selectedMode.detectability_before_id
+    form.value.criticality_before = selectedMode.criticality_before
+    form.value.criticality_nette_before = selectedMode.criticality_nette_before
+
+    aiSuggestions.value = { effects: null, causes: null, current_controls: null }
+    aiError.value = ''
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 🤖 GÉNÉRER SUGGESTIONS DÉTAILS (Effects/Causes/Controls)
+// ═══════════════════════════════════════════════════════════════════════════
+
+const generateDetailsSuggestions = async () => {
+  if (!form.value.failure_mode) return
+
+  try {
+    const activityName = getActivityName(form.value.activity_id)
+
+    const res = await axios.post(route('process.core.amdec.ai.suggest'), {
+      phase: 'PHASE1',
+      payload: {
+        failure_mode: form.value.failure_mode,
+        activity_name: activityName
+      }
+    })
+
+    if (res.data.success && res.data.suggestions) {
+      aiSuggestions.value = {
+        effects: res.data.suggestions.effects || null,
+        causes: res.data.suggestions.causes || null,
+        current_controls: res.data.suggestions.current_controls || null
+      }
+    }
+
+  } catch (err) {
+    console.error('❌ Erreur détails:', err)
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// MODAL MANAGEMENT
 // ═══════════════════════════════════════════════════════════════════════════
 
 const openModalAdd = () => {
@@ -535,6 +832,7 @@ const openModalEdit = (mode) => {
   modalMode.value = 'edit'
   form.value = {
     activity_id: mode.activity_id,
+    failure_mode_id: mode.id,
     failure_mode: mode.failure_mode,
     effects: mode.effects || '',
     gravity_before_id: mode.gravity_before_id,
@@ -546,12 +844,19 @@ const openModalEdit = (mode) => {
     criticality_nette_before: mode.criticality_nette_before,
     amdec_record_id: mode.id
   }
+  failureModeSuggestions.value = []
+  aiSuggestions.value = { effects: null, causes: null, current_controls: null }
+  aiError.value = ''
   showModal.value = true
 }
 
 const resetModal = () => {
+  if (aiTimeout.value) {
+    clearTimeout(aiTimeout.value)
+  }
   form.value = {
     activity_id: null,
+    failure_mode_id: null,
     failure_mode: '',
     effects: '',
     gravity_before_id: null,
@@ -563,10 +868,13 @@ const resetModal = () => {
     criticality_nette_before: null,
     amdec_record_id: null
   }
+  failureModeSuggestions.value = []
+  aiSuggestions.value = { effects: null, causes: null, current_controls: null }
+  aiError.value = ''
+  isAiLoadingFailureModes.value = false
 }
 
 const handleSave = () => {
-  // Validation
   if (!form.value.activity_id) { alert('⚠️ Activité requise'); return }
   if (!form.value.failure_mode?.trim()) { alert('⚠️ Mode défaillance requis'); return }
   if (!form.value.effects?.trim()) { alert('⚠️ Effets requis'); return }
@@ -636,13 +944,12 @@ const deleteRecord = (mode) => {
   margin-left: auto;
 }
 
-.mb-3 {
-  margin-bottom: 1rem;
-}
-
-.mb-2 {
-  margin-bottom: 0.5rem;
-}
+.mb-3 { margin-bottom: 1rem; }
+.mb-2 { margin-bottom: 0.5rem; }
+.d-block { display: block; }
+.text-muted { color: #6c757d; font-size: 0.85rem; }
+.text-info { color: #0dcaf0; font-size: 0.85rem; }
+.text-danger { color: #dc3545; font-size: 0.85rem; }
 
 /* TABLE AMDEC */
 .table-wrapper {
@@ -678,10 +985,6 @@ const deleteRecord = (mode) => {
 .amdec-table td {
   padding: 0.5rem;
   border: 1px solid #dee2e6;
-}
-
-.amdec-table tbody tr {
-  border-bottom: 1px solid #dee2e6;
 }
 
 .amdec-table tbody tr:nth-child(odd) {
@@ -766,15 +1069,6 @@ const deleteRecord = (mode) => {
   border: none;
 }
 
-/* MODE ROWS */
-.row-mode {
-  height: auto;
-}
-
-.row-mode:hover {
-  background: #e7f3ff;
-}
-
 /* COLONNES */
 .col-activity { min-width: 80px; text-align: center; }
 .col-num { width: 35px; text-align: center; }
@@ -844,10 +1138,88 @@ const deleteRecord = (mode) => {
   display: inline-block;
 }
 
-.text-muted {
-  color: #6c757d;
+/* 🤖 IA SUGGESTIONS AUTOMATIQUES */
+.ai-suggestions-auto {
+  background: linear-gradient(135deg, #f0f8ff 0%, #e6f7ff 100%);
+  border: 2px solid #17a2b8;
+  border-radius: 0.4rem;
+  padding: 1rem;
+  margin-bottom: 1rem;
 }
 
+.ai-header {
+  font-weight: 600;
+  color: #0056b3;
+  margin-bottom: 1rem;
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+/* SUGGESTION CHIPS (pour les modes) */
+.suggestion-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.suggestion-chip {
+  padding: 0.5rem 0.8rem !important;
+  cursor: pointer;
+  user-select: none;
+  transition: all 0.2s;
+  font-size: 0.85rem;
+  border-radius: 20px;
+  display: inline-flex;
+  align-items: center;
+}
+
+.suggestion-chip:hover {
+  opacity: 0.8;
+  transform: scale(1.05);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+}
+
+/* SUGGESTION DETAILS (Effects/Causes) */
+.ai-suggestion {
+  background: white;
+  border: 1px solid #b3d9ff;
+  border-left: 4px solid #17a2b8;
+  border-radius: 0.3rem;
+  padding: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.ai-suggestion-title {
+  font-weight: 600;
+  color: #0056b3;
+  margin-bottom: 0.5rem;
+  font-size: 0.9rem;
+}
+
+.ai-suggestion-text {
+  background: #f8f9fa;
+  padding: 0.75rem;
+  border-radius: 0.2rem;
+  font-size: 0.85rem;
+  color: #495057;
+  margin-bottom: 0.75rem;
+  line-height: 1.5;
+  max-height: 100px;
+  overflow-y: auto;
+}
+
+.ai-suggestion-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.ai-suggestion-actions button {
+  font-size: 0.75rem;
+}
+
+/* GENERIC */
 .text-center {
   text-align: center;
 }
@@ -856,20 +1228,22 @@ const deleteRecord = (mode) => {
   padding: 1rem;
 }
 
-/* BUTTONS */
-.btn-action {
-  padding: 0.25rem 0.4rem;
-  font-size: 0.7rem;
-  margin: 0.1rem;
+.row-empty {
+  background: #f8f9fa;
 }
 
-/* MODAL */
 .fw-bold {
   font-weight: 600;
 }
 
 .bg-light {
   background-color: #f8f9fa !important;
+}
+
+.btn-action {
+  padding: 0.25rem 0.4rem;
+  font-size: 0.7rem;
+  margin: 0.1rem;
 }
 
 /* RESPONSIVE */
@@ -891,6 +1265,15 @@ const deleteRecord = (mode) => {
   .cell-activity-header {
     flex-direction: column;
     align-items: flex-start;
+  }
+
+  .suggestion-chips {
+    gap: 0.3rem;
+  }
+
+  .suggestion-chip {
+    font-size: 0.75rem;
+    padding: 0.4rem 0.6rem !important;
   }
 }
 </style>

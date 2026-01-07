@@ -3,7 +3,6 @@
 namespace App\Http\Controllers\Process\Evaluations;
 
 use App\Http\Controllers\Controller;
-use App\Services\HuggingFaceAMDECAssistant;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Http\Request;
@@ -13,110 +12,14 @@ use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 use PhpOffice\PhpSpreadsheet\Style\Fill;
 use PhpOffice\PhpSpreadsheet\Style\Border;
 use PhpOffice\PhpSpreadsheet\Style\Alignment;
-use App\Services\MistralAMDECAssistant;
-
-
-class ProcessAMDECController extends Controller
+ use App\Services\AMDECAIAssistant;
+class ProcessAMDECControllercopy extends Controller
 {
     protected function t()
     {
         return DB::connection('tenant');
     }
 
-    /**
-     * 🤖 IA SUGGESTIONS — OPENAI AUTOMATIQUE
-     * Route: POST /evaluations/amdec/amdec/ai/suggest
-     */
-
-
-
-
-/**
- * À ajouter dans app/Http/Controllers/Process/Evaluations/ProcessAMDECController.php
- */
-
-    /**
-     * 🎯 GÉNÉRER MODES DE DÉFAILLANCE PAR ACTIVITÉ
-     * Route: POST /process/amdec/ai/suggest-failure-modes
-     */
-    public function aiSuggestFailureModes(Request $request, MistralAMDECAssistant $mistral)
-    {
-        try {
-            $data = $request->validate([
-                'activity_name' => 'required|string|min:3'
-            ]);
-
-            if (!MistralAMDECAssistant::validatePayloadSafety($data)) {
-                return response()->json(['success' => false, 'error' => 'Données sensibles'], 400);
-            }
-
-            \Log::info('🎯 Generating failure modes for: ' . $data['activity_name']);
-
-            $suggestions = $mistral->suggestFailureModes($data);
-
-            \Log::info('✅ Failure modes result: ' . json_encode($suggestions));
-
-            // Vérifier que c'est un tableau
-            if (!is_array($suggestions) || empty($suggestions)) {
-                return response()->json([
-                    'success' => true,
-                    'failure_modes' => [],
-                    'message' => 'Aucun mode généré, veuillez réessayer'
-                ]);
-            }
-
-            return response()->json([
-                'success' => true,
-                'failure_modes' => $suggestions['failure_modes'] ?? [],
-                'source' => 'Mistral'
-            ]);
-
-        } catch (\Exception $e) {
-            \Log::error('❌ aiSuggestFailureModes: ' . $e->getMessage());
-            return response()->json([
-                'success' => false,
-                'error' => $e->getMessage()
-            ], 500);
-        }
-    }
-
-    /**
-     * 🤖 IA SUGGESTIONS — PHASE 1/2/3
-     * Route: POST /process/amdec/ai/suggest
-     */
-    public function aiSuggest(Request $request, MistralAMDECAssistant $mistral)
-    {
-        try {
-            $data = $request->validate([
-                'phase' => 'required|in:PHASE1,PHASE2,PHASE3',
-                'payload' => 'required|array'
-            ]);
-
-            if (!MistralAMDECAssistant::validatePayloadSafety($data['payload'])) {
-                return response()->json(['success' => false, 'error' => 'Données sensibles'], 400);
-            }
-
-            $suggestions = match($data['phase']) {
-                'PHASE1' => $mistral->suggestPhase1($data['payload']),
-                'PHASE2' => $mistral->suggestPhase2($data['payload']),
-                'PHASE3' => $mistral->suggestPhase3($data['payload']),
-                default => []
-            };
-
-            return response()->json([
-                'success' => true,
-                'suggestions' => $suggestions,
-                'source' => 'Mistral'
-            ]);
-
-        } catch (\Exception $e) {
-            \Log::error('❌ aiSuggest: ' . $e->getMessage());
-            return response()->json([
-                'success' => false,
-                'error' => $e->getMessage()
-            ], 500);
-        }
-    }
     /**
      * 📋 PHASE 1 — Créer mode défaillance
      */
@@ -128,12 +31,13 @@ class ProcessAMDECController extends Controller
                 'process_id' => 'required|integer',
                 'activity_id' => 'required|integer',
                 'failure_mode' => 'required|string|max:255',
+                //'failure_description' => 'nullable|string|max:500',
                 'effects' => 'nullable|string',
                 'causes' => 'nullable|string',
-                'current_controls' => 'nullable|string',
                 'gravity_before_id' => 'required|integer',
                 'frequency_before_id' => 'required|integer',
                 'detectability_before_id' => 'required|integer',
+                //'detection_measures' => 'nullable|string',
             ]);
 
             $user = Auth::user();
@@ -168,12 +72,13 @@ class ProcessAMDECController extends Controller
                 'function_id' => $session->function_id,
                 'phase' => 'PHASE1',
                 'failure_mode' => $validated['failure_mode'],
+                //'failure_description' => $validated['failure_description'],
                 'effects' => $validated['effects'],
                 'causes' => $validated['causes'],
-                'current_controls' => $validated['current_controls'],
                 'gravity_before_id' => $validated['gravity_before_id'],
                 'frequency_before_id' => $validated['frequency_before_id'],
                 'detectability_before_id' => $validated['detectability_before_id'],
+                //'detection_measures' => $validated['detection_measures'],
                 'criticality_before' => $criticityBefore,
                 'criticality_nette_before' => $criticityNetteBefore,
                 'standard_before_id' => $standardBefore?->id,
@@ -198,6 +103,7 @@ class ProcessAMDECController extends Controller
 
     /**
      * 🛡️ PHASE 2 — Plan d'action
+     * ✅ Stocke action_responsible_function_id
      */
     public function savePhase2(Request $request)
     {
@@ -206,7 +112,9 @@ class ProcessAMDECController extends Controller
                 'amdec_record_id' => 'required|integer',
                 'prevention_measures' => 'nullable|string',
                 'action_responsible' => 'nullable|string',
+                //'action_description' => 'nullable|string',
                 'action_deadline' => 'nullable|date',
+                //'action_responsible_function_id' => 'nullable|integer',
                 'action_status' => 'nullable|in:pending,in_progress,completed,cancelled',
             ]);
 
@@ -225,16 +133,31 @@ class ProcessAMDECController extends Controller
                 ], 400);
             }
 
+            // ✅ Récupérer nom fonction si sélectionnée
+            $functionName = null;
+            // if ($validated['action_responsible_function_id']) {
+            //     $func = $t->table('functions')->find($validated['action_responsible_function_id']);
+            //     $functionName = $func?->name;
+            // }
+
+            // ✅ UPDATE le record
             $updateData = [
                 'phase' => 'PHASE2',
                 'prevention_measures' => $validated['prevention_measures'],
+                //'action_responsible_function_id' => $validated['action_responsible_function_id'],
                 'action_responsible' => $validated['action_responsible'],
                 'action_deadline' => $validated['action_deadline'],
+
                 'action_status' => $validated['action_status'] ?? 'pending',
                 'updated_by_user_id' => $user->id,
                 'updated_by_user_name' => $user->name,
                 'updated_at' => now()
             ];
+
+            // Ajouter action_responsible si colonne existe
+            if (\Schema::connection('tenant')->hasColumn('amdec_records', 'action_responsible')) {
+                $updateData['action_responsible'] = $functionName;
+            }
 
             $t->table('amdec_records')
                 ->where('id', $validated['amdec_record_id'])
@@ -341,6 +264,7 @@ class ProcessAMDECController extends Controller
 
     /**
      * 📄 INDEX — PAGE AMDEC PRINCIPALE
+     * ✅ Structure tenant correcte
      */
     public function index()
     {
@@ -348,6 +272,7 @@ class ProcessAMDECController extends Controller
             $user = Auth::user();
             $t = $this->t();
 
+            // ✅ Récupérer le lien user-entity-function (tenant)
             $link = $t->table('function_assignments as fa')
                 ->where('fa.user_id', $user->id)
                 ->first(['entity_id', 'function_id']);
@@ -364,11 +289,13 @@ class ProcessAMDECController extends Controller
                 ]);
             }
 
+            // ✅ Charger processus (structure tenant)
             $processes = $t->table('processes')
                 ->orderBy('name')
                 ->select('id', 'name')
                 ->get();
 
+            // ✅ Charger session active
             $activeSession = $t->table('process_evaluation_sessions')
                 ->where('entity_id', $link->entity_id)
                 ->where('function_id', $link->function_id)
@@ -385,6 +312,7 @@ class ProcessAMDECController extends Controller
                 ];
             }
 
+            // ✅ Charger référentiels (sans colonne 'code')
             $gravities = $t->table('amdec_gravities')
                 ->orderBy('sort')
                 ->get(['id', 'label', 'degree', 'color', 'description']);
@@ -401,6 +329,7 @@ class ProcessAMDECController extends Controller
                 ->orderBy('sort')
                 ->get(['id', 'name', 'color', 'min_criticality', 'max_criticality']);
 
+            // ✅ Charger fonctions (SANS colonne 'code')
             $functions = $t->table('functions')
                 ->select('id', 'name')
                 ->orderBy('name')
@@ -522,7 +451,7 @@ class ProcessAMDECController extends Controller
             }
 
         } catch (\Exception $e) {
-            \Log::error('❌ Erreur saveRecord: ' . $e->getMessage());
+            \Log::error('❌ Erreur saveRecord (dispatcher): ' . $e->getMessage());
             return response()->json(['success' => false, 'error' => $e->getMessage()], 500);
         }
     }
@@ -553,7 +482,7 @@ class ProcessAMDECController extends Controller
     }
 
     /**
-     * 🌐 RÉFÉRENTIELS API
+     * 🌐 Récupérer liste des fonctions (SANS code)
      */
     public function getFunctions()
     {
@@ -631,9 +560,30 @@ class ProcessAMDECController extends Controller
         }
     }
 
-    /**
-     * 📥 EXPORT EXCEL
-     */
+    private function calculateStatistics($records)
+    {
+        $total = count($records);
+        $phase1Count = $records->where('phase', 'PHASE1')->count();
+        $phase2Count = $records->where('phase', 'PHASE2')->count();
+        $phase3Count = $records->where('phase', 'PHASE3')->count();
+
+        $highRiskBefore = $records->where('criticality_nette_before', '>=', 60)->count();
+        $avgCritBefore = $records->avg('criticality_nette_before') ?? 0;
+        $avgCritAfter = $records->avg('criticality_nette_after') ?? 0;
+        $avgImprovement = $records->avg('improvement_percentage') ?? 0;
+
+        return [
+            'total_records' => $total,
+            'phase1_count' => $phase1Count,
+            'phase2_count' => $phase2Count,
+            'phase3_count' => $phase3Count,
+            'high_risk_before' => $highRiskBefore,
+            'average_criticality_nette_before' => round($avgCritBefore, 1),
+            'average_criticality_nette_after' => round($avgCritAfter, 1),
+            'average_improvement' => round($avgImprovement, 1),
+        ];
+    }
+
     public function exportExcel(Request $request)
     {
         try {
@@ -685,8 +635,8 @@ class ProcessAMDECController extends Controller
             $headers = [
                 'Phase', 'Activité', 'Mode', 'Effets', 'Gravité Av.', 'Causes', 'Fréquence Av.',
                 'Contrôles', 'Détectabilité Av.', 'Crit. Av. (%)', 'Plan d\'action', 'Responsable',
-                'Délai', 'Statut', 'Gravité Ap.', 'Fréquence Ap.', 'Détectabilité Ap.',
-                'Crit. Ap. (%)', 'Amélioration (%)'
+                'Délai', 'Statut', 'Critère Efficacité', 'Mesure Efficacité', 'Gravité Ap.',
+                'Fréquence Ap.', 'Détectabilité Ap.', 'Crit. Ap. (%)', 'Amélioration (%)'
             ];
 
             $col = 'A';
@@ -707,20 +657,22 @@ class ProcessAMDECController extends Controller
                 $sheet->setCellValue('E' . $row, $record->gravity_before_id);
                 $sheet->setCellValue('F' . $row, $record->causes);
                 $sheet->setCellValue('G' . $row, $record->frequency_before_id);
-                $sheet->setCellValue('H' . $row, $record->current_controls);
+                $sheet->setCellValue('H' . $row, $record->detection_measures);
                 $sheet->setCellValue('I' . $row, $record->detectability_before_id);
                 $sheet->setCellValue('J' . $row, $record->criticality_nette_before);
-                $sheet->setCellValue('K' . $row, $record->prevention_measures ?? '');
+                $sheet->setCellValue('K' . $row, $record->action_description);
                 $sheet->setCellValue('L' . $row, $record->action_responsible);
                 $sheet->setCellValue('M' . $row, $record->action_deadline);
                 $sheet->setCellValue('N' . $row, $record->action_status);
-                $sheet->setCellValue('O' . $row, $record->gravity_after_id);
-                $sheet->setCellValue('P' . $row, $record->frequency_after_id);
-                $sheet->setCellValue('Q' . $row, $record->detectability_after_id);
-                $sheet->setCellValue('R' . $row, $record->criticality_nette_after);
-                $sheet->setCellValue('S' . $row, $record->improvement_percentage);
+                $sheet->setCellValue('O' . $row, $record->efficacy_criterion ?? '');
+                $sheet->setCellValue('P' . $row, $record->efficacy_measure ?? '');
+                $sheet->setCellValue('Q' . $row, $record->gravity_after_id);
+                $sheet->setCellValue('R' . $row, $record->frequency_after_id);
+                $sheet->setCellValue('S' . $row, $record->detectability_after_id);
+                $sheet->setCellValue('T' . $row, $record->criticality_nette_after);
+                $sheet->setCellValue('U' . $row, $record->improvement_percentage);
 
-                $sheet->getStyle('A' . $row . ':S' . $row)->applyFromArray($cellStyle);
+                $sheet->getStyle('A' . $row . ':U' . $row)->applyFromArray($cellStyle);
                 $sheet->getRowDimension($row)->setRowHeight(25);
 
                 $row++;
@@ -740,51 +692,26 @@ class ProcessAMDECController extends Controller
         }
     }
 
-    /**
-     * 📊 UTILITIES
-     */
-    private function calculateStatistics($records)
-    {
-        $total = count($records);
-        $phase1Count = $records->where('phase', 'PHASE1')->count();
-        $phase2Count = $records->where('phase', 'PHASE2')->count();
-        $phase3Count = $records->where('phase', 'PHASE3')->count();
-
-        $highRiskBefore = $records->where('criticality_nette_before', '>=', 60)->count();
-        $avgCritBefore = $records->avg('criticality_nette_before') ?? 0;
-        $avgCritAfter = $records->avg('criticality_nette_after') ?? 0;
-        $avgImprovement = $records->avg('improvement_percentage') ?? 0;
-
-        return [
-            'total_records' => $total,
-            'phase1_count' => $phase1Count,
-            'phase2_count' => $phase2Count,
-            'phase3_count' => $phase3Count,
-            'high_risk_before' => $highRiskBefore,
-            'average_criticality_nette_before' => round($avgCritBefore, 1),
-            'average_criticality_nette_after' => round($avgCritAfter, 1),
-            'average_improvement' => round($avgImprovement, 1),
-        ];
-    }
-
     private function recordToArray($record)
     {
-        return [
+        $data = [
             'id' => $record->id ?? null,
             'activity_id' => $record->activity_id ?? null,
             'phase' => $record->phase ?? 'PHASE1',
             'failure_mode' => $record->failure_mode ?? null,
+            'failure_description' => $record->failure_description ?? null,
             'effects' => $record->effects ?? null,
             'causes' => $record->causes ?? null,
-            'current_controls' => $record->current_controls ?? null,
+            'detection_measures' => $record->detection_measures ?? null,
             'gravity_before_id' => $record->gravity_before_id ?? null,
             'frequency_before_id' => $record->frequency_before_id ?? null,
             'detectability_before_id' => $record->detectability_before_id ?? null,
             'criticality_before' => $record->criticality_before ?? null,
             'criticality_nette_before' => $record->criticality_nette_before ?? null,
             'standard_before_id' => $record->standard_before_id ?? null,
-            'prevention_measures' => $record->prevention_measures ?? null,
+            'action_description' => $record->action_description ?? null,
             'action_responsible' => $record->action_responsible ?? null,
+            'action_responsible_function_id' => $record->action_responsible_function_id ?? null,
             'action_deadline' => $record->action_deadline ?? null,
             'action_status' => $record->action_status ?? null,
             'gravity_after_id' => $record->gravity_after_id ?? null,
@@ -795,5 +722,42 @@ class ProcessAMDECController extends Controller
             'standard_after_id' => $record->standard_after_id ?? null,
             'improvement_percentage' => $record->improvement_percentage ?? null,
         ];
+
+        if (property_exists($record, 'efficacy_criterion')) {
+            $data['efficacy_criterion'] = $record->efficacy_criterion ?? null;
+        }
+        if (property_exists($record, 'efficacy_measure')) {
+            $data['efficacy_measure'] = $record->efficacy_measure ?? null;
+        }
+
+        return $data;
     }
+
+   
+
+public function aiSuggest(Request $request, AMDECAIAssistant $ai)
+{
+    $data = $request->validate([
+        'phase' => 'required|in:PHASE1,PHASE2,PHASE3',
+        'payload' => 'required|array'
+    ]);
+
+    switch ($data['phase']) {
+        case 'PHASE1':
+            $suggestions = $ai->suggestPhase1($data['payload']);
+            break;
+        case 'PHASE2':
+            $suggestions = $ai->suggestPhase2($data['payload']);
+            break;
+        case 'PHASE3':
+            $suggestions = $ai->suggestPhase3($data['payload']);
+            break;
+    }
+
+    return response()->json([
+        'success' => true,
+        'suggestions' => $suggestions
+    ]);
+}
+
 }

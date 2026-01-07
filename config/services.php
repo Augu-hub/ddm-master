@@ -34,5 +34,14 @@ return [
             'channel' => env('SLACK_BOT_USER_DEFAULT_CHANNEL'),
         ],
     ],
+'grok' => [
+    'api_key' => env('GROK_API_KEY'),
+],
+    'huggingface' => [
+        'api_key' => env('HUGGINGFACE_API_KEY'),
+    ],
+    'mistral' => [
+    'api_key' => env('MISTRAL_API_KEY'),
+],
 
 ];
