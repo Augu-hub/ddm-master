@@ -37,6 +37,7 @@ declare module 'vue' {
     BFormFloatingLabel: typeof import('bootstrap-vue-next/components/BForm')['BFormFloatingLabel']
     BFormGroup: typeof import('bootstrap-vue-next/components/BFormGroup')['BFormGroup']
     BFormInput: typeof import('bootstrap-vue-next/components/BFormInput')['BFormInput']
+    BFormInvalidFeedback: typeof import('bootstrap-vue-next/components/BForm')['BFormInvalidFeedback']
     BFormRadio: typeof import('bootstrap-vue-next/components/BFormRadio')['BFormRadio']
     BFormRadioGroup: typeof import('bootstrap-vue-next/components/BFormRadio')['BFormRadioGroup']
     BFormSelect: typeof import('bootstrap-vue-next/components/BFormSelect')['BFormSelect']

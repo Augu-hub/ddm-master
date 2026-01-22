@@ -8,13 +8,20 @@ use App\Models\Master\Menu;
 use App\Models\Master\Module;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 class MenuController extends Controller
 {
-    /** caches par requête (évite N+1) */
+    /** Caches par requête (évite N+1) */
     private array $ctxModuleCodes = [];
     private array $ctxMenuIds     = [];
     private array $ctxPerms       = [];
+
+    /**
+     * ════════════════════════════════════════════════════════════════════════════
+     * HELPERS - AUTHENTIFICATION & CONTEXTE
+     * ════════════════════════════════════════════════════════════════════════════
+     */
 
     private function isSuperAdmin($user): bool
     {
@@ -33,19 +40,19 @@ class MenuController extends Controller
         return false;
     }
 
-    /** Pré-chauffe le contexte d’autorisations (sur mysql) */
+    /** Pré-chauffe le contexte d'autorisations */
     private function warmAuthContext($user): void
     {
         if (!$user) return;
 
-        // modules du user via pivot module_user (connexion mysql via relation Eloquent)
+        // Modules du user via pivot module_user
         $this->ctxModuleCodes = $user->modules()
             ->pluck('modules.code')
             ->filter()
             ->values()
             ->all();
 
-        // menus explicitement listés pour le user (menu_user) → connexion mysql
+        // Menus explicitement listés pour le user (menu_user)
         $this->ctxMenuIds = DB::connection('mysql')
             ->table('menu_user')
             ->where('user_id', $user->id)
@@ -53,7 +60,7 @@ class MenuController extends Controller
             ->values()
             ->all();
 
-        // permissions Spatie (config/permission.php => 'connection' => 'mysql')
+        // Permissions Spatie
         if (method_exists($user, 'getAllPermissions')) {
             $this->ctxPerms = $user->getAllPermissions()->pluck('name')->values()->all();
         } else {
@@ -61,7 +68,13 @@ class MenuController extends Controller
         }
     }
 
-    /** Construit l’arbre à partir des rows */
+    /**
+     * ════════════════════════════════════════════════════════════════════════════
+     * TREE BUILDING
+     * ════════════════════════════════════════════════════════════════════════════
+     */
+
+    /** Construit l'arbre hiérarchique à partir des rows */
     private function buildTree($rows)
     {
         $byParent = [];
@@ -88,12 +101,12 @@ class MenuController extends Controller
                     'badge_json'   => $n->badge_json,
                     'tooltip_json' => $n->tooltip_json,
                     'meta_json'    => $n->meta_json,
-                    // méta contrôle
+                    // Meta contrôle
                     '_module_code'  => optional($n->module)->code,
                     '_service_code' => optional($n->service)->code,
                     '_has_perms'    => $n->permissions_count > 0,
                     '_has_users'    => $n->users_count > 0,
-                    // enfants
+                    // Enfants
                     'children'     => $make($n->id),
                 ];
             }
@@ -103,7 +116,13 @@ class MenuController extends Controller
         return $make(null);
     }
 
-    /** Filtre récursif : garder les noeuds du module ciblé (ou parents utiles) */
+    /**
+     * ════════════════════════════════════════════════════════════════════════════
+     * FILTERING - PAR MODULE, SERVICE, UTILISATEUR
+     * ════════════════════════════════════════════════════════════════════════════
+     */
+
+    /** Filtre récursif : garder les nœuds du module ciblé (ou parents utiles) */
     private function filterTreeByModule(array $nodes, string $moduleCode): array
     {
         $out = [];
@@ -118,7 +137,7 @@ class MenuController extends Controller
         return $out;
     }
 
-    /** (Optionnel) Filtrer par code service si présent */
+    /** Filtre par code service */
     private function filterTreeByService(array $nodes, string $serviceCode): array
     {
         $out = [];
@@ -133,16 +152,15 @@ class MenuController extends Controller
         return $out;
     }
 
-    /** Vérifie la visibilité d’un nœud pour l’utilisateur courant (hors super-admin) */
+    /** Vérifie si l'utilisateur peut voir ce menu */
     private function userCanSee(array $menu, $user, bool $isSuperAdmin): bool
     {
         if ($isSuperAdmin) return true;
         if (!$user) return false;
 
-        // 1) contrainte module (soit il possède le module, soit permission {code}.view)
+        // 1) Contrainte module
         if (!empty($menu['_module_code'])) {
             $code = $menu['_module_code'];
-
             $hasModule = in_array($code, $this->ctxModuleCodes, true);
             $hasPerm   = in_array($code . '.view', $this->ctxPerms, true);
 
@@ -151,7 +169,7 @@ class MenuController extends Controller
             }
         }
 
-        // 2) contrainte ciblage users → l’id doit être dans menu_user
+        // 2) Contrainte ciblage users
         if (!empty($menu['_has_users'])) {
             if (!in_array($menu['id'], $this->ctxMenuIds, true)) {
                 return false;
@@ -161,6 +179,7 @@ class MenuController extends Controller
         return true;
     }
 
+    /** Filtre l'arbre pour l'utilisateur actuel */
     private function filterTreeForUser(array $nodes, $user, bool $isSuperAdmin): array
     {
         $out = [];
@@ -176,6 +195,7 @@ class MenuController extends Controller
         return $out;
     }
 
+    /** Récupère toutes les clés d'un arbre */
     private function flattenKeys(array $nodes, array &$keys): void
     {
         foreach ($nodes as $n) {
@@ -184,138 +204,236 @@ class MenuController extends Controller
         }
     }
 
-    // -------------------------------------------------------------
-    // GET /api/menu/structure?module=...&service=...
-    // -------------------------------------------------------------
+    /**
+     * ════════════════════════════════════════════════════════════════════════════
+     * PUBLIC API ENDPOINTS
+     * ════════════════════════════════════════════════════════════════════════════
+     */
+
+    /**
+     * GET /api/menu/structure?module=audit&service=...
+     * 
+     * Retourne la structure hiérarchique des menus filtrés
+     */
     public function getMenuStructure(Request $request)
     {
-        $user    = $request->user();
-        $isSuper = $this->isSuperAdmin($user);
-        $modCode = trim((string) $request->query('module', ''));
-        $svcCode = trim((string) $request->query('service', ''));
+        try {
+            $user    = $request->user();
+            $isSuper = $this->isSuperAdmin($user);
+            $modCode = trim((string) $request->query('module', ''));
+            $svcCode = trim((string) $request->query('service', ''));
 
-        // warm caches (sur mysql)
-        if (!$isSuper && $user) {
-            $this->warmAuthContext($user);
+            Log::info('📡 getMenuStructure', [
+                'module'   => $modCode,
+                'service'  => $svcCode,
+                'user_id'  => optional($user)->id,
+                'is_super' => $isSuper,
+            ]);
+
+            // Warm caches
+            if (!$isSuper && $user) {
+                $this->warmAuthContext($user);
+            }
+
+            // Charger l'arbre maître
+            $rows = Menu::query()
+                ->with(['module', 'service'])
+                ->withCount(['permissions', 'users'])
+                ->orderBy('parent_id')
+                ->orderBy('sort')
+                ->get();
+
+            $tree = $this->buildTree($rows);
+
+            // Filtrer par module
+            if ($modCode !== '') {
+                Log::info('🔍 Filtering by module', ['module' => $modCode]);
+                $tree = $this->filterTreeByModule($tree, $modCode);
+            }
+
+            // Filtrer par service
+            if ($svcCode !== '') {
+                Log::info('🔍 Filtering by service', ['service' => $svcCode]);
+                $tree = $this->filterTreeByService($tree, $svcCode);
+            }
+
+            // Filtrer par utilisateur
+            $result = $isSuper ? $tree : $this->filterTreeForUser($tree, $user, false);
+
+            Log::info('✅ getMenuStructure success', [
+                'count' => count($result),
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'data'    => $result,
+            ]);
+        } catch (\Exception $e) {
+            Log::error('❌ getMenuStructure error', [
+                'error'   => $e->getMessage(),
+                'file'    => $e->getFile(),
+                'line'    => $e->getLine(),
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'error'   => $e->getMessage(),
+            ], 500);
         }
-
-        // Arbre maître (mysql)
-        $rows = Menu::query()
-            ->with(['module','service'])
-            ->withCount(['permissions','users'])
-            ->orderBy('parent_id')
-            ->orderBy('sort')
-            ->get();
-
-        $tree = $this->buildTree($rows);
-
-        if ($modCode !== '') {
-            $tree = $this->filterTreeByModule($tree, $modCode);
-        }
-        if ($svcCode !== '') {
-            $tree = $this->filterTreeByService($tree, $svcCode);
-        }
-
-        $result = $isSuper ? $tree : $this->filterTreeForUser($tree, $user, false);
-
-        return response()->json(['data' => $result]);
     }
 
-    // -------------------------------------------------------------
-    // GET /api/menu/visibility?module=...&service=...
-    // -------------------------------------------------------------
+    /**
+     * GET /api/menu/visibility?module=audit&service=...
+     * 
+     * Retourne la visibilité des menus (key => boolean)
+     */
     public function getMenuVisibility(Request $request)
     {
-        $user    = $request->user();
-        $isSuper = $this->isSuperAdmin($user);
-        $modCode = trim((string) $request->query('module', ''));
-        $svcCode = trim((string) $request->query('service', ''));
+        try {
+            $user    = $request->user();
+            $isSuper = $this->isSuperAdmin($user);
+            $modCode = trim((string) $request->query('module', ''));
+            $svcCode = trim((string) $request->query('service', ''));
 
-        if (!$isSuper && $user) {
-            $this->warmAuthContext($user);
-        }
+            Log::info('📡 getMenuVisibility', [
+                'module'   => $modCode,
+                'service'  => $svcCode,
+            ]);
 
-        $rows = Menu::query()
-            ->with(['module','service'])
-            ->withCount(['permissions','users'])
-            ->orderBy('parent_id')
-            ->orderBy('sort')
-            ->get();
-
-        $tree = $this->buildTree($rows);
-
-        if ($modCode !== '') {
-            $tree = $this->filterTreeByModule($tree, $modCode);
-        }
-        if ($svcCode !== '') {
-            $tree = $this->filterTreeByService($tree, $svcCode);
-        }
-
-        $keys = [];
-        $this->flattenKeys($tree, $keys);
-
-        $visibility = [];
-        $fill = function(array $node) use (&$visibility, $user, $isSuper, &$fill) {
-            $key = $node['key'] ?? null;
-            if ($key) {
-                $visibility[$key] = $this->userCanSee($node, $user, $isSuper);
+            if (!$isSuper && $user) {
+                $this->warmAuthContext($user);
             }
-            foreach ($node['children'] ?? [] as $child) $fill($child);
-        };
-        foreach ($tree as $n) $fill($n);
 
-        if ($isSuper) {
-            $visibility = array_fill_keys($keys, true);
+            $rows = Menu::query()
+                ->with(['module', 'service'])
+                ->withCount(['permissions', 'users'])
+                ->orderBy('parent_id')
+                ->orderBy('sort')
+                ->get();
+
+            $tree = $this->buildTree($rows);
+
+            if ($modCode !== '') {
+                $tree = $this->filterTreeByModule($tree, $modCode);
+            }
+            if ($svcCode !== '') {
+                $tree = $this->filterTreeByService($tree, $svcCode);
+            }
+
+            $keys = [];
+            $this->flattenKeys($tree, $keys);
+
+            $visibility = [];
+            $fill = function(array $node) use (&$visibility, $user, $isSuper, &$fill) {
+                $key = $node['key'] ?? null;
+                if ($key) {
+                    $visibility[$key] = $this->userCanSee($node, $user, $isSuper);
+                }
+                foreach ($node['children'] ?? [] as $child) {
+                    $fill($child);
+                }
+            };
+
+            foreach ($tree as $n) {
+                $fill($n);
+            }
+
+            // Si super admin: tous les menus sont visibles
+            if ($isSuper) {
+                $visibility = array_fill_keys($keys, true);
+            }
+
+            Log::info('✅ getMenuVisibility success', [
+                'count' => count($visibility),
+            ]);
+
+            return response()->json([
+                'success'    => true,
+                'visibility' => $visibility,
+            ]);
+        } catch (\Exception $e) {
+            Log::error('❌ getMenuVisibility error', [
+                'error' => $e->getMessage(),
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'error'   => $e->getMessage(),
+            ], 500);
         }
-
-        return response()->json(['visibility' => $visibility]);
     }
 
-    // -------------------------------------------------------------
-    // GET /api/me/modules  (super admin = tout)
-    // -------------------------------------------------------------
+    /**
+     * GET /api/me/modules
+     * 
+     * Retourne les modules de l'utilisateur
+     * (super admin = tous les modules)
+     */
     public function myModules(Request $request)
     {
-        $user    = $request->user();
-        $isSuper = $this->isSuperAdmin($user);
+        try {
+            $user    = $request->user();
+            $isSuper = $this->isSuperAdmin($user);
 
-        $q = Module::query()->where('is_active', true);
+            $q = Module::query()->where('is_active', true);
 
-        if (!$isSuper && $user) {
-            // filtre par pivot users (mysql)
-            $q->whereHas('users', fn($uq) => $uq->where('user_id', $user->id));
+            if (!$isSuper && $user) {
+                // Filtrer par pivot users
+                $q->whereHas('users', fn($uq) => $uq->where('user_id', $user->id));
+            }
+
+            $mods = $q->with('service:id,name')
+                      ->orderBy('sort')
+                      ->get(['id', 'code', 'name', 'entry_route_name as entry_route', 'service_id']);
+
+            return response()->json([
+                'success' => true,
+                'modules' => $mods->map(fn($m) => [
+                    'code'        => $m->code,
+                    'name'        => $m->name,
+                    'entry_route' => $m->entry_route,
+                    'service'     => ['name' => optional($m->service)->name],
+                ])->values(),
+            ]);
+        } catch (\Exception $e) {
+            Log::error('❌ myModules error', [
+                'error' => $e->getMessage(),
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'error'   => $e->getMessage(),
+            ], 500);
         }
-
-        $mods = $q->with('service:id,name')
-                  ->orderBy('sort')
-                  ->get(['id','code','name','entry_route_name as entry_route','service_id']);
-
-        return response()->json([
-            'modules' => $mods->map(fn($m) => [
-                'code'        => $m->code,
-                'name'        => $m->name,
-                'entry_route' => $m->entry_route,
-                'service'     => ['name' => optional($m->service)->name],
-            ])->values(),
-        ]);
     }
 
-    // -------------------------------------------------------------
-    // GET /api/menu/entities  (les entités sont côté TENANT)
-    // -------------------------------------------------------------
+    /**
+     * GET /api/menu/entities
+     * 
+     * Retourne les entités (tenant)
+     */
     public function getEntities(Request $request)
     {
         try {
             $entities = DB::connection('tenant')
                 ->table('entities')
-                ->select('id','name')
+                ->select('id', 'name')
                 ->orderBy('name')
                 ->get();
 
-            return response()->json(['entities' => $entities]);
-        } catch (\Throwable $e) {
-            \Log::error('MenuController@getEntities tenant error', ['error'=>$e->getMessage()]);
-            return response()->json(['entities' => []]);
+            return response()->json([
+                'success'  => true,
+                'entities' => $entities,
+            ]);
+        } catch (\Exception $e) {
+            Log::error('❌ getEntities error', [
+                'error' => $e->getMessage(),
+            ]);
+
+            return response()->json([
+                'success'  => true,
+                'entities' => [],
+            ]);
         }
     }
 }

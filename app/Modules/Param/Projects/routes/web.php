@@ -15,7 +15,11 @@ use App\Http\Controllers\Param\MpsRespController;
 use App\Http\Controllers\Param\FunctionAssignmentController;
 use App\Http\Controllers\Param\EntityFunctionsChartController;
 use App\Http\Controllers\Param\FunctionUsersController;
-use App\Http\Controllers\Param\EntityProcessRelationsController;  // ← AJOUTER ICI
+use App\Http\Controllers\Param\EntityProcessRelationsController;
+use App\Http\Controllers\Param\UsersController;
+use App\Http\Controllers\Param\AuditorController;
+use App\Http\Controllers\Param\CompetencyController;
+use App\Http\Controllers\Param\CompetencyCategoryController;
 
 /* ====== Accueil du module ====== */
 Route::get('/', fn () => Inertia::render('dashboards/Param/Entities/index'))
@@ -53,6 +57,7 @@ Route::resource('mpa', MacroProcessusController::class)->names([
     'update'  => 'mpa.update',
     'destroy' => 'mpa.destroy',
 ]);
+
 Route::post('/param/mpa/ai/suggest-processus', [MacroProcessusController::class, 'aiSuggestProcessus'])
     ->middleware(['web', 'auth'])
     ->name('mpa.ai.suggest-processus');
@@ -65,47 +70,21 @@ Route::post('/param/mpa/ai/suggest-activites', [MacroProcessusController::class,
     ->middleware(['web', 'auth'])
     ->name('mpa.ai.suggest-activites');
 
-
 Route::prefix('projects')->name('projects.')->group(function () {
-    
-    // ─────────────────────────────────────────────────────────────────
-    // 🤖 IA ENDPOINTS
-    // ─────────────────────────────────────────────────────────────────
-
-    
-    // ─────────────────────────────────────────────────────────────────
-    // 🏢 GESTION MACRO
-    // ─────────────────────────────────────────────────────────────────
-    
-
-    
-    // ─────────────────────────────────────────────────────────────────
-    // 📝 GESTION PROCESSUS
-    // ─────────────────────────────────────────────────────────────────
-    
     Route::post('processus', [MacroProcessusController::class, 'storeProcessus'])
         ->name('processus.store');
-    
     Route::put('processus/{processus}', [MacroProcessusController::class, 'updateProcessus'])
         ->name('processus.update');
-    
     Route::delete('processus/{processus}', [MacroProcessusController::class, 'destroyProcessus'])
         ->name('processus.destroy');
-    
-    // ─────────────────────────────────────────────────────────────────
-    // 📝 GESTION ACTIVITÉ
-    // ─────────────────────────────────────────────────────────────────
-    
     Route::post('activites', [MacroProcessusController::class, 'storeActivite'])
         ->name('activites.store');
-    
     Route::put('activites/{activite}', [MacroProcessusController::class, 'updateActivite'])
         ->name('activites.update');
-    
     Route::delete('activites/{activite}', [MacroProcessusController::class, 'destroyActivite'])
         ->name('activites.destroy');
-    
 });
+
 /* ✅ Validation des macros par défaut ====== */
 Route::post('macro/validate-defaults', [MacroProcessusController::class, 'validateDefaults'])
      ->name('macro.validate');
@@ -219,139 +198,207 @@ Route::get('macro/graph/{entity}', function (\App\Models\Param\Entite $entity) {
     ]);
 })->name('macro.graph.index');
 
-
-use App\Http\Controllers\Param\UsersController;
-
+// ═══════════════════════════════════════════════════════════════════════
+// 👥 UTILISATEURS - ROUTES PARAM.PROJECTS.USERS
+// ═══════════════════════════════════════════════════════════════════════
 
 /**
- * Routes pour la gestion des utilisateurs dans param.projects
- * À inclure dans votre fichier de routes tenant (routes/tenant.php)
+ * ⚠️ ORDRE TRÈS IMPORTANT !
+ * Les routes SPÉCIFIQUES doivent être AVANT les routes PARAMÉTRÉES
  */
 
-   
-    // Routes pour les utilisateurs
-        Route::prefix('users')->name('users.')->group(function () {
-            
-            // Liste et création
-            Route::get('/', [UsersController::class, 'index'])->name('index');
-            Route::get('/create', [UsersController::class, 'create'])->name('create');
-            Route::post('/store', [UsersController::class, 'store'])->name('store');
-            
-            // Export (avant les routes avec {user} pour éviter les conflits)
-            Route::get('/export', [UsersController::class, 'export'])->name('export');
-            
-            // Actions sur un utilisateur spécifique
-            Route::get('/{user}', [UsersController::class, 'show'])->name('show');
-            Route::get('/{user}/edit', [UsersController::class, 'edit'])->name('edit');
-            Route::put('/{user}', [UsersController::class, 'update'])->name('update');
-            Route::delete('/{user}', [UsersController::class, 'destroy'])->name('destroy');
-            
-            // Actions supplémentaires
-            Route::post('/{user}/change-status', [UsersController::class, 'changeStatus'])->name('change-status');
-            Route::post('/{user}/resend-email', [UsersController::class, 'resendWelcomeEmail'])->name('resend-email');
-        });
+// Routes spécifiques (sans paramètre)
+Route::get('users', [UsersController::class, 'index'])
+    ->name('users.index');
+
+Route::get('users/create', [UsersController::class, 'create'])
+    ->name('users.create');
+
+Route::post('users', [UsersController::class, 'store'])
+    ->name('users.store');
+
+Route::get('users/export', [UsersController::class, 'export'])
+    ->name('users.export');
+
+// Routes API (avant les paramétrées)
+Route::get('users/api/functions-for-entity', [UsersController::class, 'getFunctionsForEntity'])
+    ->name('users.functions-for-entity');
+
+// Routes paramétrées (avec {user})
+Route::get('users/{user}', [UsersController::class, 'show'])
+    ->name('users.show');
+
+Route::get('users/{user}/edit', [UsersController::class, 'edit'])
+    ->name('users.edit');
+
+Route::put('users/{user}', [UsersController::class, 'update'])
+    ->name('users.update');
+
+Route::delete('users/{user}', [UsersController::class, 'destroy'])
+    ->name('users.destroy');
+
+Route::patch('users/{user}/status', [UsersController::class, 'changeStatus'])
+    ->name('users.changeStatus');
+
+Route::post('users/{user}/assign-function', [UsersController::class, 'assignFunction'])
+    ->name('users.assign-function');
+
+Route::post('users/{user}/revoke-function', [UsersController::class, 'revokeFunction'])
+    ->name('users.revoke-function');
+
+// ═══════════════════════════════════════════════════════════════════════
+// 🎖️ AUDITEURS - ROUTES PARAM.PROJECTS.AUDITORS
+// ═══════════════════════════════════════════════════════════════════════
+
+/**
+ * ⚠️ ORDRE TRÈS IMPORTANT !
+ * Les routes SPÉCIFIQUES doivent être AVANT les routes PARAMÉTRÉES
+ */
+
+// Routes spécifiques (sans paramètre) - EN PREMIER
+Route::get('auditors/index', [AuditorController::class, 'index'])
+    ->name('auditors.index');
+
+Route::get('auditors/create', [AuditorController::class, 'create'])
+    ->name('auditors.create');
+
+Route::post('auditors', [AuditorController::class, 'store'])
+    ->name('auditors.store');
+
+// Routes API (avant les paramétrées)
+Route::get('auditors/api/competencies-by-category', [AuditorController::class, 'getCompetenciesByCategory'])
+    ->name('auditors.competencies.byCategory');
+
+// Routes paramétrées (avec {auditor}) - EN DERNIER
+Route::get('auditors/{auditor}', [AuditorController::class, 'show'])
+    ->name('auditors.show');
+
+Route::get('auditors/{auditor}/edit', [AuditorController::class, 'edit'])
+    ->name('auditors.edit');
+
+Route::put('auditors/{auditor}', [AuditorController::class, 'update'])
+    ->name('auditors.update');
+
+Route::delete('auditors/{auditor}', [AuditorController::class, 'destroy'])
+    ->name('auditors.destroy');
+
+Route::patch('auditors/{auditor}/status', [AuditorController::class, 'changeStatus'])
+    ->name('auditors.changeStatus');
+
+Route::post('auditors/{auditor}/competencies/assign', [AuditorController::class, 'assignCompetency'])
+    ->name('auditors.competencies.assign');
+
+Route::post('auditors/{auditor}/competencies/revoke', [AuditorController::class, 'revokeCompetency'])
+    ->name('auditors.competencies.revoke');
+
+// ═══════════════════════════════════════════════════════════════════════
+// 🎯 COMPÉTENCES - ROUTES PARAM.PROJECTS.COMPETENCIES
+// ═══════════════════════════════════════════════════════════════════════
+
+Route::resource('competencies', CompetencyController::class)->names([
+    'index'   => 'competencies.index',
+    'create'  => 'competencies.create',
+    'store'   => 'competencies.store',
+    'show'    => 'competencies.show',
+    'edit'    => 'competencies.edit',
+    'update'  => 'competencies.update',
+    'destroy' => 'competencies.destroy',
+]);
+
+// ═══════════════════════════════════════════════════════════════════════
+// 📁 CATÉGORIES DE COMPÉTENCES - ROUTES PARAM.PROJECTS.COMPETENCY_CATEGORIES
+// ═══════════════════════════════════════════════════════════════════════
+
+Route::resource('competency-categories', CompetencyCategoryController::class)->names([
+    'index'   => 'competency-categories.index',
+    'create'  => 'competency-categories.create',
+    'store'   => 'competency-categories.store',
+    'show'    => 'competency-categories.show',
+    'edit'    => 'competency-categories.edit',
+    'update'  => 'competency-categories.update',
+    'destroy' => 'competency-categories.destroy',
+]);
 
 
 
-    // ═══════════════════════════════════════════════════════════════════════
-    // ⚠️ ORDRE TRÈS IMPORTANT !
-    // Les routes SPÉCIFIQUES doivent être AVANT les routes PARAMÉTRÉES
-    // ═══════════════════════════════════════════════════════════════════════
+use App\Http\Controllers\Param\UnavailabilityController;
 
-    // ─────────────────────────────────────────────────────────────────────
-    // 1️⃣ ROUTES SPÉCIFIQUES (sans paramètre)
-    // ─────────────────────────────────────────────────────────────────────
+// ============================================================================
+// ROUTES INDISPONIBILITÉS - VERSION COMPLÈTE AVEC TOUS LES ENDPOINTS
+// ============================================================================
 
-    /**
-     * GET /param/projects/users
-     * Afficher la liste des utilisateurs
-     */
-    Route::get('users', [UsersController::class, 'index'])
-        ->name('users.index');
-
-    /**
-     * GET /param/projects/users/create
-     * Afficher le formulaire de création
-     */
-    Route::get('users/create', [UsersController::class, 'create'])
-        ->name('users.create');
-
-    /**
-     * POST /param/projects/users
-     * Enregistrer un nouvel utilisateur
-     */
-    Route::post('users', [UsersController::class, 'store'])
-        ->name('users.store');
-
-    /**
-     * GET /param/projects/users/export
-     * Exporter les utilisateurs
-     */
-    Route::get('users/export', [UsersController::class, 'export'])
-        ->name('users.export');
-
-    // ─────────────────────────────────────────────────────────────────────
-    // 2️⃣ ROUTES API (prefixe api/ pour éviter les conflits)
-    // ─────────────────────────────────────────────────────────────────────
-
-    /**
-     * GET /param/projects/users/api/functions-for-entity?entity_id=1
-     * ✅ IMPORTANT: Placer AVANT les routes {user}
-     * Récupérer les fonctions pour une entité
-     */
-    Route::get('users/api/functions-for-entity', [UsersController::class, 'getFunctionsForEntity'])
-        ->name('users.functions-for-entity');
-
-    // ─────────────────────────────────────────────────────────────────────
-    // 3️⃣ ROUTES PARAMÉTRÉES (avec paramètre {user})
-    // ─────────────────────────────────────────────────────────────────────
-
-    /**
-     * GET /param/projects/users/{user}
-     * Afficher les détails d'un utilisateur
-     */
-    Route::get('users/{user}', [UsersController::class, 'show'])
-        ->name('users.show');
-
-    /**
-     * GET /param/projects/users/{user}/edit
-     * Afficher le formulaire d'édition
-     */
-    Route::get('users/{user}/edit', [UsersController::class, 'edit'])
-        ->name('users.edit');
-
-    /**
-     * PUT /param/projects/users/{user}
-     * Mettre à jour un utilisateur
-     */
-    Route::put('users/{user}', [UsersController::class, 'update'])
-        ->name('users.update');
-
-    /**
-     * DELETE /param/projects/users/{user}
-     * Supprimer un utilisateur
-     */
-    Route::delete('users/{user}', [UsersController::class, 'destroy'])
-        ->name('users.destroy');
-
-    /**
-     * PATCH /param/projects/users/{user}/status
-     * Changer le statut d'un utilisateur
-     */
-    Route::patch('users/{user}/status', [UsersController::class, 'changeStatus'])
-        ->name('users.changeStatus');
-
-    /**
-     * POST /param/projects/users/{user}/assign-function
-     * Assigner une fonction à un utilisateur
-     */
-    Route::post('users/{user}/assign-function', [UsersController::class, 'assignFunction'])
-        ->name('users.assign-function');
-
-    /**
-     * POST /param/projects/users/{user}/revoke-function
-     * Révoquer une fonction
-     */
-    Route::post('users/{user}/revoke-function', [UsersController::class, 'revokeFunction'])
-        ->name('users.revoke-function');
-
+Route::prefix('param/projects/unavailabilities')
+    ->name('unavailabilities.')
+    ->middleware(['auth', 'verified'])
+    ->group(function () {
+        
+        // ==================== PAGES ====================
+        
+        // Index - Affiche le calendrier et les tables
+        Route::get('/', [UnavailabilityController::class, 'index'])
+            ->name('index');
+        
+        
+        // ==================== INDISPONIBILITÉS GLOBALES ====================
+        
+        // Créer
+        Route::post('store-global', [UnavailabilityController::class, 'storeGlobal'])
+            ->name('store-global');
+        
+        // Mettre à jour
+        Route::put('{id}/update-global', [UnavailabilityController::class, 'updateGlobal'])
+            ->name('update-global');
+        
+        // Supprimer
+        Route::delete('{id}/destroy-global', [UnavailabilityController::class, 'destroyGlobal'])
+            ->name('destroy-global');
+        
+        
+        // ==================== INDISPONIBILITÉS AUDITEURS ====================
+        
+        // Créer
+        Route::post('store-auditor', [UnavailabilityController::class, 'storeAuditor'])
+            ->name('store-auditor');
+        
+        // Mettre à jour
+        Route::put('{id}/update-auditor', [UnavailabilityController::class, 'updateAuditor'])
+            ->name('update-auditor');
+        
+        // Approuver
+        Route::post('{id}/approve-auditor', [UnavailabilityController::class, 'approveAuditor'])
+            ->name('approve-auditor');
+        
+        // Supprimer
+        Route::delete('{id}/destroy-auditor', [UnavailabilityController::class, 'destroyAuditor'])
+            ->name('destroy-auditor');
+        
+        
+        // ==================== TYPES PERSONNALISÉS ====================
+        
+        // Créer un type personnalisé (NOUVEAU - C'EST LA ROUTE MANQUANTE!)
+        Route::post('create-type', [UnavailabilityController::class, 'createType'])
+            ->name('create-type');
+        
+        // Obtenir les types par catégorie
+        Route::get('types/{category}', [UnavailabilityController::class, 'getTypesByCategory'])
+            ->name('types-by-category');
+        
+        
+        // ==================== REQUÊTES API ====================
+        
+        // Vérifier disponibilité auditeur
+        Route::get('check-availability', [UnavailabilityController::class, 'checkAvailability'])
+            ->name('check-availability');
+        
+        // Indisponibilités par période
+        Route::get('by-period', [UnavailabilityController::class, 'getByPeriod'])
+            ->name('by-period');
+        
+        // Statistiques
+        Route::get('stats', [UnavailabilityController::class, 'getStats'])
+            ->name('stats');
+        
+        // Export CSV
+        Route::get('export-csv', [UnavailabilityController::class, 'exportCsv'])
+            ->name('export-csv');
+    });

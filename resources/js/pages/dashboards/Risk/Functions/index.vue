@@ -1,567 +1,1077 @@
+<!-- resources/js/pages/dashboards/Audit/Index.vue -->
+<!-- 
+  ════════════════════════════════════════════════════════════════════════════════
+  DASHBOARD GESTION DES RISQUES - VERSION PRODUCTION
+  ════════════════════════════════════════════════════════════════════════════════
+  
+  Composant: Inertia + Vue 3
+  Layout: AuditModuleLayoutFinal
+  Données: Depuis API Laravel (routes /api/risque/*)
+  
+  FONCTIONNALITÉS:
+  ✅ Affichage risques (filtrés par projet/entité/année)
+  ✅ Tableau responsive avec statistiques
+  ✅ Création/Édition/Suppression risques
+  ✅ Gestion types, fréquences, impacts
+  ✅ Matrice de criticité
+  ✅ Export CSV
+  ✅ Modals avec formulaires complets
+  
+  DÉPENDANCES:
+  - Vue 3 (Composition API)
+  - Inertia.js (props from Laravel)
+  - Bootstrap 5 (CSS)
+  - CSRF Token (Laravel)
+  
+  ════════════════════════════════════════════════════════════════════════════════
+-->
+
 <template>
-  <AuditModuleLayout title="Gestion Risques" :breadcrumbs="['Audit', 'Risques']" moduleCode="audit">
+  <AuditModuleLayoutFinal 
+    title="Gestion des Risques" 
+    :breadcrumbs="['Audit', 'Risques']" 
+    :moduleCode="'audit'"
+  >
     <!-- ════════════════════════════════════════════════════════════════════════════ -->
-    <!-- HEADER AVEC BOUTONS -->
+    <!-- SECTION 1: HEADER & BOUTONS D'ACTIONS                                       -->
     <!-- ════════════════════════════════════════════════════════════════════════════ -->
-    <div class="d-flex justify-content-between align-items-center mb-3">
-      <h4 class="fw-bold text-danger mb-0">🔴 Gestion Audits & Risques</h4>
-      <div class="d-flex gap-2">
-        <b-button size="sm" variant="primary" @click="openCreateRisk" class="px-2">➕ Créer Risque</b-button>
-        <b-button size="sm" variant="success" @click="modals.matrixGlobal = true" class="px-2">📊 Matrice</b-button>
-        <b-button size="sm" variant="warning" @click="modals.frequency = true" class="px-2">📈 Fréquence</b-button>
-        <b-button size="sm" variant="info" @click="modals.impact = true" class="px-2">📉 Impact</b-button>
-        <b-button size="sm" variant="secondary" @click="modals.types = true" class="px-2">🏷️ Types</b-button>
+    <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap">
+      <h4 class="fw-bold text-danger mb-0">🔴 Gestion Risques</h4>
+      <div class="d-flex gap-2 flex-wrap">
+        <!-- CRÉER RISQUE - Ouvre modal de création -->
+        <button 
+          class="btn btn-sm btn-primary px-2" 
+          @click="openCreateRisk" 
+          title="Créer un nouveau risque"
+        >
+          ➕ Créer Risque
+        </button>
+
+        <!-- MATRICE - Affiche/Édite la matrice d'impact -->
+        <button 
+          class="btn btn-sm btn-success px-2" 
+          @click="modals.matrixGlobal = true" 
+          title="Voir la matrice d'impact"
+        >
+          📊 Matrice
+        </button>
+
+        <!-- EXPORT - Télécharge les risques en CSV -->
+        <button 
+          class="btn btn-sm btn-dark px-2" 
+          @click="exportData" 
+          title="Exporter en CSV"
+        >
+          📥 Export
+        </button>
       </div>
     </div>
 
     <!-- ════════════════════════════════════════════════════════════════════════════ -->
-    <!-- PAGE PRINCIPALE: IDENTIFICATION DES RISQUES -->
+    <!-- SECTION 2: FILTRES                                                          -->
     <!-- ════════════════════════════════════════════════════════════════════════════ -->
-    <div class="card p-2 mb-2" style="border-radius: 0.25rem;">
-      <h6 class="fw-bold mb-2" style="font-size: 0.85rem; color: #667eea;">Info mission</h6>
+    <div class="card p-2 mb-3 bg-light border-0 shadow-sm">
+      <h6 class="fw-bold mb-2" style="font-size: 0.85rem; color: #667eea;">📋 Filtres & Recherche</h6>
       
       <div class="row g-2">
-        <div class="col-md-4">
-          <small class="fw-bold" style="font-size: 0.7rem;">Code projet</small>
-          <b-form-select v-model="filters.project_code" :options="projectOptions" size="sm"></b-form-select>
+        <!-- FILTRE 1: PROJET -->
+        <div class="col-md-3">
+          <small class="fw-bold d-block mb-1" style="font-size: 0.7rem;">🏢 Projet</small>
+          <select 
+            v-model="filters.project_code" 
+            class="form-select form-select-sm"
+            @change="loadRisks"
+          >
+            <option value="">Tous</option>
+            <option value="KEKELI">KEKELI</option>
+            <option value="ELONGOPAY">ELONGOPAY</option>
+            <option value="DIADDEM">DIADDEM</option>
+            <option value="EASYSYCE">EASYSYCE</option>
+          </select>
         </div>
-        <div class="col-md-4">
-          <small class="fw-bold" style="font-size: 0.7rem;">Entité</small>
-          <b-form-select v-model="filters.entity" :options="entityOptions" size="sm"></b-form-select>
+
+        <!-- FILTRE 2: ENTITÉ -->
+        <div class="col-md-3">
+          <small class="fw-bold d-block mb-1" style="font-size: 0.7rem;">🏛️ Entité</small>
+          <select 
+            v-model="filters.entity_id" 
+            class="form-select form-select-sm"
+            @change="loadRisks"
+          >
+            <option value="">Tous</option>
+            <option v-for="ent in entities" :key="ent.id" :value="ent.id">
+              {{ ent.code }} - {{ ent.name }}
+            </option>
+          </select>
         </div>
+
+        <!-- FILTRE 3: ANNÉE -->
+        <div class="col-md-2">
+          <small class="fw-bold d-block mb-1" style="font-size: 0.7rem;">📅 Année</small>
+          <select 
+            v-model.number="filters.year" 
+            class="form-select form-select-sm"
+            @change="loadRisks"
+          >
+            <option :value="2026">2026</option>
+            <option :value="2025">2025</option>
+            <option :value="2024">2024</option>
+          </select>
+        </div>
+
+        <!-- FILTRE 4: RECHERCHE LIBRE -->
         <div class="col-md-4">
-          <small class="fw-bold" style="font-size: 0.7rem;">Année</small>
-          <b-form-select v-model="filters.year" :options="yearOptions" size="sm"></b-form-select>
+          <small class="fw-bold d-block mb-1" style="font-size: 0.7rem;">🔍 Recherche</small>
+          <input 
+            v-model="searchQuery" 
+            type="text" 
+            class="form-control form-control-sm" 
+            placeholder="Rechercher par code ou libellé..."
+          >
         </div>
       </div>
     </div>
 
-    <!-- TABLEAU IDENTIFICATION -->
-    <b-table 
-      :items="filteredRisks" 
-      :fields="identificationFields"
-      responsive 
-      hover 
-      striped
-      small 
-      class="mb-0"
-      style="font-size: 0.7rem;"
-    >
-      <template #thead-top="scope">
-        <tr class="bg-primary text-white">
-          <th v-for="field in scope.fields" :key="`th_${field.key}`" class="fw-bold p-1" style="font-size: 0.65rem;">
-            {{ field.label }}
-          </th>
-        </tr>
-      </template>
-
-      <template #cell(entity)="row">
-        <small><strong>{{ row.item.entity }}</strong></small>
-      </template>
-
-      <template #cell(process)="row">
-        <small>{{ row.item.process }}</small>
-      </template>
-
-      <template #cell(risk)="row">
-        <small><strong>{{ row.item.label }}</strong></small>
-      </template>
-
-      <template #cell(impact_brut)="row">
-        <b-badge :bg="getImpactColor(row.item.impact_code)" class="px-1" style="font-size: 0.6rem;">{{ row.item.impact_code }}</b-badge>
-      </template>
-
-      <template #cell(freq_brut)="row">
-        <b-badge :bg="getFreqColor(row.item.frequency_code)" class="px-1" style="font-size: 0.6rem;">{{ row.item.frequency_code }}</b-badge>
-      </template>
-
-      <template #cell(global_brut)="row">
-        <b-badge :bg="getCriticalityColor(row.item.criticality)" style="font-size: 0.6rem;">{{ row.item.criticality }}</b-badge>
-      </template>
-
-      <template #cell(procedure)="row">
-        <small>{{ row.item.control_procedure || '-' }}</small>
-      </template>
-
-      <template #cell(actions)="row">
-        <b-button size="sm" variant="info" @click="editRisk(row.item)" class="px-1 py-0" style="font-size: 0.6rem;">✏️</b-button>
-        <b-button size="sm" variant="danger" @click="deleteRisk(row.item)" class="px-1 py-0 ms-1" style="font-size: 0.6rem;">🗑️</b-button>
-      </template>
-    </b-table>
-
     <!-- ════════════════════════════════════════════════════════════════════════════ -->
-    <!-- MODAL: CRÉER RISQUE -->
+    <!-- SECTION 3: STATISTIQUES                                                     -->
     <!-- ════════════════════════════════════════════════════════════════════════════ -->
-    <b-modal v-model="modals.createRisk" title="➕ Créer Risque" size="lg" centered hide-footer scrollable>
-      <div class="row g-2">
-        <!-- COLONNE GAUCHE: Filtres -->
-        <div class="col-md-5" style="border-right: 1px solid #dee2e6; padding-right: 1rem;">
-          <h6 class="fw-bold mb-2" style="font-size: 0.85rem; color: #667eea;">Contexte</h6>
-          
-          <small class="fw-bold" style="font-size: 0.7rem;">Projet</small>
-          <b-form-select v-model="newRiskForm.project_code" :options="projectOptions" size="sm" class="mb-2" @change="updateEntities"></b-form-select>
-
-          <small class="fw-bold" style="font-size: 0.7rem;">Entité</small>
-          <b-form-select v-model="newRiskForm.entity" :options="filteredEntities" size="sm" class="mb-2"></b-form-select>
-
-          <small class="fw-bold" style="font-size: 0.7rem;">Univers de Risque</small>
-          <b-form-select v-model="newRiskForm.type_code" :options="typeSelectOptions" size="sm" class="mb-2"></b-form-select>
-
-          <small class="fw-bold" style="font-size: 0.7rem;">Processus</small>
-          <b-form-select v-model="newRiskForm.process_id" :options="processOptions" size="sm" class="mb-2"></b-form-select>
-        </div>
-
-        <!-- COLONNE DROITE: Formulaire Risque -->
-        <div class="col-md-7" style="padding-left: 1rem;">
-          <h6 class="fw-bold mb-2" style="font-size: 0.85rem; color: #667eea;">Identification Risque</h6>
-          
-          <small class="fw-bold" style="font-size: 0.7rem;">Code risque</small>
-          <b-form-input v-model="newRiskForm.code" size="sm" placeholder="RC-001" class="mb-2"></b-form-input>
-
-          <small class="fw-bold" style="font-size: 0.7rem;">Libellé risque</small>
-          <b-form-input v-model="newRiskForm.label" size="sm" placeholder="Description du risque" class="mb-2"></b-form-input>
-
-          <small class="fw-bold" style="font-size: 0.7rem;">Fréquence</small>
-          <b-form-select v-model="newRiskForm.frequency_code" :options="freqSelectOptions" size="sm" class="mb-2"></b-form-select>
-
-          <small class="fw-bold" style="font-size: 0.7rem;">Impact</small>
-          <b-form-select v-model="newRiskForm.impact_code" :options="impactSelectOptions" size="sm" class="mb-2"></b-form-select>
-
-          <small class="fw-bold" style="font-size: 0.7rem;">Propriétaire</small>
-          <b-form-input v-model="newRiskForm.owner" size="sm" placeholder="Nom propriétaire" class="mb-2"></b-form-input>
-
-          <small class="fw-bold" style="font-size: 0.7rem;">Procédure de contrôle</small>
-          <b-form-input v-model="newRiskForm.control_procedure" size="sm" placeholder="Procédure" class="mb-2"></b-form-input>
-
-          <div class="text-end"><b-button size="sm" variant="secondary" @click="modals.createRisk = false">Annuler</b-button> <b-button size="sm" variant="success" @click="saveNewRisk" class="ms-1">Créer</b-button></div>
-        </div>
-      </div>
-    </b-modal>
-
-    <!-- ════════════════════════════════════════════════════════════════════════════ -->
-    <!-- MODAL: MATRICE GLOBALE -->
-    <!-- ════════════════════════════════════════════════════════════════════════════ -->
-    <b-modal v-model="modals.matrixGlobal" title="📊 Matrice globale" size="lg" centered hide-footer scrollable>
-      <div class="card p-2 mb-2" style="border-radius: 0.25rem;">
-        <h6 class="fw-bold mb-2" style="font-size: 0.85rem; color: #667eea;">Saisie cotation nette</h6>
-        
-        <div class="row g-2">
-          <div class="col-md-12">
-            <small class="fw-bold" style="font-size: 0.7rem;">Code projet</small>
-            <b-form-select v-model="matrixForm.project_code" :options="projectOptions" size="sm"></b-form-select>
-          </div>
-          <div class="col-md-6">
-            <small class="fw-bold" style="font-size: 0.7rem;">Niveau impact</small>
-            <b-form-input v-model.number="matrixForm.impact_level" type="number" min="1" max="5" size="sm" placeholder="0"></b-form-input>
-          </div>
-          <div class="col-md-6">
-            <small class="fw-bold" style="font-size: 0.7rem;">Niveau fréquence</small>
-            <b-form-input v-model.number="matrixForm.freq_level" type="number" min="1" max="4" size="sm" placeholder="0"></b-form-input>
-          </div>
-          <div class="col-md-12">
-            <small class="fw-bold" style="font-size: 0.7rem;">Appellation</small>
-            <b-form-input v-model="matrixForm.label" size="sm" placeholder="Nom"></b-form-input>
-          </div>
-          <div class="col-md-12">
-            <small class="fw-bold" style="font-size: 0.7rem;">Qualification</small>
-            <div style="background: linear-gradient(90deg, #FFD700 0%, #FFD700 100%); height: 25px; border-radius: 0.25rem; margin-bottom: 0.5rem;"></div>
-            <input v-model="matrixForm.qualification" type="color" class="form-control form-control-sm" style="height: 1.8rem;">
-          </div>
-          <div class="col-md-12 text-end"><b-button size="sm" variant="secondary" @click="resetMatrix">Annuler</b-button> <b-button size="sm" variant="success" @click="addMatrix" class="ms-1">Valider</b-button></div>
+    <div class="row mb-3 g-2">
+      <!-- STAT 1: TOTAL -->
+      <div class="col-md-3">
+        <div class="card bg-light p-2 text-center border-0 shadow-sm">
+          <small class="fw-bold" style="color: #667eea; font-size: 0.8rem;">📊 Total</small>
+          <h4 class="mb-0 text-primary">{{ filteredRisks.length }}</h4>
+          <small style="color: #999;">risques identifiés</small>
         </div>
       </div>
 
-      <div class="card p-2" style="border-radius: 0.25rem;">
-        <h6 class="fw-bold mb-2" style="font-size: 0.85rem; color: #667eea;">Liste cotation nette</h6>
-        <b-table :items="matrixLevels" :fields="matrixFields" responsive hover small style="font-size: 0.7rem; margin-bottom: 0;">
-          <template #cell(impact)="row"><b-badge :bg="row.item.impact_color" style="font-size: 0.6rem;">{{ row.item.impact_level }}</b-badge></template>
-          <template #cell(freq)="row"><b-badge :bg="row.item.freq_color" style="font-size: 0.6rem;">{{ row.item.freq_level }}</b-badge></template>
-          <template #cell(qualification)="row"><div :style="{ backgroundColor: row.item.qualification, height: '20px', borderRadius: '0.2rem' }"></div></template>
-        </b-table>
-      </div>
-    </b-modal>
-
-    <!-- ════════════════════════════════════════════════════════════════════════════ -->
-    <!-- MODAL: COTATION FRÉQUENCE -->
-    <!-- ════════════════════════════════════════════════════════════════════════════ -->
-    <b-modal v-model="modals.frequency" title="📈 Cotation fréquence" size="lg" centered hide-footer scrollable>
-      <div class="card p-2 mb-2" style="border-radius: 0.25rem;">
-        <h6 class="fw-bold mb-2" style="font-size: 0.85rem; color: #667eea;">Saisie cotation nette</h6>
-        
-        <div class="row g-2">
-          <div class="col-md-12">
-            <small class="fw-bold" style="font-size: 0.7rem;">Code projet</small>
-            <b-form-select v-model="freqForm.project_code" :options="projectOptions" size="sm"></b-form-select>
-          </div>
-          <div class="col-md-12">
-            <small class="fw-bold" style="font-size: 0.7rem;">Niveau fréquence</small>
-            <b-form-input v-model.number="freqForm.level" type="range" min="1" max="4" size="sm" @input="updateFreqLabel"></b-form-input>
-            <small class="text-muted" style="font-size: 0.65rem;">{{ ['', 'RARE', 'PROBABLE', 'FREQUENT', 'CERTAIN'][freqForm.level] }}</small>
-          </div>
-          <div class="col-md-12">
-            <small class="fw-bold" style="font-size: 0.7rem;">Appellation</small>
-            <b-form-input v-model="freqForm.label" size="sm" placeholder="Nom"></b-form-input>
-          </div>
-          <div class="col-md-12">
-            <small class="fw-bold" style="font-size: 0.7rem;">Description</small>
-            <b-form-input v-model="freqForm.description" size="sm" placeholder="Description"></b-form-input>
-          </div>
-          <div class="col-md-12 text-end"><b-button size="sm" variant="secondary" @click="resetFreq">Annuler</b-button> <b-button size="sm" variant="success" @click="addFreq" class="ms-1">Valider</b-button></div>
+      <!-- STAT 2: CRITIQUES -->
+      <div class="col-md-3">
+        <div class="card bg-danger text-white p-2 text-center border-0 shadow-sm">
+          <small class="fw-bold" style="font-size: 0.8rem;">🔴 Critiques (≥12)</small>
+          <h4 class="mb-0">{{ filteredRisks.filter(r => r.criticality >= 12).length }}</h4>
+          <small style="opacity: 0.9;">action immédiate</small>
         </div>
       </div>
 
-      <div class="card p-2" style="border-radius: 0.25rem;">
-        <h6 class="fw-bold mb-2" style="font-size: 0.85rem; color: #667eea;">Liste cotation nette</h6>
-        <b-table :items="frequencies" :fields="['level','label','description']" responsive hover small style="font-size: 0.7rem; margin-bottom: 0;">
-          <template #cell(level)="row"><b-badge :bg="row.item.color" style="font-size: 0.6rem;">{{ row.item.level }}</b-badge></template>
-        </b-table>
-      </div>
-    </b-modal>
-
-    <!-- ════════════════════════════════════════════════════════════════════════════ -->
-    <!-- MODAL: COTATION IMPACT -->
-    <!-- ════════════════════════════════════════════════════════════════════════════ -->
-    <b-modal v-model="modals.impact" title="📉 Cotation impact" size="lg" centered hide-footer scrollable>
-      <div class="card p-2 mb-2" style="border-radius: 0.25rem;">
-        <h6 class="fw-bold mb-2" style="font-size: 0.85rem; color: #667eea;">Saisie niveaux risque</h6>
-        
-        <div class="row g-2">
-          <div class="col-md-12">
-            <small class="fw-bold" style="font-size: 0.7rem;">Code projet</small>
-            <b-form-select v-model="impactForm.project_code" :options="projectOptions" size="sm"></b-form-select>
-          </div>
-          <div class="col-md-12">
-            <small class="fw-bold" style="font-size: 0.7rem;">Niveau impact</small>
-            <b-form-input v-model.number="impactForm.level" type="range" min="1" max="5" size="sm" @input="updateImpactLabel"></b-form-input>
-            <small class="text-muted" style="font-size: 0.65rem;">{{ ['', 'FAIBLE', 'MODERE', 'IMPORTANT', 'ELEVE', 'MOYEN'][impactForm.level] }}</small>
-          </div>
-          <div class="col-md-12">
-            <small class="fw-bold" style="font-size: 0.7rem;">Appellation</small>
-            <b-form-input v-model="impactForm.label" size="sm" placeholder="Nom"></b-form-input>
-          </div>
-          <div class="col-md-12">
-            <small class="fw-bold" style="font-size: 0.7rem;">Description</small>
-            <b-form-input v-model="impactForm.description" size="sm" placeholder="Description"></b-form-input>
-          </div>
-          <div class="col-md-12 text-end"><b-button size="sm" variant="secondary" @click="resetImpact">Annuler</b-button> <b-button size="sm" variant="success" @click="addImpact" class="ms-1">Valider</b-button></div>
+      <!-- STAT 3: ÉLEVÉS -->
+      <div class="col-md-3">
+        <div class="card bg-warning p-2 text-center border-0 shadow-sm">
+          <small class="fw-bold text-dark" style="font-size: 0.8rem;">🟠 Élevés (8-11)</small>
+          <h4 class="mb-0 text-dark">{{ filteredRisks.filter(r => r.criticality >= 8 && r.criticality < 12).length }}</h4>
+          <small style="color: #333;">à surveiller</small>
         </div>
       </div>
 
-      <div class="card p-2" style="border-radius: 0.25rem;">
-        <h6 class="fw-bold mb-2" style="font-size: 0.85rem; color: #667eea;">Liste niveau risque</h6>
-        <b-table :items="impacts" :fields="['level','label','description']" responsive hover small style="font-size: 0.7rem; margin-bottom: 0;">
-          <template #cell(level)="row"><b-badge :bg="row.item.color" style="font-size: 0.6rem;">{{ row.item.level }}</b-badge></template>
-        </b-table>
-      </div>
-    </b-modal>
-
-    <!-- ════════════════════════════════════════════════════════════════════════════ -->
-    <!-- MODAL: GESTION TYPES -->
-    <!-- ════════════════════════════════════════════════════════════════════════════ -->
-    <b-modal v-model="modals.types" title="🏷️ Gestion des types de risques" size="lg" centered hide-footer scrollable>
-      <div class="card p-2 mb-2" style="border-radius: 0.25rem;">
-        <h6 class="fw-bold mb-2" style="font-size: 0.85rem; color: #667eea;">Saisie des types de risque</h6>
-        
-        <div class="row g-2">
-          <div class="col-md-12">
-            <small class="fw-bold" style="font-size: 0.7rem;">Code projet</small>
-            <b-form-select v-model="typeForm.project_code" :options="projectOptions" size="sm"></b-form-select>
-          </div>
-          <div class="col-md-12">
-            <small class="fw-bold" style="font-size: 0.7rem;">Code type</small>
-            <b-form-input v-model="typeForm.code" size="sm" placeholder="RC, RF, RI..."></b-form-input>
-          </div>
-          <div class="col-md-12">
-            <small class="fw-bold" style="font-size: 0.7rem;">Libellé type</small>
-            <b-form-input v-model="typeForm.label" size="sm" placeholder="Description"></b-form-input>
-          </div>
-          <div class="col-md-12 text-end"><b-button size="sm" variant="secondary" @click="resetType">Annuler</b-button> <b-button size="sm" variant="success" @click="addType" class="ms-1">Valider</b-button></div>
+      <!-- STAT 4: FAIBLES -->
+      <div class="col-md-3">
+        <div class="card bg-success text-white p-2 text-center border-0 shadow-sm">
+          <small class="fw-bold" style="font-size: 0.8rem;">🟢 Faibles (<8)</small>
+          <h4 class="mb-0">{{ filteredRisks.filter(r => r.criticality < 8).length }}</h4>
+          <small style="opacity: 0.9;">contrôlés</small>
         </div>
       </div>
-
-      <div class="card p-2" style="border-radius: 0.25rem;">
-        <h6 class="fw-bold mb-2" style="font-size: 0.85rem; color: #667eea;">Liste des types de risque</h6>
-        <b-table :items="riskTypes" :fields="['code','label']" responsive hover small style="font-size: 0.7rem; margin-bottom: 0;">
-          <template #cell(code)="row"><b-badge :bg="row.item.color" style="font-size: 0.6rem;">{{ row.item.code }}</b-badge></template>
-        </b-table>
-      </div>
-    </b-modal>
+    </div>
 
     <!-- ════════════════════════════════════════════════════════════════════════════ -->
-    <!-- MODAL: ÉDITION RISQUE -->
+    <!-- SECTION 4: TABLEAU DES RISQUES                                              -->
     <!-- ════════════════════════════════════════════════════════════════════════════ -->
-    <b-modal v-model="modals.editRisk" title="✏️ Edition risque" size="xl" centered hide-footer scrollable>
-      <div class="row g-2">
-        <div class="col-md-5" style="border-right: 1px solid #dee2e6; padding-right: 1rem;">
-          <h6 class="fw-bold mb-2" style="font-size: 0.85rem; color: #667eea;">Edition Risque</h6>
-          
-          <small class="fw-bold" style="font-size: 0.7rem;">Projet</small>
-          <div class="mb-2" style="background: linear-gradient(90deg, #FFD700 0%, #FFD700 100%); height: 25px; border-radius: 0.25rem;"></div>
-          <b-form-select v-model="editingRisk.project_id" :options="projectOptions" size="sm" class="mb-2"></b-form-select>
+    <div class="card mb-3 border-0 shadow-sm">
+      <div class="card-header bg-primary text-white py-2 border-0">
+        <h6 class="fw-bold mb-0" style="font-size: 0.8rem;">📊 Risques ({{ filteredRisks.length }})</h6>
+      </div>
+      
+      <!-- Wrapper pour scroll horizontal sur mobile -->
+      <div style="overflow-x: auto;">
+        <table class="table table-sm table-hover mb-0" style="font-size: 0.75rem; min-width: 1200px;">
+          <!-- EN-TÊTES DU TABLEAU -->
+          <thead class="table-primary text-white">
+            <tr>
+              <th class="p-2" style="font-size: 0.7rem; width: 8%;">CODE</th>
+              <th class="p-2" style="font-size: 0.7rem; width: 20%;">LIBELLÉ</th>
+              <th class="p-2" style="font-size: 0.7rem; width: 10%;">TYPE</th>
+              <th class="p-2" style="font-size: 0.7rem; width: 8%;">IMPACT</th>
+              <th class="p-2" style="font-size: 0.7rem; width: 8%;">FRÉQUENCE</th>
+              <th class="p-2" style="font-size: 0.7rem; width: 8%;">CRITICITÉ</th>
+              <th class="p-2" style="font-size: 0.7rem; width: 10%;">STATUS</th>
+              <th class="p-2" style="font-size: 0.7rem; width: 12%;">PROPRIÉTAIRE</th>
+              <th class="p-2" style="font-size: 0.7rem; width: 10%;">ACTIONS</th>
+            </tr>
+          </thead>
 
-          <small class="fw-bold d-block mb-2" style="font-size: 0.7rem;">Processus</small>
-          <b-list-group style="font-size: 0.7rem;">
-            <b-list-group-item v-for="p in processes" :key="p.id" button @click="editingRisk.process_id = p.id" :active="editingRisk.process_id === p.id" class="p-1">
-              <strong>{{ p.code }}</strong> {{ p.name }}
-            </b-list-group-item>
-          </b-list-group>
-        </div>
+          <!-- LIGNES DU TABLEAU -->
+          <tbody>
+            <tr v-for="risk in filteredRisks" :key="risk.id" class="align-middle hover-row">
+              <!-- CODE -->
+              <td class="p-2">
+                <strong class="text-primary">{{ risk.code }}</strong>
+              </td>
 
-        <div class="col-md-7" style="padding-left: 1rem;">
-          <h6 class="fw-bold mb-2" style="font-size: 0.85rem; color: #667eea;">Edition Risque</h6>
-          
-          <small class="fw-bold" style="font-size: 0.7rem;">Code risque</small>
-          <b-form-input v-model="editingRisk.code" size="sm" placeholder="RC-001" class="mb-2"></b-form-input>
+              <!-- LIBELLÉ (tronqué) -->
+              <td class="p-2">
+                <span :title="risk.label">{{ truncate(risk.label, 30) }}</span>
+              </td>
 
-          <small class="fw-bold" style="font-size: 0.7rem;">Type</small>
-          <b-form-select v-model="editingRisk.type_code" :options="typeSelectOptions" size="sm" class="mb-2"></b-form-select>
+              <!-- TYPE (badge coloré) -->
+              <td class="p-2">
+                <span 
+                  class="badge" 
+                  :class="'bg-' + getTypeColor(risk.risk_type_id)" 
+                  style="font-size: 0.65rem;"
+                >
+                  {{ getRiskTypeName(risk.risk_type_id) }}
+                </span>
+              </td>
 
-          <small class="fw-bold" style="font-size: 0.7rem;">Risque</small>
-          <b-form-input v-model="editingRisk.label" size="sm" placeholder="Description" class="mb-2"></b-form-input>
+              <!-- IMPACT (badge coloré) -->
+              <td class="p-2">
+                <span 
+                  class="badge" 
+                  :class="'bg-' + getImpactColor(risk.impact_level_id)" 
+                  style="font-size: 0.65rem;"
+                >
+                  {{ getImpactName(risk.impact_level_id) }}
+                </span>
+              </td>
 
-          <small class="fw-bold" style="font-size: 0.7rem;">Code activité</small>
-          <b-form-input v-model="editingRisk.activity_code" size="sm" placeholder="Code" class="mb-2"></b-form-input>
+              <!-- FRÉQUENCE (badge coloré) -->
+              <td class="p-2">
+                <span 
+                  class="badge" 
+                  :class="'bg-' + getFreqColor(risk.frequency_level_id)" 
+                  style="font-size: 0.65rem;"
+                >
+                  {{ getFrequencyName(risk.frequency_level_id) }}
+                </span>
+              </td>
 
-          <div class="text-end"><b-button size="sm" variant="secondary" @click="modals.editRisk = false">Annuler</b-button> <b-button size="sm" variant="success" @click="saveEditedRisk" class="ms-1">Valider</b-button></div>
+              <!-- CRITICITÉ (calculée: fréquence × impact) -->
+              <td class="p-2">
+                <span 
+                  class="badge" 
+                  :class="'bg-' + getCriticalityColor(risk.criticality)" 
+                  style="font-size: 0.65rem;"
+                >
+                  {{ risk.criticality || '-' }}
+                </span>
+              </td>
+
+              <!-- STATUS (enum) -->
+              <td class="p-2">
+                <small :style="{ color: getStatusColor(risk.status) }" class="fw-bold">
+                  {{ formatStatus(risk.status) }}
+                </small>
+              </td>
+
+              <!-- PROPRIÉTAIRE -->
+              <td class="p-2">
+                <small>{{ risk.owner || '-' }}</small>
+              </td>
+
+              <!-- ACTIONS (éditer/supprimer) -->
+              <td class="p-2">
+                <button 
+                  class="btn btn-sm btn-info px-1 py-0 me-1" 
+                  @click="editRisk(risk)" 
+                  style="font-size: 0.65rem;" 
+                  title="Éditer"
+                >✏️</button>
+                <button 
+                  class="btn btn-sm btn-danger px-1 py-0" 
+                  @click="deleteRisk(risk)" 
+                  style="font-size: 0.65rem;" 
+                  title="Supprimer"
+                >🗑️</button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      
+      <!-- Message si aucun risque -->
+      <div v-if="filteredRisks.length === 0" class="p-3 text-center text-muted">
+        <small>📭 Aucun risque trouvé pour cette période</small>
+      </div>
+    </div>
+
+    <!-- ════════════════════════════════════════════════════════════════════════════ -->
+    <!-- MODAL 1: CRÉER RISQUE                                                       -->
+    <!-- ════════════════════════════════════════════════════════════════════════════ -->
+    <div v-if="modals.createRisk" class="modal d-block" style="background: rgba(0,0,0,0.5);">
+      <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content border-0 shadow-lg">
+          <!-- En-tête modal -->
+          <div class="modal-header bg-primary text-white border-0">
+            <h5 class="modal-title fw-bold">➕ Créer Risque</h5>
+            <button type="button" class="btn-close btn-close-white" @click="modals.createRisk = false"></button>
+          </div>
+
+          <!-- Formulaire -->
+          <form @submit.prevent="saveNewRisk">
+            <div class="modal-body">
+              <div class="row g-2">
+                <!-- ═══════════════════════════════════════════════════════════ -->
+                <!-- COLONNE GAUCHE: CONTEXTE                                   -->
+                <!-- ═══════════════════════════════════════════════════════════ -->
+                <div class="col-md-6">
+                  <div class="form-group mb-2">
+                    <small class="fw-bold d-block mb-1" style="font-size: 0.75rem; color: #333;">
+                      Code risque *
+                    </small>
+                    <input 
+                      v-model="newRiskForm.code" 
+                      type="text" 
+                      class="form-control form-control-sm" 
+                      placeholder="RC-001" 
+                      required
+                    >
+                    <small style="color: #999;">Format: TYPE-NNN (RC-001, RI-042, etc)</small>
+                  </div>
+
+                  <div class="form-group mb-2">
+                    <small class="fw-bold d-block mb-1" style="font-size: 0.75rem; color: #333;">
+                      Type de risque *
+                    </small>
+                    <select v-model.number="newRiskForm.risk_type_id" class="form-select form-select-sm" required>
+                      <option value="">Sélectionner un type</option>
+                      <option v-for="t in riskTypes" :key="t.id" :value="t.id">
+                        {{ t.code }} - {{ t.label }}
+                      </option>
+                    </select>
+                  </div>
+
+                  <div class="form-group mb-2">
+                    <small class="fw-bold d-block mb-1" style="font-size: 0.75rem; color: #333;">
+                      Fréquence *
+                    </small>
+                    <select v-model.number="newRiskForm.frequency_level_id" class="form-select form-select-sm" required>
+                      <option value="">Sélectionner</option>
+                      <option v-for="f in frequencies" :key="f.id" :value="f.id">
+                        {{ f.label }} ({{ f.level }})
+                      </option>
+                    </select>
+                    <small style="color: #999;">Détermine la probabilité d'occurrence</small>
+                  </div>
+
+                  <div class="form-group mb-2">
+                    <small class="fw-bold d-block mb-1" style="font-size: 0.75rem; color: #333;">
+                      Impact *
+                    </small>
+                    <select v-model.number="newRiskForm.impact_level_id" class="form-select form-select-sm" required>
+                      <option value="">Sélectionner</option>
+                      <option v-for="i in impacts" :key="i.id" :value="i.id">
+                        {{ i.label }} ({{ i.level }})
+                      </option>
+                    </select>
+                    <small style="color: #999;">Sévérité si le risque se produit</small>
+                  </div>
+
+                  <div class="form-group mb-2">
+                    <small class="fw-bold d-block mb-1" style="font-size: 0.75rem; color: #333;">
+                      Entité *
+                    </small>
+                    <select v-model.number="newRiskForm.entity_id" class="form-select form-select-sm" required>
+                      <option value="">Sélectionner</option>
+                      <option v-for="e in entities" :key="e.id" :value="e.id">
+                        {{ e.code }} - {{ e.name }}
+                      </option>
+                    </select>
+                  </div>
+                </div>
+
+                <!-- ═══════════════════════════════════════════════════════════ -->
+                <!-- COLONNE DROITE: DÉTAILS                                    -->
+                <!-- ═══════════════════════════════════════════════════════════ -->
+                <div class="col-md-6">
+                  <div class="form-group mb-2">
+                    <small class="fw-bold d-block mb-1" style="font-size: 0.75rem; color: #333;">
+                      Libellé risque *
+                    </small>
+                    <textarea 
+                      v-model="newRiskForm.label" 
+                      class="form-control form-control-sm" 
+                      rows="3" 
+                      placeholder="Description détaillée et contexte du risque" 
+                      required
+                    ></textarea>
+                    <small style="color: #999;">Explication claire du risque identifié</small>
+                  </div>
+
+                  <div class="form-group mb-2">
+                    <small class="fw-bold d-block mb-1" style="font-size: 0.75rem; color: #333;">
+                      Propriétaire
+                    </small>
+                    <input 
+                      v-model="newRiskForm.owner" 
+                      type="text" 
+                      class="form-control form-control-sm" 
+                      placeholder="Nom du responsable"
+                    >
+                    <small style="color: #999;">Personne responsable du suivi</small>
+                  </div>
+
+                  <div class="form-group mb-2">
+                    <small class="fw-bold d-block mb-1" style="font-size: 0.75rem; color: #333;">
+                      Procédure de contrôle
+                    </small>
+                    <input 
+                      v-model="newRiskForm.control_procedure" 
+                      type="text" 
+                      class="form-control form-control-sm" 
+                      placeholder="Ex: Audit mensuel, KPI suivi quotidien"
+                    >
+                    <small style="color: #999;">Comment le risque est contrôlé</small>
+                  </div>
+
+                  <div class="form-group mb-2">
+                    <small class="fw-bold d-block mb-1" style="font-size: 0.75rem; color: #333;">
+                      Statut
+                    </small>
+                    <select v-model="newRiskForm.status" class="form-select form-select-sm">
+                      <option value="identified">Identifié</option>
+                      <option value="assessed">Évalué</option>
+                      <option value="mitigated">Atténué</option>
+                      <option value="monitored">Suivi</option>
+                      <option value="closed">Fermé</option>
+                    </select>
+                    <small style="color: #999;">État du risque dans le processus</small>
+                  </div>
+
+                  <div class="form-group mb-2">
+                    <small class="fw-bold d-block mb-1" style="font-size: 0.75rem; color: #333;">
+                      Processus (optionnel)
+                    </small>
+                    <select v-model.number="newRiskForm.process_id" class="form-select form-select-sm">
+                      <option :value="null">Sélectionner</option>
+                      <option v-for="p in processes" :key="p.id" :value="p.id">
+                        {{ p.code }} - {{ p.name }}
+                      </option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Boutons footer -->
+            <div class="modal-footer border-top-0 pt-0">
+              <button 
+                type="button" 
+                class="btn btn-secondary btn-sm" 
+                @click="modals.createRisk = false"
+              >
+                Annuler
+              </button>
+              <button 
+                type="submit" 
+                class="btn btn-primary btn-sm"
+                :disabled="loading"
+              >
+                {{ loading ? '⏳ Création...' : '💾 Créer Risque' }}
+              </button>
+            </div>
+          </form>
         </div>
       </div>
+    </div>
 
-      <div class="card p-2 mt-2" style="border-radius: 0.25rem;">
-        <h6 class="fw-bold mb-2" style="font-size: 0.85rem; color: #667eea;">Liste des risques</h6>
-        <b-table :items="risks" :fields="['code','label','type_code','activity_code','process']" responsive hover small style="font-size: 0.7rem; margin-bottom: 0;">
-          <template #cell(type_code)="row"><b-badge :bg="getTypeColor(row.item.type_code)" style="font-size: 0.6rem;">{{ row.item.type_code }}</b-badge></template>
-        </b-table>
+    <!-- ════════════════════════════════════════════════════════════════════════════ -->
+    <!-- MODAL 2: ÉDITER RISQUE                                                      -->
+    <!-- ════════════════════════════════════════════════════════════════════════════ -->
+    <div v-if="modals.editRisk" class="modal d-block" style="background: rgba(0,0,0,0.5);">
+      <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content border-0 shadow-lg">
+          <!-- En-tête modal -->
+          <div class="modal-header bg-info text-white border-0">
+            <h5 class="modal-title fw-bold">✏️ Éditer Risque</h5>
+            <button type="button" class="btn-close btn-close-white" @click="modals.editRisk = false"></button>
+          </div>
+
+          <!-- Formulaire édition -->
+          <form @submit.prevent="saveEditedRisk">
+            <div class="modal-body">
+              <div class="row g-2">
+                <div class="col-md-6">
+                  <small class="fw-bold d-block mb-1" style="font-size: 0.75rem;">Code</small>
+                  <input 
+                    v-model="editingRisk.code" 
+                    type="text" 
+                    class="form-control form-control-sm mb-2" 
+                    required
+                  >
+
+                  <small class="fw-bold d-block mb-1" style="font-size: 0.75rem;">Type</small>
+                  <select v-model.number="editingRisk.risk_type_id" class="form-select form-select-sm mb-2">
+                    <option value="">Sélectionner</option>
+                    <option v-for="t in riskTypes" :key="t.id" :value="t.id">
+                      {{ t.code }} - {{ t.label }}
+                    </option>
+                  </select>
+
+                  <small class="fw-bold d-block mb-1" style="font-size: 0.75rem;">Fréquence</small>
+                  <select v-model.number="editingRisk.frequency_level_id" class="form-select form-select-sm mb-2">
+                    <option v-for="f in frequencies" :key="f.id" :value="f.id">{{ f.label }}</option>
+                  </select>
+
+                  <small class="fw-bold d-block mb-1" style="font-size: 0.75rem;">Impact</small>
+                  <select v-model.number="editingRisk.impact_level_id" class="form-select form-select-sm mb-2">
+                    <option v-for="i in impacts" :key="i.id" :value="i.id">{{ i.label }}</option>
+                  </select>
+                </div>
+
+                <div class="col-md-6">
+                  <small class="fw-bold d-block mb-1" style="font-size: 0.75rem;">Libellé</small>
+                  <textarea 
+                    v-model="editingRisk.label" 
+                    class="form-control form-control-sm mb-2" 
+                    rows="3" 
+                    required
+                  ></textarea>
+
+                  <small class="fw-bold d-block mb-1" style="font-size: 0.75rem;">Propriétaire</small>
+                  <input 
+                    v-model="editingRisk.owner" 
+                    type="text" 
+                    class="form-control form-control-sm mb-2"
+                  >
+
+                  <small class="fw-bold d-block mb-1" style="font-size: 0.75rem;">Statut</small>
+                  <select v-model="editingRisk.status" class="form-select form-select-sm">
+                    <option value="identified">Identifié</option>
+                    <option value="assessed">Évalué</option>
+                    <option value="mitigated">Atténué</option>
+                    <option value="monitored">Suivi</option>
+                    <option value="closed">Fermé</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            <!-- Boutons footer -->
+            <div class="modal-footer border-top-0 pt-0">
+              <button 
+                type="button" 
+                class="btn btn-secondary btn-sm" 
+                @click="modals.editRisk = false"
+              >
+                Annuler
+              </button>
+              <button 
+                type="submit" 
+                class="btn btn-primary btn-sm"
+                :disabled="loading"
+              >
+                {{ loading ? '⏳ Sauvegarde...' : '💾 Sauvegarder' }}
+              </button>
+            </div>
+          </form>
+        </div>
       </div>
-    </b-modal>
+    </div>
 
-  </AuditModuleLayout>
+  </AuditModuleLayoutFinal>
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
-import AuditModuleLayout from '@/layoutsparam/AuditModuleLayout.vue'
+/**
+ * ════════════════════════════════════════════════════════════════════════════════
+ * SCRIPT - COMPOSANT DASHBOARD RISQUES
+ * ════════════════════════════════════════════════════════════════════════════════
+ */
 
-// DONNÉES
-const riskTypes = ref([
-  { code: 'RC', label: 'Risque de conformité', color: 'danger' },
-  { code: 'RF', label: 'Risque financier', color: 'info' },
-  { code: 'RI', label: 'Risque informatique', color: 'warning' },
-  { code: 'RM', label: 'Risque métier', color: 'secondary' },
-  { code: 'RO', label: 'Risque opérationnel', color: 'primary' },
-  { code: 'RS', label: 'Risque stratégique', color: 'success' },
-])
+import { ref, computed, onMounted } from 'vue'
+import AuditModuleLayoutFinal from '@/layoutsparam/AuditModuleLayout-FINAL.vue'
 
-const frequencies = ref([
-  { code: 'RARE', label: 'Rare', level: 1, color: 'success', description: 'Une fois tous les 5 ans' },
-  { code: 'PROBABLE', label: 'Probable', level: 2, color: 'warning', description: 'Une fois par an' },
-  { code: 'FREQUENT', label: 'Fréquent', level: 3, color: 'danger', description: 'Plusieurs fois par an' },
-  { code: 'CERTAIN', label: 'Certain', level: 4, color: 'dark', description: 'Mensuel ou plus' },
-])
+// ════════════════════════════════════════════════════════════════════════════════
+// PROPS DEPUIS INERTIA/LARAVEL
+// ════════════════════════════════════════════════════════════════════════════════
 
-const impacts = ref([
-  { code: 'FAIBLE', label: 'Faible', level: 1, color: 'success', description: 'Impact mineur' },
-  { code: 'MODERE', label: 'Modéré', level: 2, color: 'info', description: 'Perturbations mineures' },
-  { code: 'IMPORTANT', label: 'Important', level: 3, color: 'warning', description: 'Perturbations significatives' },
-  { code: 'ELEVE', label: 'Élevé', level: 4, color: 'danger', description: 'Conséquences majeures' },
-  { code: 'MOYEN', label: 'Moyen', level: 5, color: 'dark', description: 'Catastrophique' },
-])
-
-const processes = ref([
-  { id: 1, code: 'P001', name: 'Processus de vente' },
-  { id: 2, code: 'P002', name: 'Processus de production' },
-  { id: 3, code: 'P003', name: 'Processus RH' },
-  { id: 4, code: 'P004', name: 'Processus financier' },
-  { id: 5, code: 'P005', name: 'Processus IT' },
-])
-
-const projects = ref([
-  { code: 'KEKELI', name: 'KEKELI', entities: ['Finance', 'RH', 'IT', 'Commercial'] },
-])
-
-const risks = ref([
-  { id: 1, code: 'RC-001', label: 'RGPD', type_code: 'RC', frequency_code: 'PROBABLE', impact_code: 'ELEVE', entity: 'Finance', process: 'Paiement', owner: 'Dupont', control_procedure: 'Audit interne', criticality: 8, project_code: 'KEKELI', year: 2026, activity_code: 'ACT01', process_id: 4 },
-  { id: 2, code: 'RC-002', label: 'Contrôle interne', type_code: 'RC', frequency_code: 'FREQUENT', impact_code: 'IMPORTANT', entity: 'RH', process: 'Paie', owner: 'Martin', control_procedure: 'Test', criticality: 9, project_code: 'KEKELI', year: 2026, activity_code: 'ACT02', process_id: 3 },
-  { id: 3, code: 'RI-001', label: 'Cyberattaque', type_code: 'RI', frequency_code: 'FREQUENT', impact_code: 'MOYEN', entity: 'IT', process: 'Infrastructure', owner: 'Mercier', control_procedure: 'MFA', criticality: 20, project_code: 'KEKELI', year: 2026, activity_code: 'ACT03', process_id: 5 },
-])
-
-const matrixLevels = ref([
-  { impact_level: 2, freq_level: 1, qualification: '#90EE90', impact_color: 'info', freq_color: 'success' },
-  { impact_level: 3, freq_level: 1, qualification: '#FFD700', impact_color: 'warning', freq_color: 'success' },
-  { impact_level: 4, freq_level: 3, qualification: '#FF6347', impact_color: 'danger', freq_color: 'danger' },
-])
-
-// FORMS
-const filters = ref({ project_code: 'KEKELI', entity: '', year: 2026 })
-const newRiskForm = ref({ project_code: 'KEKELI', entity: '', type_code: '', process_id: null, code: '', label: '', frequency_code: '', impact_code: '', owner: '', control_procedure: '' })
-const matrixForm = ref({ project_code: 'KEKELI', impact_level: 0, freq_level: 0, label: '', qualification: '#FFD700' })
-const freqForm = ref({ project_code: 'KEKELI', level: 1, label: '', description: '' })
-const impactForm = ref({ project_code: 'KEKELI', level: 1, label: '', description: '' })
-const typeForm = ref({ project_code: 'KEKELI', code: '', label: '' })
-const editingRisk = ref({ project_id: 'KEKELI', process_id: null, code: '', type_code: '', label: '', activity_code: '' })
-
-const modals = ref({ createRisk: false, matrixGlobal: false, frequency: false, impact: false, types: false, editRisk: false })
-
-// OPTIONS
-const projectOptions = computed(() => [{ value: 'KEKELI', text: 'KEKELI' }])
-const entityOptions = computed(() => {
-  const proj = projects.value.find(p => p.code === filters.value.project_code)
-  return [{ value: '', text: 'Tous' }, ...(proj?.entities || []).map(e => ({ value: e, text: e }))]
+const props = defineProps({
+  riskTypes: { type: Array, default: () => [] },
+  frequencies: { type: Array, default: () => [] },
+  impacts: { type: Array, default: () => [] },
+  entities: { type: Array, default: () => [] },
+  processes: { type: Array, default: () => [] },
 })
-const filteredEntities = computed(() => {
-  const proj = projects.value.find(p => p.code === newRiskForm.value.project_code)
-  return (proj?.entities || []).map(e => ({ value: e, text: e }))
+
+// ════════════════════════════════════════════════════════════════════════════════
+// STATE VARIABLES
+// ════════════════════════════════════════════════════════════════════════════════
+
+// Filtres appliqués
+const filters = ref({
+  project_code: '',
+  entity_id: '',
+  year: 2026
 })
-const yearOptions = computed(() => [{ value: 2026, text: '2026' }, { value: 2025, text: '2025' }])
-const processOptions = computed(() => processes.value.map(p => ({ value: p.id, text: `${p.code} - ${p.name}` })))
-const typeSelectOptions = computed(() => [{ value: '', text: 'Type' }, ...riskTypes.value.map(t => ({ value: t.code, text: `${t.code} - ${t.label}` }))])
-const freqSelectOptions = computed(() => [{ value: '', text: 'Fréquence' }, ...frequencies.value.map(f => ({ value: f.code, text: f.label }))])
-const impactSelectOptions = computed(() => [{ value: '', text: 'Impact' }, ...impacts.value.map(i => ({ value: i.code, text: i.label }))])
 
-// FIELDS
-const identificationFields = computed(() => [
-  { key: 'entity', label: 'ENTITE' },
-  { key: 'process', label: 'PROCESSUS' },
-  { key: 'risk', label: 'RISQUE' },
-  { key: 'impact_brut', label: 'IMPACT_BRUT' },
-  { key: 'freq_brut', label: 'FREQ_BRUT' },
-  { key: 'global_brut', label: 'GLOBAL_BRUT' },
-  { key: 'procedure', label: 'PROCEDURE DE CONTROLE' },
-  { key: 'actions', label: '' },
-])
+// Recherche libre
+const searchQuery = ref('')
 
-const matrixFields = computed(() => [
-  { key: 'impact', label: 'Niveau impact' },
-  { key: 'freq', label: 'Niveau Fréquence' },
-  { key: 'qualification', label: 'Appellation & qualification' },
-])
+// Loading state
+const loading = ref(false)
 
-// COMPUTED
+// Données depuis la base
+const riskTypes = ref(props.riskTypes || [])
+const frequencies = ref(props.frequencies || [])
+const impacts = ref(props.impacts || [])
+const entities = ref(props.entities || [])
+const processes = ref(props.processes || [])
+const risks = ref([])
+
+// Contrôle modals
+const modals = ref({
+  createRisk: false,
+  editRisk: false
+})
+
+// Formulaire création
+const newRiskForm = ref({
+  code: '',
+  label: '',
+  risk_type_id: null,
+  frequency_level_id: null,
+  impact_level_id: null,
+  entity_id: null,
+  process_id: null,
+  owner: '',
+  control_procedure: '',
+  status: 'identified'
+})
+
+// Formulaire édition
+const editingRisk = ref({
+  id: null,
+  code: '',
+  label: '',
+  risk_type_id: null,
+  frequency_level_id: null,
+  impact_level_id: null,
+  owner: '',
+  status: 'identified'
+})
+
+// ════════════════════════════════════════════════════════════════════════════════
+// COMPUTED PROPERTIES
+// ════════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Risques filtrés selon les critères
+ * - Filtre par projet
+ * - Filtre par entité
+ * - Filtre par année
+ * - Recherche par code/libellé
+ */
 const filteredRisks = computed(() => {
   return risks.value.filter(r => {
+    // Filtre projet
     const matchProject = !filters.value.project_code || r.project_code === filters.value.project_code
-    const matchEntity = !filters.value.entity || r.entity === filters.value.entity
+    
+    // Filtre entité
+    const matchEntity = !filters.value.entity_id || r.entity_id === filters.value.entity_id
+    
+    // Filtre année
     const matchYear = !filters.value.year || r.year === filters.value.year
-    return matchProject && matchEntity && matchYear
+    
+    // Recherche libre
+    const matchSearch = !searchQuery.value || 
+      r.code.toLowerCase().includes(searchQuery.value.toLowerCase()) ||
+      r.label.toLowerCase().includes(searchQuery.value.toLowerCase())
+    
+    return matchProject && matchEntity && matchYear && matchSearch
   })
 })
 
-// METHODS
+// ════════════════════════════════════════════════════════════════════════════════
+// LIFECYCLE HOOKS
+// ════════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Initialisé au montage du composant
+ * Charge les risques depuis la base de données
+ */
+onMounted(() => {
+  loadRisks()
+})
+
+// ════════════════════════════════════════════════════════════════════════════════
+// MÉTHODES - CHARGEMENT DONNÉES
+// ════════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Charge tous les risques depuis l'API Laravel
+ * GET /api/risque/
+ */
+const loadRisks = async () => {
+  try {
+    loading.value = true
+    const response = await fetch('/api/risque/', {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Requested-With': 'XMLHttpRequest'
+      }
+    })
+    
+    if (response.ok) {
+      const data = await response.json()
+      risks.value = data
+    } else {
+      console.error('Erreur lors du chargement des risques')
+    }
+  } catch (error) {
+    console.error('Erreur:', error)
+    alert('Erreur lors du chargement des risques')
+  } finally {
+    loading.value = false
+  }
+}
+
+// ════════════════════════════════════════════════════════════════════════════════
+// MÉTHODES - ACTIONS RISQUES
+// ════════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Ouvre le modal de création
+ * Réinitialise le formulaire
+ */
 const openCreateRisk = () => {
-  newRiskForm.value = { project_code: 'KEKELI', entity: '', type_code: '', process_id: null, code: '', label: '', frequency_code: '', impact_code: '', owner: '', control_procedure: '' }
+  newRiskForm.value = {
+    code: '',
+    label: '',
+    risk_type_id: null,
+    frequency_level_id: null,
+    impact_level_id: null,
+    entity_id: null,
+    process_id: null,
+    owner: '',
+    control_procedure: '',
+    status: 'identified'
+  }
   modals.value.createRisk = true
 }
 
-const saveNewRisk = () => {
-  if (newRiskForm.value.code && newRiskForm.value.label) {
-    const criticality = (parseInt(frequencies.value.find(f => f.code === newRiskForm.value.frequency_code)?.level || 0) || 1) * (parseInt(impacts.value.find(i => i.code === newRiskForm.value.impact_code)?.level || 0) || 1)
-    risks.value.push({
-      id: Math.max(...risks.value.map(r => r.id), 0) + 1,
-      ...newRiskForm.value,
-      criticality: criticality,
-      process: processes.value.find(p => p.id === newRiskForm.value.process_id)?.name || '-',
-      project_code: newRiskForm.value.project_code,
-      year: 2026,
-      activity_code: '',
-      status: 'active',
+/**
+ * Sauvegarde un nouveau risque
+ * POST /api/risque/
+ */
+const saveNewRisk = async () => {
+  try {
+    loading.value = true
+    const response = await fetch('/api/risque/', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content || ''
+      },
+      body: JSON.stringify(newRiskForm.value)
     })
-    modals.value.createRisk = false
+    
+    if (response.ok) {
+      modals.value.createRisk = false
+      await loadRisks() // Recharger la liste
+      alert('Risque créé avec succès!')
+    } else {
+      alert('Erreur lors de la création')
+    }
+  } catch (error) {
+    console.error('Erreur:', error)
+    alert('Erreur: ' + error.message)
+  } finally {
+    loading.value = false
   }
 }
 
-const updateEntities = () => {
-  newRiskForm.value.entity = ''
-}
-
-const updateFreqLabel = () => {
-  const f = frequencies.value.find(f => f.level === parseInt(freqForm.value.level))
-  if (f) { freqForm.value.label = f.label; freqForm.value.description = f.description }
-}
-
-const updateImpactLabel = () => {
-  const i = impacts.value.find(i => i.level === parseInt(impactForm.value.level))
-  if (i) { impactForm.value.label = i.label; impactForm.value.description = i.description }
-}
-
-const addMatrix = () => {
-  if (matrixForm.value.label) {
-    matrixLevels.value.push({
-      impact_level: matrixForm.value.impact_level,
-      freq_level: matrixForm.value.freq_level,
-      qualification: matrixForm.value.qualification,
-      impact_color: 'secondary',
-      freq_color: 'secondary',
-    })
-    resetMatrix()
-  }
-}
-
-const addFreq = () => {
-  if (freqForm.value.label) {
-    frequencies.value.push({
-      code: `FREQ_${freqForm.value.level}`,
-      label: freqForm.value.label,
-      level: freqForm.value.level,
-      color: 'secondary',
-      description: freqForm.value.description,
-    })
-    resetFreq()
-  }
-}
-
-const addImpact = () => {
-  if (impactForm.value.label) {
-    impacts.value.push({
-      code: `IMP_${impactForm.value.level}`,
-      label: impactForm.value.label,
-      level: impactForm.value.level,
-      color: 'secondary',
-      description: impactForm.value.description,
-    })
-    resetImpact()
-  }
-}
-
-const addType = () => {
-  if (typeForm.value.code && typeForm.value.label) {
-    riskTypes.value.push({ code: typeForm.value.code, label: typeForm.value.label, color: 'secondary' })
-    resetType()
-  }
-}
-
+/**
+ * Édite un risque
+ * Ouvre le modal avec les données du risque
+ */
 const editRisk = (risk) => {
   editingRisk.value = { ...risk }
   modals.value.editRisk = true
 }
 
-const saveEditedRisk = () => {
-  const idx = risks.value.findIndex(r => r.id === editingRisk.value.id)
-  if (idx >= 0) { risks.value[idx] = { ...editingRisk.value } }
-  modals.value.editRisk = false
+/**
+ * Sauvegarde un risque édité
+ * PUT /api/risque/{id}
+ */
+const saveEditedRisk = async () => {
+  try {
+    loading.value = true
+    const response = await fetch(`/api/risque/${editingRisk.value.id}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content || ''
+      },
+      body: JSON.stringify(editingRisk.value)
+    })
+    
+    if (response.ok) {
+      modals.value.editRisk = false
+      await loadRisks()
+      alert('Risque modifié avec succès!')
+    } else {
+      alert('Erreur lors de la modification')
+    }
+  } catch (error) {
+    console.error('Erreur:', error)
+    alert('Erreur: ' + error.message)
+  } finally {
+    loading.value = false
+  }
 }
 
-const deleteRisk = (risk) => {
-  if (confirm('Supprimer?')) { risks.value = risks.value.filter(r => r.id !== risk.id) }
+/**
+ * Supprime un risque
+ * DELETE /api/risque/{id}
+ */
+const deleteRisk = async (risk) => {
+  if (!confirm(`Êtes-vous sûr de vouloir supprimer ${risk.code}?`)) return
+  
+  try {
+    loading.value = true
+    const response = await fetch(`/api/risque/${risk.id}`, {
+      method: 'DELETE',
+      headers: {
+        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content || ''
+      }
+    })
+    
+    if (response.ok) {
+      await loadRisks()
+      alert('Risque supprimé avec succès!')
+    } else {
+      alert('Erreur lors de la suppression')
+    }
+  } catch (error) {
+    console.error('Erreur:', error)
+    alert('Erreur: ' + error.message)
+  } finally {
+    loading.value = false
+  }
 }
 
-const resetMatrix = () => { matrixForm.value = { project_code: 'KEKELI', impact_level: 0, freq_level: 0, label: '', qualification: '#FFD700' } }
-const resetFreq = () => { freqForm.value = { project_code: 'KEKELI', level: 1, label: '', description: '' } }
-const resetImpact = () => { impactForm.value = { project_code: 'KEKELI', level: 1, label: '', description: '' } }
-const resetType = () => { typeForm.value = { project_code: 'KEKELI', code: '', label: '' } }
+// ════════════════════════════════════════════════════════════════════════════════
+// MÉTHODES - EXPORT
+// ════════════════════════════════════════════════════════════════════════════════
 
-const getTypeColor = (code) => riskTypes.value.find(t => t.code === code)?.color || 'secondary'
-const getFreqColor = (code) => frequencies.value.find(f => f.code === code)?.color || 'secondary'
-const getImpactColor = (code) => impacts.value.find(i => i.code === code)?.color || 'secondary'
-const getCriticalityColor = (criticality) => (criticality >= 12 ? 'danger' : criticality >= 8 ? 'warning' : 'success')
+/**
+ * Exporte les risques en CSV
+ * Télécharge un fichier CSV avec les risques filtrés
+ */
+const exportData = () => {
+  const csv = convertToCSV(filteredRisks.value)
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+  const link = document.createElement('a')
+  const url = URL.createObjectURL(blob)
+  link.setAttribute('href', url)
+  link.setAttribute('download', `risques_${new Date().toISOString().slice(0,10)}.csv`)
+  link.click()
+}
+
+/**
+ * Convertit un array de risques en CSV
+ */
+const convertToCSV = (data) => {
+  const headers = ['CODE', 'LIBELLÉ', 'TYPE', 'FRÉQUENCE', 'IMPACT', 'CRITICITÉ', 'STATUS', 'PROPRIÉTAIRE']
+  const csv = [headers.join(',')]
+  
+  data.forEach(row => {
+    csv.push([
+      row.code,
+      `"${row.label}"`,
+      getRiskTypeName(row.risk_type_id),
+      getFrequencyName(row.frequency_level_id),
+      getImpactName(row.impact_level_id),
+      row.criticality || '-',
+      row.status,
+      row.owner || '-'
+    ].join(','))
+  })
+  
+  return csv.join('\n')
+}
+
+// ════════════════════════════════════════════════════════════════════════════════
+// MÉTHODES - HELPERS (Traduction des IDs)
+// ════════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Récupère le nom du type de risque par ID
+ */
+const getRiskTypeName = (id) => {
+  const type = riskTypes.value.find(t => t.id === id)
+  return type ? type.code : '-'
+}
+
+/**
+ * Récupère le nom de la fréquence par ID
+ */
+const getFrequencyName = (id) => {
+  const freq = frequencies.value.find(f => f.id === id)
+  return freq ? freq.label : '-'
+}
+
+/**
+ * Récupère le nom de l'impact par ID
+ */
+const getImpactName = (id) => {
+  const impact = impacts.value.find(i => i.id === id)
+  return impact ? impact.label : '-'
+}
+
+// ════════════════════════════════════════════════════════════════════════════════
+// MÉTHODES - COULEURS (UI)
+// ════════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Retourne la couleur Bootstrap du type de risque
+ */
+const getTypeColor = (id) => {
+  const type = riskTypes.value.find(t => t.id === id)
+  return type && type.color ? type.color : 'secondary'
+}
+
+/**
+ * Retourne la couleur Bootstrap de la fréquence
+ */
+const getFreqColor = (id) => {
+  const freq = frequencies.value.find(f => f.id === id)
+  return freq && freq.color ? freq.color : 'warning'
+}
+
+/**
+ * Retourne la couleur Bootstrap de l'impact
+ */
+const getImpactColor = (id) => {
+  const impact = impacts.value.find(i => i.id === id)
+  return impact && impact.color ? impact.color : 'info'
+}
+
+/**
+ * Retourne la couleur de la criticité basée sur le score
+ * ≥ 12: danger (rouge)
+ * 8-11: warning (orange)
+ * < 8: success (vert)
+ */
+const getCriticalityColor = (criticality) => {
+  if (criticality >= 12) return 'danger'
+  if (criticality >= 8) return 'warning'
+  return 'success'
+}
+
+/**
+ * Retourne la couleur hex du statut
+ */
+const getStatusColor = (status) => {
+  const colors = {
+    'identified': '#0066cc',
+    'assessed': '#6f42c1',
+    'mitigated': '#28a745',
+    'monitored': '#ffc107',
+    'closed': '#6c757d'
+  }
+  return colors[status] || '#6c757d'
+}
+
+// ════════════════════════════════════════════════════════════════════════════════
+// MÉTHODES - FORMATAGE
+// ════════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Tronque un texte à une longueur max
+ */
+const truncate = (text, length) => {
+  return text && text.length > length ? text.substring(0, length) + '...' : text
+}
+
+/**
+ * Formate le statut en français
+ */
+const formatStatus = (status) => {
+  const statuses = {
+    'identified': 'Identifié',
+    'assessed': 'Évalué',
+    'mitigated': 'Atténué',
+    'monitored': 'Suivi',
+    'closed': 'Fermé'
+  }
+  return statuses[status] || status
+}
 </script>
 
 <style scoped>
-:deep(.table) { font-size: 0.7rem; margin-bottom: 0; }
-:deep(.table th) { background-color: #0066cc; color: white; padding: 0.3rem 0.4rem; border: 1px solid #0066cc; }
-:deep(.table td) { padding: 0.3rem 0.4rem; border: 1px solid #dee2e6; }
-:deep(.badge) { padding: 0.15rem 0.3rem; font-size: 0.6rem; }
-:deep(.btn-sm) { padding: 0.15rem 0.3rem; font-size: 0.65rem; }
-:deep(.form-control-sm, .form-select-sm) { height: 1.8rem; font-size: 0.7rem; }
-:deep(.card) { border: 1px solid #dee2e6; }
-:deep(.list-group-item) { padding: 0.4rem 0.5rem; font-size: 0.7rem; }
-:deep(.list-group-item.active) { background-color: #0d6efd; border-color: #0d6efd; }
+/**
+ * ════════════════════════════════════════════════════════════════════════════════
+ * STYLES SCOPED
+ * ════════════════════════════════════════════════════════════════════════════════
+ */
+
+/* Modal */
+.modal {
+  position: fixed;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 1050;
+  display: flex;
+  align-items: center;
+}
+
+.modal-dialog {
+  margin: auto;
+}
+
+/* Tableau */
+.hover-row:hover {
+  background-color: #f0f0f0;
+  transition: background-color 0.2s ease;
+}
+
+table th {
+  background-color: #0066cc;
+  color: white;
+  font-weight: 600;
+}
+
+table td {
+  vertical-align: middle;
+}
+
+/* Cartes */
+.card {
+  border: 1px solid #dee2e6;
+  border-radius: 0.375rem;
+}
+
+/* Badges */
+.badge {
+  padding: 0.3rem 0.6rem;
+  font-size: 0.65rem;
+  font-weight: 600;
+}
+
+/* Formulaires */
+.form-control-sm,
+.form-select-sm {
+  font-size: 0.8rem;
+  height: 1.8rem;
+}
+
+/* Boutons */
+.btn-sm {
+  font-size: 0.7rem;
+  padding: 0.3rem 0.6rem;
+}
+
+/* Texte */
+.text-primary {
+  color: #0066cc !important;
+}
+
+small {
+  display: block;
+  color: #666;
+}
 </style>

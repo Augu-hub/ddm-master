@@ -3,6 +3,11 @@
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
+/* ====== AJOUTER CES IMPORTS EN HAUT (AVEC LES AUTRES) ====== */
+use App\Models\Master\Menu;
+use App\Models\Master\Module;
+/* ======================================================== */
+
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\ModuleEntryController;
 use App\Http\Controllers\ErrorController;
@@ -90,6 +95,7 @@ Route::middleware(['web','auth','verified'])->group(function () {
 Route::get('/error/403', [ErrorController::class, 'error403'])->name('error403');
 Route::get('/error/404', [ErrorController::class, 'error404'])->name('error404');
 Route::get('/error/500', [ErrorController::class, 'error500'])->name('error500');
+
 use App\Http\Controllers\Admin\MenusController;
 
 Route::prefix('admin')
@@ -136,4 +142,43 @@ Route::prefix('admin')
             ->name('menus.api.dbinfo');
     });
 
+/* ════════════════════════════════════════════════════════════════════════════
+|  ROUTE SIMPLE - CHARGER MENUS AUDIT
+|════════════════════════════════════════════════════════════════════════════ */
 
+Route::get('/api-simple/audit-menus', function () {
+    try {
+        // 1. Trouver le module AUDIT (code = 'audit.core')
+        $auditModule = Module::where('code', 'audit.core')->first();
+        
+        if (!$auditModule) {
+            return response()->json([
+                'success' => false,
+                'message' => 'AUDIT module not found',
+                'data' => []
+            ]);
+        }
+        
+        // 2. Charger les menus AUDIT
+        $menus = Menu::where('module_id', $auditModule->id)
+                     ->whereNull('parent_id')
+                     ->with('children')
+                     ->orderBy('sort')
+                     ->get()
+                     ->toArray();
+        
+        return response()->json([
+            'success' => true,
+            'message' => 'AUDIT menus loaded',
+            'data' => $menus,
+            'count' => count($menus)
+        ]);
+        
+    } catch (\Exception $e) {
+        return response()->json([
+            'success' => false,
+            'message' => $e->getMessage(),
+            'data' => []
+        ], 500);
+    }
+})->name('api.audit.menus');
