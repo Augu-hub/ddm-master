@@ -3,6 +3,7 @@
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\DB;
 
 return new class extends Migration
 {
@@ -28,65 +29,64 @@ return new class extends Migration
         });
 
         // ════════════════════════════════════════════════════════════════════════════════════
-        // 2️⃣ RISK_FREQUENCY_LEVELS - Niveaux de fréquence (RÉFÉRENCE)
+        // 2️⃣ AUDIT_FREQUENCY_LEVELS - Niveaux de fréquence (AUDIT TABLE)
         // ════════════════════════════════════════════════════════════════════════════════════
-        Schema::create('risk_frequency_levels', function (Blueprint $table) {
+        Schema::create('audit_frequency_levels', function (Blueprint $table) {
             $table->id();
             $table->unsignedBigInteger('tenant_id');
             $table->string('code')->unique();
             $table->string('label');
             $table->integer('level');
             $table->text('description')->nullable();
-            $table->string('color')->default('secondary');
+            $table->string('color')->default('#6c757d')->comment('HEX color format: #RRGGBB');
             $table->timestamps();
             $table->softDeletes();
 
             $table->index('tenant_id');
+            $table->index('level');
             $table->unique(['tenant_id', 'code']);
         });
 
         // ════════════════════════════════════════════════════════════════════════════════════
-        // 3️⃣ RISK_IMPACT_LEVELS - Niveaux d'impact (RÉFÉRENCE)
+        // 3️⃣ AUDIT_IMPACT_LEVELS - Niveaux d'impact (AUDIT TABLE)
         // ════════════════════════════════════════════════════════════════════════════════════
-        Schema::create('risk_impact_levels', function (Blueprint $table) {
+        Schema::create('audit_impact_levels', function (Blueprint $table) {
             $table->id();
             $table->unsignedBigInteger('tenant_id');
             $table->string('code')->unique();
             $table->string('label');
             $table->integer('level');
             $table->text('description')->nullable();
-            $table->string('color')->default('secondary');
+            $table->string('color')->default('#6c757d')->comment('HEX color format: #RRGGBB');
             $table->timestamps();
             $table->softDeletes();
 
             $table->index('tenant_id');
+            $table->index('level');
             $table->unique(['tenant_id', 'code']);
         });
 
         // ════════════════════════════════════════════════════════════════════════════════════
-        // 4️⃣ RISK_MATRIX - Matrice impact x fréquence (RÉFÉRENCE)
+        // 4️⃣ AUDIT_MATRIX - Matrice impact x fréquence (AUDIT TABLE)
         // ════════════════════════════════════════════════════════════════════════════════════
-        Schema::create('risk_matrix', function (Blueprint $table) {
+        Schema::create('audit_matrix', function (Blueprint $table) {
             $table->id();
             $table->unsignedBigInteger('tenant_id');
-            $table->unsignedBigInteger('project_id')->nullable();
             $table->integer('impact_level');
             $table->integer('frequency_level');
             $table->string('label')->nullable();
             $table->string('qualification')->nullable();
             $table->integer('criticality_score')->nullable();
+            $table->string('color')->default('#6c757d')->comment('HEX color format: #RRGGBB');
             $table->timestamps();
             $table->softDeletes();
 
             $table->index('tenant_id');
-            $table->index('project_id');
+            $table->index('impact_level');
+            $table->index('frequency_level');
             $table->unique(['tenant_id', 'impact_level', 'frequency_level']);
         });
 
-        // ════════════════════════════════════════════════════════════════════════════════════
-        // 5️⃣ ENTITIES - Entités (SANS tenant_id par défaut)
-        // ════════════════════════════════════════════════════════════════════════════════════
-      
         // ════════════════════════════════════════════════════════════════════════════════════
         // 8️⃣ AUDIT_EXERCISES - Exercices d'audit
         // ════════════════════════════════════════════════════════════════════════════════════
@@ -161,8 +161,7 @@ return new class extends Migration
         Schema::create('risks', function (Blueprint $table) {
             $table->id();
             $table->unsignedBigInteger('tenant_id');
-            $table->unsignedBigInteger('project_id')->nullable();
-            $table->unsignedBigInteger('audit_session_id')->nullable(); // Lien vers session
+            $table->unsignedBigInteger('audit_session_id')->nullable();
             $table->unsignedBigInteger('entity_id')->nullable();
             $table->unsignedBigInteger('process_id')->nullable();
             $table->unsignedBigInteger('activity_id')->nullable();
@@ -172,9 +171,8 @@ return new class extends Migration
             $table->string('code')->unique();
             $table->string('label');
             $table->text('description')->nullable();
-            $table->string('activity_code')->nullable();
 
-            // Cotations
+            // ✅ Cotations AUDIT (audit_frequency_levels et audit_impact_levels)
             $table->unsignedBigInteger('frequency_level_id')->nullable();
             $table->decimal('frequency_net', 3, 1)->nullable();
             $table->unsignedBigInteger('impact_level_id')->nullable();
@@ -194,7 +192,6 @@ return new class extends Migration
             $table->softDeletes();
 
             $table->index('tenant_id');
-            $table->index('project_id');
             $table->index('audit_session_id');
             $table->index('entity_id');
             $table->index('process_id');
@@ -205,14 +202,15 @@ return new class extends Migration
             $table->index('status');
             $table->index('year');
 
+            // ✅ Foreign keys
             $table->foreign('audit_session_id')->references('id')->on('audit_sessions')->onDelete('set null');
             $table->foreign('risk_type_id')->references('id')->on('risk_types')->onDelete('set null');
-            $table->foreign('frequency_level_id')->references('id')->on('risk_frequency_levels')->onDelete('set null');
-            $table->foreign('impact_level_id')->references('id')->on('risk_impact_levels')->onDelete('set null');
+            $table->foreign('frequency_level_id')->references('id')->on('audit_frequency_levels')->onDelete('set null');
+            $table->foreign('impact_level_id')->references('id')->on('audit_impact_levels')->onDelete('set null');
         });
 
         // ════════════════════════════════════════════════════════════════════════════════════
-        // 1️⃣1️⃣ SESSION_RISKS - Risques en session (avant validation admin)
+        // 1️⃣1️⃣ SESSION_RISKS - Risques en session
         // ════════════════════════════════════════════════════════════════════════════════════
         Schema::create('session_risks', function (Blueprint $table) {
             $table->id();
@@ -220,37 +218,29 @@ return new class extends Migration
             $table->unsignedBigInteger('audit_session_id');
             $table->unsignedBigInteger('risk_id')->nullable();
 
-            // Risk info
             $table->string('code');
             $table->string('label');
             $table->text('description')->nullable();
 
-            // Classification
             $table->unsignedBigInteger('risk_type_id')->nullable();
             $table->unsignedBigInteger('process_id')->nullable();
             $table->unsignedBigInteger('activity_id')->nullable();
 
-            // Cotations
             $table->unsignedBigInteger('frequency_level_id')->nullable();
             $table->unsignedBigInteger('impact_level_id')->nullable();
             $table->integer('criticality')->nullable();
             $table->decimal('frequency_net', 3, 1)->nullable();
             $table->decimal('impact_net', 3, 1)->nullable();
 
-            // Contrôle
             $table->text('control_procedure')->nullable();
             $table->string('owner')->nullable();
 
-            // Status validation
             $table->enum('validation_status', ['draft', 'pending', 'approved', 'rejected'])->default('draft');
             $table->text('validation_comments')->nullable();
             $table->dateTime('validated_at')->nullable();
             $table->unsignedBigInteger('validated_by')->nullable();
 
-            // Couleur d'affichage (warning|success|danger)
             $table->string('color')->default('warning');
-
-            // Created in session
             $table->unsignedBigInteger('created_by');
             $table->timestamps();
             $table->softDeletes();
@@ -259,11 +249,12 @@ return new class extends Migration
             $table->index('audit_session_id');
             $table->index('risk_id');
             $table->index('validation_status');
-            $table->index('color');
 
             $table->foreign('audit_session_id')->references('id')->on('audit_sessions')->onDelete('cascade');
             $table->foreign('risk_id')->references('id')->on('risks')->onDelete('set null');
             $table->foreign('risk_type_id')->references('id')->on('risk_types')->onDelete('set null');
+            $table->foreign('frequency_level_id')->references('id')->on('audit_frequency_levels')->onDelete('set null');
+            $table->foreign('impact_level_id')->references('id')->on('audit_impact_levels')->onDelete('set null');
         });
 
         // ════════════════════════════════════════════════════════════════════════════════════
@@ -295,6 +286,7 @@ return new class extends Migration
 
             $table->index('tenant_id');
             $table->index('risk_id');
+            $table->index('status');
             $table->foreign('risk_id')->references('id')->on('risks')->onDelete('cascade');
         });
 
@@ -332,6 +324,8 @@ return new class extends Migration
             $table->index('status');
 
             $table->foreign('risk_id')->references('id')->on('risks')->onDelete('cascade');
+            $table->foreign('residual_frequency_id')->references('id')->on('audit_frequency_levels')->onDelete('set null');
+            $table->foreign('residual_impact_id')->references('id')->on('audit_impact_levels')->onDelete('set null');
         });
 
         // ════════════════════════════════════════════════════════════════════════════════════
@@ -341,7 +335,6 @@ return new class extends Migration
             $table->id();
             $table->unsignedBigInteger('tenant_id');
             $table->unsignedBigInteger('risk_id');
-            $table->unsignedBigInteger('project_id')->nullable();
 
             $table->string('code')->unique();
             $table->date('assessment_date');
@@ -487,6 +480,72 @@ return new class extends Migration
             $table->index('action');
             $table->index('created_at');
         });
+
+        // ════════════════════════════════════════════════════════════════════════════════════
+        // ✅ CHARGER LES DONNÉES DANS LES TABLES AUDIT (TENANT_ID = 1)
+        // ════════════════════════════════════════════════════════════════════════════════════
+
+        // 📊 AUDIT_FREQUENCY_LEVELS avec couleurs HEX
+        DB::table('audit_frequency_levels')->insert([
+            ['tenant_id' => 1, 'code' => 'RARE', 'level' => 1, 'label' => 'Rare (< 1 fois/an)', 'description' => 'Événement très rare, moins d\'une fois par an', 'color' => '#28a745', 'created_at' => now(), 'updated_at' => now()],
+            ['tenant_id' => 1, 'code' => 'UNLIKELY', 'level' => 2, 'label' => 'Peu probable (1-2 fois/an)', 'description' => 'Événement peu probable, 1 à 2 fois par an', 'color' => '#17a2b8', 'created_at' => now(), 'updated_at' => now()],
+            ['tenant_id' => 1, 'code' => 'MODERATE', 'level' => 3, 'label' => 'Modéré (3-4 fois/an)', 'description' => 'Événement modéré, 3 à 4 fois par an', 'color' => '#ffc107', 'created_at' => now(), 'updated_at' => now()],
+            ['tenant_id' => 1, 'code' => 'LIKELY', 'level' => 4, 'label' => 'Probable (mensuel)', 'description' => 'Événement probable, environ une fois par mois', 'color' => '#fd7e14', 'created_at' => now(), 'updated_at' => now()],
+            ['tenant_id' => 1, 'code' => 'FREQUENT', 'level' => 5, 'label' => 'Très fréquent (hebdo)', 'description' => 'Événement très fréquent, plusieurs fois par semaine', 'color' => '#dc3545', 'created_at' => now(), 'updated_at' => now()],
+        ]);
+
+        // ⚡ AUDIT_IMPACT_LEVELS avec couleurs HEX
+        DB::table('audit_impact_levels')->insert([
+            ['tenant_id' => 1, 'code' => 'NEGLIGIBLE', 'level' => 1, 'label' => 'Négligeable', 'description' => 'Impact minimal ou très localisé', 'color' => '#28a745', 'created_at' => now(), 'updated_at' => now()],
+            ['tenant_id' => 1, 'code' => 'MINOR', 'level' => 2, 'label' => 'Mineur', 'description' => 'Impact limité, facilement gérable', 'color' => '#17a2b8', 'created_at' => now(), 'updated_at' => now()],
+            ['tenant_id' => 1, 'code' => 'MODERATE', 'level' => 3, 'label' => 'Modéré', 'description' => 'Impact significatif, gestion requise', 'color' => '#ffc107', 'created_at' => now(), 'updated_at' => now()],
+            ['tenant_id' => 1, 'code' => 'MAJOR', 'level' => 4, 'label' => 'Majeur', 'description' => 'Impact grave, priorité élevée', 'color' => '#fd7e14', 'created_at' => now(), 'updated_at' => now()],
+            ['tenant_id' => 1, 'code' => 'CATASTROPHIC', 'level' => 5, 'label' => 'Catastrophique', 'description' => 'Impact critique, menace la viabilité', 'color' => '#dc3545', 'created_at' => now(), 'updated_at' => now()],
+        ]);
+
+        // 📊 AUDIT_MATRIX 5x5 avec couleurs HEX (25 cellules)
+        $matrixData = [
+            // Ligne 1 (Impact 1 - Négligeable): Vert
+            ['tenant_id' => 1, 'impact_level' => 1, 'frequency_level' => 1, 'criticality_score' => 1, 'label' => 'Minime', 'qualification' => 'Acceptable', 'color' => '#28a745'],
+            ['tenant_id' => 1, 'impact_level' => 1, 'frequency_level' => 2, 'criticality_score' => 2, 'label' => 'Très faible', 'qualification' => 'Acceptable', 'color' => '#28a745'],
+            ['tenant_id' => 1, 'impact_level' => 1, 'frequency_level' => 3, 'criticality_score' => 3, 'label' => 'Faible', 'qualification' => 'À surveiller', 'color' => '#28a745'],
+            ['tenant_id' => 1, 'impact_level' => 1, 'frequency_level' => 4, 'criticality_score' => 4, 'label' => 'Faible-Modéré', 'qualification' => 'À surveiller', 'color' => '#17a2b8'],
+            ['tenant_id' => 1, 'impact_level' => 1, 'frequency_level' => 5, 'criticality_score' => 5, 'label' => 'Modéré', 'qualification' => 'À surveiller', 'color' => '#17a2b8'],
+
+            // Ligne 2 (Impact 2 - Mineur): Vert à Jaune
+            ['tenant_id' => 1, 'impact_level' => 2, 'frequency_level' => 1, 'criticality_score' => 2, 'label' => 'Très faible', 'qualification' => 'Acceptable', 'color' => '#28a745'],
+            ['tenant_id' => 1, 'impact_level' => 2, 'frequency_level' => 2, 'criticality_score' => 4, 'label' => 'Faible', 'qualification' => 'À surveiller', 'color' => '#28a745'],
+            ['tenant_id' => 1, 'impact_level' => 2, 'frequency_level' => 3, 'criticality_score' => 6, 'label' => 'Faible-Modéré', 'qualification' => 'À surveiller', 'color' => '#ffc107'],
+            ['tenant_id' => 1, 'impact_level' => 2, 'frequency_level' => 4, 'criticality_score' => 8, 'label' => 'Modéré', 'qualification' => 'À surveiller', 'color' => '#ffc107'],
+            ['tenant_id' => 1, 'impact_level' => 2, 'frequency_level' => 5, 'criticality_score' => 10, 'label' => 'Modéré-Élevé', 'qualification' => 'Action requise', 'color' => '#fd7e14'],
+
+            // Ligne 3 (Impact 3 - Modéré): Jaune à Orange
+            ['tenant_id' => 1, 'impact_level' => 3, 'frequency_level' => 1, 'criticality_score' => 3, 'label' => 'Faible', 'qualification' => 'À surveiller', 'color' => '#17a2b8'],
+            ['tenant_id' => 1, 'impact_level' => 3, 'frequency_level' => 2, 'criticality_score' => 6, 'label' => 'Faible-Modéré', 'qualification' => 'À surveiller', 'color' => '#ffc107'],
+            ['tenant_id' => 1, 'impact_level' => 3, 'frequency_level' => 3, 'criticality_score' => 9, 'label' => 'Modéré', 'qualification' => 'À surveiller', 'color' => '#ffc107'],
+            ['tenant_id' => 1, 'impact_level' => 3, 'frequency_level' => 4, 'criticality_score' => 12, 'label' => 'Modéré-Élevé', 'qualification' => 'Action requise', 'color' => '#fd7e14'],
+            ['tenant_id' => 1, 'impact_level' => 3, 'frequency_level' => 5, 'criticality_score' => 15, 'label' => 'Élevé', 'qualification' => 'Action requise', 'color' => '#fd7e14'],
+
+            // Ligne 4 (Impact 4 - Majeur): Orange à Rouge
+            ['tenant_id' => 1, 'impact_level' => 4, 'frequency_level' => 1, 'criticality_score' => 4, 'label' => 'Faible-Modéré', 'qualification' => 'À surveiller', 'color' => '#ffc107'],
+            ['tenant_id' => 1, 'impact_level' => 4, 'frequency_level' => 2, 'criticality_score' => 8, 'label' => 'Modéré', 'qualification' => 'À surveiller', 'color' => '#fd7e14'],
+            ['tenant_id' => 1, 'impact_level' => 4, 'frequency_level' => 3, 'criticality_score' => 12, 'label' => 'Modéré-Élevé', 'qualification' => 'Action requise', 'color' => '#fd7e14'],
+            ['tenant_id' => 1, 'impact_level' => 4, 'frequency_level' => 4, 'criticality_score' => 16, 'label' => 'Élevé', 'qualification' => 'Action requise', 'color' => '#dc3545'],
+            ['tenant_id' => 1, 'impact_level' => 4, 'frequency_level' => 5, 'criticality_score' => 20, 'label' => 'Très élevé', 'qualification' => 'Action immédiate', 'color' => '#dc3545'],
+
+            // Ligne 5 (Impact 5 - Catastrophique): Rouge foncé
+            ['tenant_id' => 1, 'impact_level' => 5, 'frequency_level' => 1, 'criticality_score' => 5, 'label' => 'Modéré', 'qualification' => 'À surveiller', 'color' => '#fd7e14'],
+            ['tenant_id' => 1, 'impact_level' => 5, 'frequency_level' => 2, 'criticality_score' => 10, 'label' => 'Modéré-Élevé', 'qualification' => 'Action requise', 'color' => '#fd7e14'],
+            ['tenant_id' => 1, 'impact_level' => 5, 'frequency_level' => 3, 'criticality_score' => 15, 'label' => 'Élevé', 'qualification' => 'Action requise', 'color' => '#dc3545'],
+            ['tenant_id' => 1, 'impact_level' => 5, 'frequency_level' => 4, 'criticality_score' => 20, 'label' => 'Très élevé', 'qualification' => 'Action immédiate', 'color' => '#dc3545'],
+            ['tenant_id' => 1, 'impact_level' => 5, 'frequency_level' => 5, 'criticality_score' => 25, 'label' => 'Critique', 'qualification' => 'Action immédiate', 'color' => '#8B0000'],
+        ];
+
+        foreach ($matrixData as $matrix) {
+            $matrix['created_at'] = now();
+            $matrix['updated_at'] = now();
+            DB::table('audit_matrix')->insert([$matrix]);
+        }
     }
 
     public function down(): void
@@ -503,9 +562,9 @@ return new class extends Migration
         Schema::dropIfExists('risks');
         Schema::dropIfExists('audit_sessions');
         Schema::dropIfExists('audit_exercises');
-        Schema::dropIfExists('risk_matrix');
-        Schema::dropIfExists('risk_impact_levels');
-        Schema::dropIfExists('risk_frequency_levels');
+        Schema::dropIfExists('audit_matrix');
+        Schema::dropIfExists('audit_impact_levels');
+        Schema::dropIfExists('audit_frequency_levels');
         Schema::dropIfExists('risk_types');
     }
 };
