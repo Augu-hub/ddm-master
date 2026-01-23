@@ -37,7 +37,7 @@ return new class extends Migration
             // Indexes
             $table->index('user_id');
             $table->index('contract_id');
-            $table->index('read');
+          
             $table->index('created_at');
         });
     }

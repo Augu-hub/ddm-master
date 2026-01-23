@@ -247,6 +247,9 @@ class TenantsController extends Controller
         $this->runTenantMigrations($tenant->db_name, [
             base_path('database/migrations/tenant/process'),
         ]);
+          $this->runTenantMigrations($tenant->db_name, [
+            base_path('database/migrations/tenant/audits'),
+        ]);
 
         // 5) Diagnostic tables attendues
         $this->ensureProcessModule($tenant);
