@@ -33,6 +33,32 @@ class AuditorController extends Controller
     }
 
     /**
+     * ✅ RÉSOUDRE l'ID tenant de l'utilisateur connecté
+     * En multi-tenancy, Auth::id() retourne l'ID MASTER, pas l'ID TENANT
+     * On cherche l'user dans la DB tenant par son email
+     */
+    private function getTenantUserId(): ?int
+    {
+        $authUser = Auth::user();
+        if (!$authUser) {
+            return null;
+        }
+
+        // Chercher l'user dans le tenant par email
+        $tenantUser = User::where('email', $authUser->email)->first();
+
+        if (!$tenantUser) {
+            Log::warning('⚠️ [MULTI-TENANT] Creator non trouvé dans le tenant', [
+                'auth_id' => $authUser->id,
+                'auth_email' => $authUser->email,
+            ]);
+            return null;
+        }
+
+        return $tenantUser->id;
+    }
+
+    /**
      * 📋 Liste des auditeurs
      */
     public function index(Request $request)
@@ -67,9 +93,9 @@ class AuditorController extends Controller
         Log::info('✅ Liste auditeurs chargée:', ['count' => $auditors->total()]);
 
         return Inertia::render('dashboards/Param/Auditors/Index', [
-            'auditors' => $auditors,
-            'entities' => Entite::select('id', 'name')->orderBy('name')->get(),
-            'filters' => $request->only(['search', 'status', 'entity_id']),
+            'auditors'   => $auditors,
+            'entities'   => Entite::select('id', 'name')->orderBy('name')->get(),
+            'filters'    => $request->only(['search', 'status', 'entity_id']),
             'statistics' => $this->getStatistics(),
         ]);
     }
@@ -82,7 +108,7 @@ class AuditorController extends Controller
         Log::info('🆕 Création auditeur - formulaire');
 
         return Inertia::render('dashboards/Param/Auditors/Create', [
-            'entities' => Entite::select('id', 'name')->orderBy('name')->get(),
+            'entities'               => Entite::select('id', 'name')->orderBy('name')->get(),
             'competenciesByCategory' => CompetencyCategory::active()
                 ->with(['competencies' => fn($q) => $q->active()])
                 ->ordered()
@@ -92,7 +118,7 @@ class AuditorController extends Controller
 
     /**
      * ✅ STORE - Créer auditeur avec User automatique
-     * ✅ VALIDATION CORRIGÉE
+     * ✅ FIX MULTI-TENANCY : created_by résolu dans le tenant
      */
     public function store(Request $request)
     {
@@ -101,33 +127,29 @@ class AuditorController extends Controller
         Log::info('========================================');
 
         try {
-            // ✅ 1. Valider - VERSION CORRIGÉE
+            // ✅ 1. Valider
             Log::info('1️⃣ Validation des données...');
 
             $validator = Validator::make($request->all(), [
-                'first_name' => 'required|string|max:255',
-                'last_name' => 'required|string|max:255',
-                'email' => 'required|email',
-                'phone' => 'nullable|string|max:20',
-                'date_of_birth' => 'nullable|date',
-                'birthplace' => 'nullable|string|max:255',
-                'address' => 'nullable|string',
-                'city' => 'nullable|string|max:100',
-                'postal_code' => 'nullable|string|max:20',
-                'country' => 'nullable|string|max:100',
+                'first_name'       => 'required|string|max:255',
+                'last_name'        => 'required|string|max:255',
+                'email'            => 'required|email',
+                'phone'            => 'nullable|string|max:20',
+                'date_of_birth'    => 'nullable|date',
+                'birthplace'       => 'nullable|string|max:255',
+                'address'          => 'nullable|string',
+                'city'             => 'nullable|string|max:100',
+                'postal_code'      => 'nullable|string|max:20',
+                'country'          => 'nullable|string|max:100',
                 'audit_experience' => 'nullable|integer|min:0',
                 'other_experience' => 'nullable|integer|min:0',
-                'gender' => 'nullable|in:M,F',
-                'status' => 'required|in:active,inactive,suspended',
-                'bio' => 'nullable|string|max:1000',
-                'entity_id' => 'nullable|exists:entities,id',
-                'avatar' => 'nullable|image|mimes:jpeg,png,jpg,gif|max:2048',
-                
-                // ✅ COMPÉTENCES - FLEXIBLES
-                'competencies' => 'nullable|json', // JSON array ou array direct
-                
-                // ✅ SEND_EMAIL - ACCEPTE PLUSIEURS FORMATS
-                'send_email' => 'nullable|in:0,1,on,off,true,false',
+                'gender'           => 'nullable|in:M,F',
+                'status'           => 'required|in:active,inactive,suspended',
+                'bio'              => 'nullable|string|max:1000',
+                'entity_id'        => 'nullable|exists:entities,id',
+                'avatar'           => 'nullable|image|mimes:jpeg,png,jpg,gif|max:2048',
+                'competencies'     => 'nullable|json',
+                'send_email'       => 'nullable|in:0,1,on,off,true,false',
             ]);
 
             if ($validator->fails()) {
@@ -137,7 +159,7 @@ class AuditorController extends Controller
 
             Log::info('✅ Données valides');
 
-            // ✅ 2. Vérifier email
+            // ✅ 2. Vérifier unicité email
             Log::info('2️⃣ Vérification email...');
 
             if (DB::connection('mysql')->table('users')->where('email', $request->email)->exists()) {
@@ -159,9 +181,9 @@ class AuditorController extends Controller
 
             // ✅ 3. Générer codes
             Log::info('3️⃣ Génération des codes...');
-            $auditCode = Auditor::generateAuditCode();
+            $auditCode        = Auditor::generateAuditCode();
             $generatedPassword = Str::random(12);
-            $hashedPassword = bcrypt($generatedPassword);
+            $hashedPassword   = bcrypt($generatedPassword);
             Log::info('✅ Code généré:', ['audit_code' => $auditCode]);
 
             // ✅ 4. Tenant ID
@@ -175,8 +197,13 @@ class AuditorController extends Controller
 
             Log::info('✅ Tenant ID:', ['tenant_id' => $tenantId]);
 
-            // ✅ 5. MASTER transaction
-            Log::info('5️⃣ Création en MASTER...');
+            // ✅ 5. FIX MULTI-TENANCY : résoudre l'ID du creator dans le TENANT
+            Log::info('5️⃣ Résolution creator ID dans le tenant...');
+            $tenantCreatorId = $this->getTenantUserId();
+            Log::info('✅ Tenant Creator ID:', ['tenant_creator_id' => $tenantCreatorId ?? 'null (sera NULL en DB)']);
+
+            // ✅ 6. MASTER transaction
+            Log::info('6️⃣ Création en MASTER...');
 
             $masterUserId = null;
 
@@ -184,9 +211,9 @@ class AuditorController extends Controller
                 $request, $hashedPassword, $tenantId, &$masterUserId
             ) {
                 $masterUserId = DB::connection('mysql')->table('users')->insertGetId([
-                    'name' => trim("{$request->last_name} {$request->first_name}"),
-                    'email' => $request->email,
-                    'password' => $hashedPassword,
+                    'name'       => trim("{$request->last_name} {$request->first_name}"),
+                    'email'      => $request->email,
+                    'password'   => $hashedPassword,
                     'created_at' => now(),
                     'updated_at' => now(),
                 ]);
@@ -194,8 +221,8 @@ class AuditorController extends Controller
                 Log::info('✅ User créé en MASTER:', ['master_user_id' => $masterUserId]);
 
                 DB::connection('mysql')->table('tenant_user')->insert([
-                    'tenant_id' => $tenantId,
-                    'user_id' => $masterUserId,
+                    'tenant_id'  => $tenantId,
+                    'user_id'    => $masterUserId,
                     'created_at' => now(),
                     'updated_at' => now(),
                 ]);
@@ -203,32 +230,32 @@ class AuditorController extends Controller
                 Log::info('✅ Relation tenant_user créée');
             });
 
-            // ✅ 6. Créer User en TENANT
-            Log::info('6️⃣ Création User en TENANT...');
+            // ✅ 7. Créer User en TENANT
+            Log::info('7️⃣ Création User en TENANT...');
 
             $user = User::create([
-                'name' => trim("{$request->last_name} {$request->first_name}"),
-                'email' => $request->email,
-                'password' => $hashedPassword,
-                'status' => $request->status ?? 'active',
-                'created_by' => Auth::id(),
+                'name'       => trim("{$request->last_name} {$request->first_name}"),
+                'email'      => $request->email,
+                'password'   => $hashedPassword,
+                'status'     => $request->status ?? 'active',
+                'created_by' => $tenantCreatorId, // ✅ ID TENANT (pas MASTER)
             ]);
 
             Log::info('✅ User créé en TENANT:', ['user_id' => $user->id]);
 
-            // ✅ 7. Créer Auditor en TENANT
-            Log::info('7️⃣ Création Auditor en TENANT...');
+            // ✅ 8. Créer Auditor en TENANT
+            Log::info('8️⃣ Création Auditor en TENANT...');
 
-            $auditData = $request->except(['avatar', 'competencies', 'send_email']);
-            $auditData['user_id'] = $user->id;
-            $auditData['audit_id'] = $auditCode;
+            $auditData               = $request->except(['avatar', 'competencies', 'send_email']);
+            $auditData['user_id']    = $user->id;
+            $auditData['audit_id']   = $auditCode;
             $auditData['audit_code'] = $auditCode;
-            $auditData['created_by'] = Auth::id();
+            $auditData['created_by'] = $tenantCreatorId; // ✅ ID TENANT (pas MASTER)
 
             if ($request->hasFile('avatar')) {
                 Log::info('📸 Upload avatar...');
                 try {
-                    $avatarPath = $request->file('avatar')->store('auditors', 'public');
+                    $avatarPath          = $request->file('avatar')->store('auditors', 'public');
                     $auditData['avatar'] = $avatarPath;
                     Log::info('✅ Avatar uploadé:', ['path' => $avatarPath]);
                 } catch (\Exception $e) {
@@ -240,15 +267,12 @@ class AuditorController extends Controller
 
             Log::info('✅ Auditor créé en TENANT:', ['auditor_id' => $auditor->id]);
 
-            // ✅ 8. Assigner compétences
-            Log::info('8️⃣ Assignment des compétences...');
+            // ✅ 9. Assigner compétences
+            Log::info('9️⃣ Assignment des compétences...');
 
-            // Gérer les compétences (peuvent être JSON ou array)
             $competencies = [];
             if ($request->has('competencies')) {
                 $compData = $request->input('competencies');
-                
-                // Si c'est une string JSON, la décoder
                 if (is_string($compData)) {
                     $competencies = json_decode($compData, true) ?? [];
                 } else {
@@ -258,35 +282,32 @@ class AuditorController extends Controller
 
             if (!empty($competencies)) {
                 foreach ($competencies as $comp) {
-                    // Gérer les cas où le comp peut être un array ou un objet
                     $competencyId = $comp['competency_id'] ?? $comp->competency_id ?? null;
-                    $level = $comp['level'] ?? $comp->level ?? 1;
-                    $isPrimary = $comp['is_primary'] ?? $comp->is_primary ?? false;
-                    
+                    $level        = $comp['level']          ?? $comp->level          ?? 1;
+                    $isPrimary    = $comp['is_primary']     ?? $comp->is_primary     ?? false;
+
                     if ($competencyId) {
                         $auditor->assignCompetency(
-                            (int)$competencyId,
-                            (int)$level,
-                            (bool)$isPrimary
+                            (int) $competencyId,
+                            (int) $level,
+                            (bool) $isPrimary
                         );
                     }
                 }
                 Log::info('✅ Compétences assignées:', ['count' => count($competencies)]);
             }
 
-            // ✅ 9. Email
-            Log::info('9️⃣ Envoi email...');
+            // ✅ 10. Email
+            Log::info('🔟 Envoi email...');
 
-            // ✅ CORRIGER: Accepter plusieurs formats pour send_email
             $sendEmailValue = $request->input('send_email');
-            $sendEmail = in_array($sendEmailValue, ['1', 'on', 'true'], true) || $sendEmailValue === true;
-            
-            $emailSent = false;
+            $sendEmail      = in_array($sendEmailValue, ['1', 'on', 'true'], true) || $sendEmailValue === true;
+            $emailSent      = false;
 
             if ($sendEmail) {
                 try {
                     $creatorName = Auth::user()->name ?? 'L\'administrateur';
-                    $emailSent = $this->emailService->sendAccountCreatedEmail(
+                    $emailSent   = $this->emailService->sendAccountCreatedEmail(
                         $user->email,
                         $user->name,
                         $generatedPassword,
@@ -294,7 +315,7 @@ class AuditorController extends Controller
                     );
 
                     if ($emailSent) {
-                        Log::info("✅ Email envoyé");
+                        Log::info('✅ Email envoyé');
                     }
                 } catch (\Exception $e) {
                     Log::error('❌ Erreur email:', ['error' => $e->getMessage()]);
@@ -332,7 +353,7 @@ class AuditorController extends Controller
         $auditor->load(['user', 'entity', 'creator', 'competencies.category']);
 
         return Inertia::render('dashboards/Param/Auditors/Show', [
-            'auditor' => $auditor,
+            'auditor'               => $auditor,
             'competenciesByCategory' => $auditor->competenciesByCategory(),
         ]);
     }
@@ -347,8 +368,8 @@ class AuditorController extends Controller
         $auditor->load(['user', 'entity', 'competencies']);
 
         return Inertia::render('dashboards/Param/Auditors/Edit', [
-            'auditor' => $auditor,
-            'entities' => Entite::select('id', 'name')->orderBy('name')->get(),
+            'auditor'               => $auditor,
+            'entities'              => Entite::select('id', 'name')->orderBy('name')->get(),
             'competenciesByCategory' => CompetencyCategory::active()
                 ->with(['competencies' => fn($q) => $q->active()])
                 ->ordered()
@@ -364,23 +385,23 @@ class AuditorController extends Controller
         Log::info('💾 Mise à jour auditeur:', ['id' => $auditor->id]);
 
         $validator = Validator::make($request->all(), [
-            'first_name' => 'required|string|max:255',
-            'last_name' => 'required|string|max:255',
-            'email' => 'required|email|unique:auditors,email,' . $auditor->id,
-            'phone' => 'nullable|string|max:20',
-            'date_of_birth' => 'nullable|date',
-            'birthplace' => 'nullable|string|max:255',
-            'address' => 'nullable|string',
-            'city' => 'nullable|string|max:100',
-            'postal_code' => 'nullable|string|max:20',
-            'country' => 'nullable|string|max:100',
+            'first_name'       => 'required|string|max:255',
+            'last_name'        => 'required|string|max:255',
+            'email'            => 'required|email|unique:auditors,email,' . $auditor->id,
+            'phone'            => 'nullable|string|max:20',
+            'date_of_birth'    => 'nullable|date',
+            'birthplace'       => 'nullable|string|max:255',
+            'address'          => 'nullable|string',
+            'city'             => 'nullable|string|max:100',
+            'postal_code'      => 'nullable|string|max:20',
+            'country'          => 'nullable|string|max:100',
             'audit_experience' => 'nullable|integer|min:0',
             'other_experience' => 'nullable|integer|min:0',
-            'gender' => 'nullable|in:M,F',
-            'status' => 'required|in:active,inactive,suspended',
-            'bio' => 'nullable|string|max:1000',
-            'entity_id' => 'nullable|exists:entities,id',
-            'avatar' => 'nullable|image|mimes:jpeg,png,jpg,gif|max:2048',
+            'gender'           => 'nullable|in:M,F',
+            'status'           => 'required|in:active,inactive,suspended',
+            'bio'              => 'nullable|string|max:1000',
+            'entity_id'        => 'nullable|exists:entities,id',
+            'avatar'           => 'nullable|image|mimes:jpeg,png,jpg,gif|max:2048',
         ]);
 
         if ($validator->fails()) {
@@ -396,15 +417,16 @@ class AuditorController extends Controller
             $data['avatar'] = $request->file('avatar')->store('auditors', 'public');
         }
 
-        $data['updated_by'] = Auth::id();
+        // ✅ FIX MULTI-TENANCY : ID tenant pour updated_by
+        $data['updated_by'] = $this->getTenantUserId();
 
         $auditor->update($data);
 
         // Mettre à jour User associé
         if ($auditor->user) {
             $auditor->user->update([
-                'name' => trim("{$request->last_name} {$request->first_name}"),
-                'email' => $request->email,
+                'name'   => trim("{$request->last_name} {$request->first_name}"),
+                'email'  => $request->email,
                 'status' => $request->status,
             ]);
         }
@@ -463,8 +485,8 @@ class AuditorController extends Controller
 
         $request->validate([
             'competency_id' => 'required|integer|exists:competencies,id',
-            'level' => 'required|integer|between:1,5',
-            'is_primary' => 'nullable|boolean',
+            'level'         => 'required|integer|between:1,5',
+            'is_primary'    => 'nullable|boolean',
         ]);
 
         try {
@@ -516,12 +538,12 @@ class AuditorController extends Controller
     private function getStatistics(): array
     {
         return [
-            'total' => Auditor::count(),
-            'active' => Auditor::where('status', 'active')->count(),
-            'inactive' => Auditor::where('status', 'inactive')->count(),
-            'suspended' => Auditor::where('status', 'suspended')->count(),
+            'total'            => Auditor::count(),
+            'active'           => Auditor::where('status', 'active')->count(),
+            'inactive'         => Auditor::where('status', 'inactive')->count(),
+            'suspended'        => Auditor::where('status', 'suspended')->count(),
             'with_competencies' => Auditor::has('competencies')->count(),
-            'recent' => Auditor::where('created_at', '>=', now()->subDays(30))->count(),
+            'recent'           => Auditor::where('created_at', '>=', now()->subDays(30))->count(),
         ];
     }
 

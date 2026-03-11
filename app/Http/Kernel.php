@@ -72,6 +72,7 @@ class Kernel extends HttpKernel
 
         // ✅ Ajoute ceci :
         'menu.authz' => \App\Http\Middleware\AuthorizeMenu::class,
+        'audit.session' => \App\Http\Middleware\EnsureTenantSession::class,
     ];
 }
 

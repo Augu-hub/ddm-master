@@ -14,6 +14,11 @@
  * ════════════════════════════════════════════════════════════════════════════════════════
  */
 
+use App\Http\Controllers\Audit\AuditPlanningController;
+use App\Http\Controllers\Audit\FactorInputController;
+use App\Http\Controllers\Audit\MissionPrioritizationController;
+use App\Http\Controllers\Audit\MissionRequestController;
+use App\Http\Controllers\Audit\ProcessFactorEvaluationController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Risk\RiskController;
@@ -324,3 +329,4 @@ Route::prefix('audit/universe')->group(function () {
     Route::post('/create-risk', [AuditUniverseController::class, 'createRisk']);
 
 });
+

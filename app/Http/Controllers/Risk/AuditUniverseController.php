@@ -44,21 +44,21 @@ class AuditUniverseController extends Controller
                 ->get();
 
             // Charger fréquences
-            $frequencies = DB::table('risk_frequency_levels')
+            $frequencies = DB::table('audit_frequency_levels')
                 ->select('id', 'level', 'label', 'color')
                 ->whereNull('deleted_at')
                 ->orderBy('level')
                 ->get();
 
             // Charger impacts
-            $impacts = DB::table('risk_impact_levels')
+            $impacts = DB::table('audit_impact_levels')
                 ->select('id', 'level', 'label', 'color')
                 ->whereNull('deleted_at')
                 ->orderBy('level')
                 ->get();
 
             // Charger matrice (COMPLÈTE pour calculs côté client)
-            $matrix = DB::table('risk_matrix')
+            $matrix = DB::table('audit_matrix')
                 ->select('id', 'frequency_level', 'impact_level', 'qualification')
                 ->whereNull('deleted_at')
                 ->get();

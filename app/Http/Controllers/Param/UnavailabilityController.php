@@ -34,12 +34,13 @@ class UnavailabilityController extends Controller
             ->orderBy('date_start')
             ->get();
 
-        $auditorUnavailabilities = AuditorUnavailability::with('auditor:id,first_name,last_name,code')
+        $auditorUnavailabilities = AuditorUnavailability::with('auditor:id,first_name,last_name,audit_id')
             ->orderBy('date_start')
             ->get();
 
+        // CORRECTION : Utiliser audit_id au lieu de code
         $auditors = Auditor::active()
-            ->select('id', 'first_name', 'last_name', 'code')
+            ->select('id', 'first_name', 'last_name', 'audit_id')
             ->orderBy('first_name')
             ->get();
 
@@ -210,7 +211,7 @@ class UnavailabilityController extends Controller
             'type' => 'nullable|string',
         ]);
 
-        $query = AuditorUnavailability::with('auditor')
+        $query = AuditorUnavailability::with('auditor:id,first_name,last_name,audit_id')
             ->where('date_start', '<=', $validated['date_end'])
             ->where('date_end', '>=', $validated['date_start'])
             ->where('is_approved', true);
@@ -241,7 +242,7 @@ class UnavailabilityController extends Controller
             'auditor_count' => AuditorUnavailability::count(),
             'approved_count' => AuditorUnavailability::where('is_approved', true)->count(),
             'pending_count' => AuditorUnavailability::where('is_approved', false)->count(),
-            'affected_auditors' => AuditorUnavailability::distinct('auditor_id')->count(),
+            'affected_auditors' => AuditorUnavailability::distinct('auditor_id')->count('auditor_id'),
             'days_unavailable' => $this->calculateTotalUnavailableDays(),
         ];
 
@@ -305,7 +306,7 @@ class UnavailabilityController extends Controller
         ]);
 
         $year = $validated['year'] ?? now()->year;
-        $auditor = Auditor::findOrFail($validated['auditor_id']);
+        $auditor = Auditor::select('id', 'first_name', 'last_name', 'audit_id')->findOrFail($validated['auditor_id']);
 
         $unavailabilities = AuditorUnavailability::where('auditor_id', $validated['auditor_id'])
             ->where('is_approved', true)
@@ -366,7 +367,7 @@ class UnavailabilityController extends Controller
             fputcsv($file, []);
 
             // Indisponibilités auditeurs
-            AuditorUnavailability::with('auditor')
+            AuditorUnavailability::with('auditor:id,first_name,last_name')
                 ->orderBy('date_start')
                 ->each(function($u) use ($file) {
                     $days = ceil((strtotime($u->date_end) - strtotime($u->date_start)) / (60*60*24)) + 1;
@@ -396,7 +397,7 @@ class UnavailabilityController extends Controller
     public function exportJson()
     {
         $global = GlobalUnavailability::where('is_active', true)->get();
-        $auditor = AuditorUnavailability::with('auditor')->get();
+        $auditor = AuditorUnavailability::with('auditor:id,first_name,last_name,audit_id')->get();
 
         return response()->json([
             'exported_at' => now(),
@@ -512,7 +513,9 @@ class UnavailabilityController extends Controller
             'year' => 'required|integer',
         ]);
 
-        $auditor = Auditor::findOrFail($validated['auditor_id']);
+        $auditor = Auditor::select('id', 'first_name', 'last_name', 'audit_id')
+            ->findOrFail($validated['auditor_id']);
+            
         $unavailabilities = AuditorUnavailability::where('auditor_id', $validated['auditor_id'])
             ->whereYear('date_start', $validated['year'])
             ->get()

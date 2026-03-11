@@ -48,6 +48,8 @@ declare module 'vue' {
     BListGroup: typeof import('bootstrap-vue-next/components/BListGroup')['BListGroup']
     BListGroupItem: typeof import('bootstrap-vue-next/components/BListGroup')['BListGroupItem']
     BModal: typeof import('bootstrap-vue-next/components/BModal')['BModal']
+    BNav: typeof import('bootstrap-vue-next/components/BNav')['BNav']
+    BNavItem: typeof import('bootstrap-vue-next/components/BNav')['BNavItem']
     BOffcanvas: typeof import('bootstrap-vue-next/components/BOffcanvas')['BOffcanvas']
     BPagination: typeof import('bootstrap-vue-next/components/BPagination')['BPagination']
     BPlaceholder: typeof import('bootstrap-vue-next/components/BPlaceholder')['BPlaceholder']

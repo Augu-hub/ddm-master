@@ -1,963 +1,665 @@
 <template>
-  <div class="mission-phases-container">
-    <!-- Header -->
-    <div class="phases-header bg-white shadow-sm p-4 rounded mb-4">
-      <div class="row align-items-center">
-        <div class="col-md-6">
-          <h2 class="mb-0">📋 Phases de Mission</h2>
+  <div class="mp-wrapper">
+
+    <!-- ═══════════════════════════════════════════════════════
+         EN-TÊTE GLOBAL
+    ════════════════════════════════════════════════════════ -->
+    <div class="d-flex align-items-center justify-content-between mb-4 flex-wrap gap-2">
+      <div class="d-flex align-items-center gap-3">
+        <div class="mp-header-icon">
+          <i class="ti ti-sitemap fs-20"></i>
         </div>
-        <div class="col-md-6 text-end">
-          <!-- Action Buttons -->
-          <button 
-            @click="expandAll" 
-            class="btn btn-sm btn-success ms-2"
-            title="Déplier tous"
-          >
-            ⬇️ Tout Déplier
-          </button>
-          <button 
-            @click="collapseAll" 
-            class="btn btn-sm btn-warning ms-2"
-            title="Replier tous"
-          >
-            ⬆️ Tout Replier
-          </button>
-          <button 
-            @click="openCreateModal(null)" 
-            class="btn btn-sm btn-primary ms-2"
-          >
-            ➕ Nouvelle Phase
-          </button>
+        <div>
+          <h4 class="mb-0 fw-bold text-dark">Formulaires d'Audit</h4>
+          <p class="text-muted mb-0 fs-12">
+            {{ totalForms }} formulaire(s) répartis sur
+            {{ groupedData.length }} type(s) de mission · {{ totalPhases }} phase(s)
+          </p>
         </div>
       </div>
-
-      <!-- Statistics -->
-      <div v-if="selectedAudit" class="row mt-3 text-muted small">
-        <div class="col-4">📊 Total: {{ statistics.totalPhases }} phases</div>
-        <div class="col-4">🔝 Racines: {{ statistics.mainPhases }}</div>
-        <div class="col-4">⚖️ Poids: {{ statistics.totalWeight }}</div>
+      <div class="d-flex align-items-center gap-2">
+        <b-button variant="soft-primary" size="sm" @click="expandAll">
+          <i class="ti ti-arrows-maximize me-1"></i> Tout ouvrir
+        </b-button>
+        <b-button variant="soft-secondary" size="sm" @click="collapseAll">
+          <i class="ti ti-arrows-minimize me-1"></i> Tout fermer
+        </b-button>
       </div>
     </div>
 
-    <!-- Audit Type Selector - Cards -->
-    <div v-if="!selectedAudit" class="audit-selector-section">
-      <h3 class="mb-4 text-center">🎯 Sélectionnez un Type d'Audit</h3>
-      
-      <div class="audit-cards-grid">
+    <!-- ── Aucune donnée ──────────────────────────────────── -->
+    <b-card v-if="groupedData.length === 0" no-body class="text-center py-5">
+      <b-card-body>
+        <i class="ti ti-inbox fs-48 text-muted d-block mb-3" style="opacity:.4"></i>
+        <h5 class="text-muted fw-semibold">Aucune donnée disponible</h5>
+        <p class="text-muted fs-13 mb-0">
+          Vérifiez que les menus ont bien été construits lors de la connexion.<br>
+          <small class="text-danger" v-if="debugInfo">{{ debugInfo }}</small>
+        </p>
+      </b-card-body>
+    </b-card>
+
+    <!-- ═══════════════════════════════════════════════════════
+         GROUPES PAR TYPE DE MISSION
+         Structure attendue depuis session (buildUserMenus) :
+         [
+           {
+             mission_type: { id, code, label, audit_type_code, color, icon },
+             phases: [
+               { phase_num, phase_label, forms: [ { id, code, label, url_path, icon, children: [...] } ] }
+             ]
+           }
+         ]
+    ════════════════════════════════════════════════════════ -->
+    <div v-else class="d-flex flex-column gap-4">
+      <div
+        v-for="(group, gi) in groupedData"
+        :key="group.missionType?.id ?? gi"
+        class="mp-type-block"
+      >
+        <!-- ── Titre du type de mission ──────────────────── -->
+        <div class="mp-type-header d-flex align-items-center justify-content-between flex-wrap gap-2 mb-2">
+          <div class="d-flex align-items-center gap-3">
+            <div class="mp-type-badge" :style="{ background: group.color }">
+              <i :class="group.icon || 'ti ti-clipboard-list'" class="fs-14"></i>
+            </div>
+            <div>
+              <div class="d-flex align-items-center gap-2">
+                <h5 class="mb-0 fw-bold text-dark">{{ group.label }}</h5>
+                <span class="badge fs-10 px-2" :style="{ background: group.color + '22', color: group.color }">
+                  {{ group.code }}
+                </span>
+                <span v-if="group.auditTypeCode" class="badge fs-10 px-2 bg-light text-muted">
+                  → {{ group.auditTypeCode }}
+                </span>
+              </div>
+              <p class="text-muted fs-12 mb-0">
+                {{ group.phases.length }} phase(s) ·
+                {{ countGroupForms(group) }} formulaire(s)
+              </p>
+            </div>
+          </div>
+          <!-- Pills navigation rapide vers chaque phase -->
+          <div class="d-flex align-items-center gap-1 flex-wrap">
+            <b-button
+              v-for="ph in group.phases"
+              :key="phaseKey(group, ph)"
+              variant="null"
+              size="sm"
+              class="btn-phase-pill"
+              :style="{
+                background: phaseColor(ph.phase_num, group.color) + '18',
+                color:      phaseColor(ph.phase_num, group.color),
+                border:     '1px solid ' + phaseColor(ph.phase_num, group.color) + '44'
+              }"
+              @click="scrollToPhase(phaseKey(group, ph))"
+            >
+              {{ ph.phase_label }}
+            </b-button>
+          </div>
+        </div>
+
+        <!-- ── Phases du groupe ──────────────────────────── -->
         <div
-          v-for="audit in missionTypes"
-          :key="audit.id"
-          @click="selectAudit(audit)"
-          class="audit-card"
-          :style="{ borderColor: getAuditColor(audit.id) }"
+          class="d-flex flex-column gap-3 ms-2 ps-3 mp-phases-indent"
+          :style="{ '--type-color': group.color }"
         >
-          <div class="audit-icon" :style="{ backgroundColor: getAuditColor(audit.id) }">
-            {{ getAuditIcon(audit.code) }}
-          </div>
-          <div class="audit-content">
-            <h5 class="audit-code">{{ audit.code }}</h5>
-            <p class="audit-label">{{ audit.label }}</p>
-            <small class="audit-description">{{ getAuditDescription(audit.code) }}</small>
-          </div>
-          <div class="audit-arrow">→</div>
+          <b-card
+            v-for="ph in group.phases"
+            :key="phaseKey(group, ph)"
+            :id="'phase-' + phaseKey(group, ph)"
+            no-body
+            class="mp-phase-card"
+          >
+            <!-- En-tête de phase (cliquable) -->
+            <div
+              class="mp-phase-header d-flex align-items-center justify-content-between flex-wrap gap-2 px-4 py-3"
+              :style="{ borderLeftColor: phaseColor(ph.phase_num, group.color) }"
+              @click="togglePhase(phaseKey(group, ph))"
+              style="cursor:pointer"
+            >
+              <div class="d-flex align-items-center gap-3">
+                <div
+                  class="mp-phase-icon-wrap"
+                  :style="{
+                    background: phaseColor(ph.phase_num, group.color) + '18',
+                    color:      phaseColor(ph.phase_num, group.color)
+                  }"
+                >
+                  <i :class="phaseIcon(ph.phase_num)" class="fs-16"></i>
+                </div>
+                <div>
+                  <div class="d-flex align-items-center gap-2">
+                    <h6 class="mb-0 fw-bold text-dark">{{ ph.phase_label }}</h6>
+                    <span class="text-muted fs-11 font-monospace">Phase {{ ph.phase_num }}</span>
+                  </div>
+                  <p class="text-muted fs-11 mb-0">{{ (ph.forms || []).length }} formulaire(s)</p>
+                </div>
+              </div>
+              <div class="d-flex align-items-center gap-2">
+                <span
+                  class="badge rounded-pill px-3 py-1 fs-11"
+                  :style="{
+                    background: phaseColor(ph.phase_num, group.color) + '18',
+                    color:      phaseColor(ph.phase_num, group.color)
+                  }"
+                >
+                  P{{ ph.phase_num }}
+                </span>
+                <i
+                  :class="expandedPhases[phaseKey(group, ph)] !== false
+                    ? 'ti ti-chevron-up' : 'ti ti-chevron-down'"
+                  class="text-muted fs-14"
+                ></i>
+              </div>
+            </div>
+
+            <!-- Corps : formulaires -->
+            <b-collapse :visible="expandedPhases[phaseKey(group, ph)] !== false">
+
+              <div v-if="!ph.forms || ph.forms.length === 0"
+                class="px-4 py-3 text-muted text-center fs-12 bg-light">
+                <i class="ti ti-alert-circle me-1"></i> Aucun formulaire pour cette phase.
+              </div>
+
+              <div v-else class="table-responsive">
+                <table class="table table-hover table-nowrap mb-0 align-middle mp-table">
+                  <thead class="bg-light bg-opacity-75">
+                    <tr class="text-uppercase fs-10 text-muted">
+                      <th class="ps-4" style="width:40px">#</th>
+                      <th>Formulaire</th>
+                      <th>Chemin</th>
+                      <th class="text-center" style="width:110px">Sous-menus</th>
+                      <th class="text-end pe-4" style="width:110px">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <template v-for="(form, fi) in ph.forms" :key="form.id">
+
+                      <!-- ── Ligne formulaire principal ─── -->
+                      <tr class="mp-form-row">
+                        <td class="ps-4 text-muted fs-11">{{ fi + 1 }}</td>
+                        <td>
+                          <div class="d-flex align-items-center gap-2">
+                            <div class="mp-form-icon-wrap">
+                              <i :class="form.icon || 'ti ti-file'" class="fs-13 text-muted"></i>
+                            </div>
+                            <div>
+                              <div class="fw-semibold text-dark fs-13">{{ form.label }}</div>
+                              <div v-if="form.children?.length" class="fs-10 text-muted">
+                                {{ form.children.length }} sous-menu(s)
+                              </div>
+                            </div>
+                          </div>
+                        </td>
+                        <td>
+                          <code class="text-muted fs-11">{{ form.url_path || '—' }}</code>
+                        </td>
+                        <td class="text-center">
+                          <b-button
+                            v-if="form.children?.length"
+                            variant="null"
+                            size="sm"
+                            class="btn btn-sm btn-soft-info px-2 py-1 fs-11"
+                            @click.stop="toggleFormChildren(form.id)"
+                          >
+                            <i :class="expandedForms[form.id] ? 'ti ti-eye-off' : 'ti ti-eye'" class="me-1"></i>
+                            {{ form.children.length }}
+                          </b-button>
+                          <span v-else class="text-muted fs-11">—</span>
+                        </td>
+                        <td class="text-end pe-4">
+                          <div class="d-flex align-items-center justify-content-end gap-1">
+                            <b-button
+                              v-if="form.url_path"
+                              variant="null"
+                              size="sm"
+                              class="btn btn-sm btn-soft-primary px-2 py-1"
+                              v-b-tooltip.top="'Aperçu'"
+                              @click.stop="openPreview({ label: form.label, url: form.url_path, icon: form.icon, type: 'Formulaire' })"
+                            >
+                              <i class="ti ti-eye fs-13"></i>
+                            </b-button>
+                            <a
+                              v-if="form.url_path"
+                              :href="buildUrl(form.url_path)"
+                              target="_blank"
+                              class="btn btn-sm btn-soft-secondary px-2 py-1"
+                              v-b-tooltip.top="'Nouvel onglet'"
+                              @click.stop
+                            >
+                              <i class="ti ti-external-link fs-13"></i>
+                            </a>
+                            <span v-if="!form.url_path" class="text-muted fs-11">—</span>
+                          </div>
+                        </td>
+                      </tr>
+
+                      <!-- ── Sous-formulaires (children) ─── -->
+                      <tr
+                        v-for="child in (form.children || [])"
+                        v-show="expandedForms[form.id]"
+                        :key="child.id"
+                        class="mp-child-row"
+                      >
+                        <td class="ps-4"></td>
+                        <td>
+                          <div class="d-flex align-items-center gap-2 ms-4">
+                            <i class="ti ti-corner-down-right text-muted fs-11"></i>
+                            <div class="mp-child-icon-wrap">
+                              <i :class="child.icon || 'ti ti-file-text'" class="fs-11 text-muted"></i>
+                            </div>
+                            <span class="text-dark fs-12">{{ child.label }}</span>
+                          </div>
+                        </td>
+                        <td>
+                          <code class="text-muted fs-10">{{ child.url_path || '—' }}</code>
+                        </td>
+                        <td class="text-center">
+                          <span class="badge bg-warning-subtle text-warning fs-10 px-2">Sous-menu</span>
+                        </td>
+                        <td class="text-end pe-4">
+                          <div class="d-flex align-items-center justify-content-end gap-1">
+                            <b-button
+                              v-if="child.url_path"
+                              variant="null"
+                              size="sm"
+                              class="btn btn-sm btn-soft-primary px-2 py-1"
+                              v-b-tooltip.top="'Aperçu'"
+                              @click="openPreview({ label: child.label, url: child.url_path, icon: child.icon, type: 'Sous-menu' })"
+                            >
+                              <i class="ti ti-eye fs-12"></i>
+                            </b-button>
+                            <a
+                              v-if="child.url_path"
+                              :href="buildUrl(child.url_path)"
+                              target="_blank"
+                              class="btn btn-sm btn-soft-secondary px-2 py-1"
+                              v-b-tooltip.top="'Nouvel onglet'"
+                            >
+                              <i class="ti ti-external-link fs-12"></i>
+                            </a>
+                          </div>
+                        </td>
+                      </tr>
+
+                    </template>
+                  </tbody>
+                </table>
+              </div>
+            </b-collapse>
+          </b-card>
         </div>
+        <!-- /phases du groupe -->
       </div>
     </div>
 
-    <!-- Phases Section -->
-    <div v-if="selectedAudit" class="phases-section">
-      <!-- Selected Audit Info Bar -->
-      <div class="selected-audit-bar bg-light border-bottom p-3 mb-4 rounded">
-        <div class="row align-items-center">
-          <div class="col-md-6">
-            <div class="selected-audit-info">
-              <span class="audit-icon-small" :style="{ backgroundColor: getAuditColor(selectedAudit.id) }">
-                {{ getAuditIcon(selectedAudit.code) }}
-              </span>
-              <div class="ms-3">
-                <h6 class="mb-0">{{ selectedAudit.code }}</h6>
-                <small class="text-muted">{{ selectedAudit.label }}</small>
-              </div>
+    <!-- ═══════════════════════════════════════════════════════
+         MODAL APERÇU IFRAME
+    ════════════════════════════════════════════════════════ -->
+    <b-modal
+      v-model="previewModal.show"
+      size="xl"
+      body-class="p-0"
+      header-class="mp-modal-header"
+      footer-class="mp-modal-footer"
+      dialog-class="mp-preview-dialog"
+      scrollable
+      hide-title
+    >
+      <template #header>
+        <div class="d-flex align-items-center gap-3 w-100">
+          <div class="mp-modal-icon">
+            <i :class="previewModal.icon || 'ti ti-layout'" class="fs-16"></i>
+          </div>
+          <div class="flex-grow-1 min-w-0">
+            <div class="fw-bold text-dark fs-14 text-truncate">{{ previewModal.label }}</div>
+            <div class="d-flex align-items-center gap-2 mt-1 flex-wrap">
+              <span class="badge bg-primary-subtle text-primary fs-10">{{ previewModal.type }}</span>
+              <code class="text-muted fs-10 text-truncate" style="max-width:300px">{{ previewModal.url }}</code>
             </div>
           </div>
-          <div class="col-md-6 text-end">
-            <button 
-              @click="deselectAudit"
-              class="btn btn-sm btn-outline-secondary"
-            >
-              ← Changer d'Audit
-            </button>
+          <div class="d-flex align-items-center gap-2 flex-shrink-0">
+            <a :href="buildUrl(previewModal.url)" target="_blank" class="btn btn-sm btn-soft-primary">
+              <i class="ti ti-external-link me-1"></i> Ouvrir
+            </a>
+            <b-button variant="null" class="btn btn-sm btn-soft-secondary" @click="previewModal.show = false">
+              <i class="ti ti-x fs-14"></i>
+            </b-button>
           </div>
         </div>
-      </div>
+      </template>
 
-      <!-- Loading -->
-      <div v-if="loading" class="alert alert-info">
-        ⏳ Chargement hiérarchie complète...
-      </div>
-
-      <!-- Error -->
-      <div v-if="error" class="alert alert-danger alert-dismissible fade show">
-        ❌ {{ error }}
-        <button @click="error = null" class="btn-close"></button>
-      </div>
-
-      <!-- Success -->
-      <div v-if="successMessage" class="alert alert-success alert-dismissible fade show">
-        ✅ {{ successMessage }}
-        <button @click="successMessage = null" class="btn-close"></button>
-      </div>
-
-      <!-- Phases Table -->
-      <div class="phases-table-wrapper bg-white rounded shadow-sm p-3">
-        <table class="table table-hover mb-0">
-          <thead class="table-light">
-            <tr>
-              <th style="width: 5%"></th>
-              <th style="width: 12%">Code</th>
-              <th style="width: 25%">Label</th>
-              <th style="width: 35%">Description</th>
-              <th style="width: 8%">Type</th>
-              <th style="width: 15%">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            <!-- Phases Racines -->
-            <PhaseRow
-              v-for="phase in hierarchy"
-              :key="`phase-${phase.id}`"
-              :phase="phase"
-              :expanded-ids="expandedIds"
-              :mission-type-id="selectedAudit.id"
-              @toggle-expand="toggleExpand"
-              @edit="editPhase"
-              @delete="deletePhase"
-              @create-child="openCreateModal"
-            />
-          </tbody>
-        </table>
-
-        <!-- Empty State -->
-        <div v-if="hierarchy.length === 0" class="text-center py-5 text-muted">
-          <p>📭 Aucune phase trouvée pour ce type d'audit</p>
+      <div class="mp-iframe-wrap">
+        <div v-if="previewModal.loading" class="mp-iframe-loader">
+          <div class="spinner-border text-primary" style="width:2rem;height:2rem" role="status"></div>
+          <p class="text-muted mt-3 fs-13 mb-0">Chargement de l'aperçu…</p>
         </div>
+        <iframe
+          v-if="previewModal.show"
+          :src="buildUrl(previewModal.url)"
+          class="mp-iframe"
+          :class="{ 'opacity-0': previewModal.loading }"
+          @load="previewModal.loading = false"
+          @error="previewModal.loading = false"
+          frameborder="0"
+          sandbox="allow-same-origin allow-scripts allow-forms"
+        ></iframe>
       </div>
-    </div>
 
-    <!-- Modal Création/Edit Phase -->
-    <div v-if="showModal" class="modal-overlay" @click.self="closeModal">
-      <div class="modal-content">
-        <div class="modal-header">
-          <h5>{{ form.id ? '✏️ Modifier Phase' : '➕ Créer Phase' }}</h5>
-          <button @click="closeModal" class="btn-close"></button>
+      <template #footer>
+        <div class="d-flex align-items-center justify-content-between w-100">
+          <span class="text-muted fs-12">
+            <i class="ti ti-info-circle me-1"></i>
+            Aperçu en lecture seule.
+          </span>
+          <b-button size="sm" variant="secondary" @click="previewModal.show = false">Fermer</b-button>
         </div>
+      </template>
+    </b-modal>
 
-        <div class="modal-body">
-          <!-- Step Indicators -->
-          <div class="step-indicators mb-4">
-            <div 
-              v-for="(step, idx) in steps" 
-              :key="idx"
-              class="step"
-              :class="{ active: currentStep === idx + 1, completed: currentStep > idx + 1 }"
-            >
-              <span class="step-number">{{ idx + 1 }}</span>
-              <span class="step-label">{{ step }}</span>
-            </div>
-          </div>
-
-          <!-- Step 1: Parent -->
-          <div v-if="currentStep === 1">
-            <h6>1️⃣ Parent de la phase?</h6>
-            <select v-model="form.parent_id" class="form-select">
-              <option :value="null">📍 Racine (Pas de parent)</option>
-              <option v-for="phase in availableParents" :key="phase.id" :value="phase.id">
-                {{ phase.code_full }} - {{ phase.label }}
-              </option>
-            </select>
-          </div>
-
-          <!-- Step 2: Code -->
-          <div v-if="currentStep === 2">
-            <h6>2️⃣ Code phase</h6>
-            <input 
-              v-model="form.code" 
-              type="text" 
-              class="form-control"
-              placeholder="Ex: P1, E1, PREP"
-              @keyup="generateCodeFull"
-            >
-            <small class="text-muted d-block mt-2">Code généré: <strong>{{ generatedCodeFull }}</strong></small>
-          </div>
-
-          <!-- Step 3: Label -->
-          <div v-if="currentStep === 3">
-            <h6>3️⃣ Libellé phase</h6>
-            <input 
-              v-model="form.label" 
-              type="text" 
-              class="form-control"
-              placeholder="Ex: Fiche 1 : Déclenchement de la mission"
-            >
-          </div>
-
-          <!-- Step 4: Description -->
-          <div v-if="currentStep === 4">
-            <h6>4️⃣ Description (Texte Fiche)</h6>
-            <textarea 
-              v-model="form.description" 
-              class="form-control" 
-              rows="4"
-              placeholder="Description détaillée de la fiche ou phase..."
-            ></textarea>
-            <small class="text-muted">{{ form.description?.length || 0 }}/5000 caractères</small>
-          </div>
-
-          <!-- Step 5: Type & Logos -->
-          <div v-if="currentStep === 5">
-            <h6>5️⃣ Type Phase & Logos</h6>
-            
-            <div class="mb-3">
-              <label class="form-label">Type Phase</label>
-              <select v-model="form.phase_type" class="form-select">
-                <option :value="null">-- Sélectionner un type --</option>
-                <option value="PREPARATION">🟦 PREPARATION</option>
-                <option value="VERIFICATION">🟩 VERIFICATION</option>
-                <option value="CONCLUSION">🟨 CONCLUSION</option>
-                <option value="SUIVI">🟪 SUIVI</option>
-              </select>
-            </div>
-
-            <div class="row">
-              <div class="col-6 mb-3">
-                <label class="form-label">Logo Préparation</label>
-                <input v-model="form.logo_preparation" type="text" class="form-control form-control-sm" placeholder="/chemin/logo">
-              </div>
-              <div class="col-6 mb-3">
-                <label class="form-label">Logo Vérification</label>
-                <input v-model="form.logo_verification" type="text" class="form-control form-control-sm" placeholder="/chemin/logo">
-              </div>
-              <div class="col-6 mb-3">
-                <label class="form-label">Logo Conclusion</label>
-                <input v-model="form.logo_conclusion" type="text" class="form-control form-control-sm" placeholder="/chemin/logo">
-              </div>
-              <div class="col-6 mb-3">
-                <label class="form-label">Logo Suivi</label>
-                <input v-model="form.logo_suivi" type="text" class="form-control form-control-sm" placeholder="/chemin/logo">
-              </div>
-            </div>
-          </div>
-
-          <!-- Step 6: Poids & Options -->
-          <div v-if="currentStep === 6">
-            <h6>6️⃣ Poids & Options</h6>
-            <div class="mb-3">
-              <label class="form-label">Poids (0-5)</label>
-              <input 
-                v-model.number="form.weight" 
-                type="number" 
-                min="0" 
-                max="5" 
-                class="form-control"
-              >
-            </div>
-            <div class="form-check">
-              <input v-model="form.is_decomposable" type="checkbox" class="form-check-input" id="decomposable">
-              <label class="form-check-label" for="decomposable">
-                Décomposable en sous-phases
-              </label>
-            </div>
-          </div>
-
-          <!-- Step 7: Confirmation -->
-          <div v-if="currentStep === 7" class="alert alert-light">
-            <h6>7️⃣ Confirmation</h6>
-            <div class="row">
-              <div class="col-6">
-                <p><strong>Code:</strong> {{ generatedCodeFull }}</p>
-                <p><strong>Type:</strong> {{ form.phase_type || '—' }}</p>
-                <p><strong>Poids:</strong> {{ form.weight }}/5</p>
-              </div>
-              <div class="col-6">
-                <p><strong>Label:</strong> {{ form.label }}</p>
-                <p><strong>Description:</strong> {{ (form.description || '').substring(0, 50) }}...</p>
-                <p><strong>Decomposable:</strong> {{ form.is_decomposable ? 'Oui' : 'Non' }}</p>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div class="modal-footer">
-          <button 
-            @click="previousStep" 
-            class="btn btn-secondary"
-            :disabled="currentStep === 1"
-          >
-            ← Précédent
-          </button>
-          <button 
-            @click="nextStep" 
-            class="btn btn-primary"
-            v-if="currentStep < 7"
-          >
-            Suivant →
-          </button>
-          <button 
-            @click="savePhase" 
-            class="btn btn-success"
-            v-if="currentStep === 7"
-            :disabled="saving"
-          >
-            {{ saving ? '⏳ Sauvegarde...' : '💾 Enregistrer' }}
-          </button>
-        </div>
-      </div>
-    </div>
   </div>
 </template>
 
-<script>
-import PhaseRow from './PhaseRow.vue';
+<script setup>
+import { computed, reactive, ref, nextTick } from 'vue'
+import { usePage } from '@inertiajs/vue3'
 
-export default {
-  name: 'MissionPhases',
-  components: { PhaseRow },
-  props: {
-    missionTypes: Array,
-    selectedTypeId: Number,
-    hierarchyProp: Array,
-    statistics: Object,
-  },
-  data() {
-    return {
-      selectedAudit: null,
-      hierarchy: [],
-      expandedIds: new Set(),
-      loading: false,
-      error: null,
-      successMessage: null,
-      showModal: false,
-      saving: false,
-      currentStep: 1,
-      steps: ['Parent', 'Code', 'Label', 'Description', 'Type & Logos', 'Poids', 'Confirmation'],
-      form: {
-        id: null,
-        code: '',
-        label: '',
-        description: '', // ✅ V4: Description fiche
-        phase_type: null, // ✅ V4: Type phase
-        logo_preparation: null, // ✅ V4: Logo prep
-        logo_verification: null, // ✅ V4: Logo verif
-        logo_conclusion: null, // ✅ V4: Logo conc
-        logo_suivi: null, // ✅ V4: Logo suivi
-        parent_id: null,
-        parentLevel: 1,
-        weight: 0,
-        is_decomposable: false,
-        mission_type_id: null,
-      },
-      availableParents: [],
-      generatedCodeFull: '',
-    };
-  },
-  mounted() {
-    if (this.selectedTypeId && this.missionTypes) {
-      const audit = this.missionTypes.find(a => a.id === this.selectedTypeId);
-      if (audit) this.selectAudit(audit);
+// ── URL de base ──────────────────────────────────────────────
+const page    = usePage()
+const baseUrl = computed(() =>
+  page.props?.ziggy?.url ?? page.props?.appUrl ?? window.location.origin
+)
+
+function buildUrl(urlPath) {
+  if (!urlPath) return '#'
+  const path = urlPath.startsWith('/') ? urlPath : '/' + urlPath
+  return baseUrl.value + path
+}
+
+// ── Lecture des menus depuis la session ──────────────────────
+// buildUserMenus retourne maintenant :
+// [
+//   {
+//     mission_type: { id, code, label, audit_type_code, audit_type_label, color, icon },
+//     phases: [
+//       { phase_num: 1, phase_label: 'Préparation', forms: [ { id, code, label, url_path, icon, children:[] } ] },
+//       { phase_num: 2, phase_label: 'Réalisation', forms: [...] },
+//       ...
+//     ]
+//   }
+// ]
+const rawMenus = page.props?.auth?.menus
+              ?? page.props?.userMenus
+              ?? []
+
+// Couleurs de phase par numéro
+const PHASE_COLORS = ['#1D4ED8','#059669','#D97706','#7C3AED','#DC2626']
+const TYPE_COLORS  = ['#2E86AB','#1E8449','#D68910','#7D3C98','#B03A2E','#1A5276','#117A65','#784212']
+
+function phaseColor(phaseNum, groupColor) {
+  return PHASE_COLORS[(phaseNum - 1) % PHASE_COLORS.length] ?? groupColor ?? '#64748B'
+}
+function phaseIcon(phaseNum) {
+  return [
+    'ti ti-search',         // 1 Préparation
+    'ti ti-tools',          // 2 Réalisation
+    'ti ti-file-report',    // 3 Conclusion
+    'ti ti-chart-arrows-vertical', // 4 Suivi
+    'ti ti-bulb',           // 5 Recommandations
+  ][(phaseNum - 1)] ?? 'ti ti-flag'
+}
+
+// ── Clé unique par phase (groupIndex_phaseNum) ───────────────
+// Évite les collisions si plusieurs types ont même phase_num
+function phaseKey(group, ph) {
+  return `${group.missionType?.id ?? group.code}_${ph.phase_num}`
+}
+
+// ── Normalisation des menus ──────────────────────────────────
+// Supporte DEUX formats possibles pour la rétrocompatibilité :
+//
+// FORMAT A (nouveau — AuthenticatedSessionController corrigé) :
+//   { mission_type: {...}, phases: [ { phase_num, phase_label, forms: [...] } ] }
+//
+// FORMAT B (ancien — structure phase/forms plate) :
+//   { phase: { id, code, label, color, icon, order }, forms: [...] }
+//
+const groupedData = computed(() => {
+  if (!rawMenus || rawMenus.length === 0) return []
+
+  // Détecter le format en regardant le premier élément
+  const first = rawMenus[0]
+
+  // ── FORMAT A : nouveau (mission_type + phases[]) ──────────
+  if (first?.mission_type !== undefined || first?.phases !== undefined) {
+    return rawMenus.map((item, gi) => {
+      const mt = item.mission_type ?? {}
+      return {
+        missionType:   mt,
+        code:          mt.code          ?? item.code          ?? `T${gi+1}`,
+        label:         mt.label         ?? item.label          ?? `Type ${gi+1}`,
+        auditTypeCode: mt.audit_type_code ?? null,
+        color:         mt.color         ?? mt.audit_color      ?? TYPE_COLORS[gi % TYPE_COLORS.length],
+        icon:          mt.icon          ?? mt.audit_icon        ?? 'ti ti-clipboard-list',
+        order:         mt.sort_order    ?? gi,
+        phases:        Array.isArray(item.phases) ? item.phases : [],
+      }
+    }).sort((a, b) => a.order - b.order)
+  }
+
+  // ── FORMAT B : ancien (phase + forms plats — groupement manuel) ─
+  // On regroupe par mission_type si dispo, sinon tout dans un seul groupe
+  const map = new Map()
+  rawMenus.forEach((item, idx) => {
+    const mt  = item.phase?.mission_type ?? null
+    const key = mt?.id ?? '__ungrouped__'
+
+    if (!map.has(key)) {
+      map.set(key, {
+        missionType: mt,
+        code:    mt?.code  ?? '—',
+        label:   mt?.label ?? 'Formulaires',
+        auditTypeCode: null,
+        color:   mt?.color ?? TYPE_COLORS[map.size % TYPE_COLORS.length],
+        icon:    mt?.icon  ?? 'ti ti-clipboard-list',
+        order:   mt?.sort_order ?? map.size,
+        // Convertir au format A pour uniformité
+        phases: [],
+      })
     }
-  },
-  methods: {
-    getCsrfToken() {
-      return document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') 
-        || document.querySelector('input[name="_token"]')?.value 
-        || '';
-    },
 
-    selectAudit(audit) {
-      this.selectedAudit = audit;
-      this.loadPhases();
-    },
+    const g = map.get(key)
+    // Convertir l'item en phase synthétique
+    const ph = item.phase ?? {}
+    g.phases.push({
+      phase_num:   ph.order ?? idx + 1,
+      phase_label: ph.label ?? ph.code ?? `Phase ${idx+1}`,
+      _phaseId:    ph.id,   // conservé pour compatibilité scroll
+      forms:       Array.isArray(item.forms) ? item.forms : [],
+    })
+  })
 
-    deselectAudit() {
-      this.selectedAudit = null;
-      this.hierarchy = [];
-      this.expandedIds.clear();
-      this.error = null;
-      this.successMessage = null;
-    },
+  return Array.from(map.values()).sort((a, b) => a.order - b.order)
+})
 
-    getAuditColor(auditId) {
-      const colors = {
-        1: '#0d6efd', 2: '#28a745', 3: '#fd7e14',
-        4: '#dc3545', 5: '#6f42c1', 6: '#20c997',
-      };
-      return colors[auditId] || '#6c757d';
-    },
+// ── Compteurs ────────────────────────────────────────────────
+const totalPhases = computed(() =>
+  groupedData.value.reduce((s, g) => s + g.phases.length, 0)
+)
+const totalForms = computed(() =>
+  groupedData.value.reduce((s, g) => s + countGroupForms(g), 0)
+)
+function countGroupForms(group) {
+  return group.phases.reduce((s, ph) => s + (ph.forms?.length ?? 0), 0)
+}
 
-    getAuditIcon(code) {
-      const icons = {
-        'ASS-AAP': '📊', 'ASS-ADC': '✅', 'ASS-ADI': '🔍',
-        'ASS-ADM': '📋', 'ASS-ADP': '⚡', 'ASS-ERC': '⚠️',
-      };
-      return icons[code] || '🎯';
-    },
+// ── Debug info (affiché si vide) ─────────────────────────────
+const debugInfo = computed(() => {
+  if (!rawMenus) return 'rawMenus est null/undefined'
+  if (!Array.isArray(rawMenus)) return `rawMenus n'est pas un tableau (type: ${typeof rawMenus})`
+  if (rawMenus.length === 0) return 'rawMenus est un tableau vide'
+  return null
+})
 
-    getAuditDescription(code) {
-      const descriptions = {
-        'ASS-AAP': 'Audit des processus analytiques et gestion paie',
-        'ASS-ADC': 'Audit de conformité réglementaire et légale',
-        'ASS-ADI': 'Audit interne général',
-        'ASS-ADM': 'Audit administratif',
-        'ASS-ADP': 'Audit de performance opérationnelle',
-        'ASS-ERC': 'Audit des risques et contrôles internes',
-      };
-      return descriptions[code] || '';
-    },
+// ── Accordéons phases ─────────────────────────────────────────
+// Initialiser après que groupedData soit calculé
+const expandedPhases = reactive({})
+const expandedForms  = reactive({})
 
-    async loadPhases() {
-      this.loading = true;
-      this.error = null;
-
-      try {
-        const response = await fetch(
-          `/m/audit.core/api/mission-phases/hierarchy/${this.selectedAudit.id}`
-        );
-        if (!response.ok) throw new Error('Erreur chargement');
-
-        const data = await response.json();
-        this.hierarchy = this.buildCompleteHierarchy(data.data || []);
-        await this.loadAllPhases();
-        this.expandAll();
-
-      } catch (err) {
-        this.error = `Erreur: ${err.message}`;
-        console.error('loadPhases error:', err);
-      } finally {
-        this.loading = false;
+// Ouvrir toutes les phases au montage
+function initExpanded() {
+  groupedData.value.forEach(g => {
+    g.phases.forEach(ph => {
+      const key = phaseKey(g, ph)
+      if (expandedPhases[key] === undefined) {
+        expandedPhases[key] = true
       }
-    },
+    })
+  })
+}
+// Appel immédiat (setup synchrone)
+initExpanded()
 
-    buildCompleteHierarchy(phases, level = 1) {
-      return phases.map(phase => ({
-        ...phase,
-        level: level,
-        _level: level,
-        children: phase.children && phase.children.length > 0 
-          ? this.buildCompleteHierarchy(phase.children, level + 1)
-          : [],
-      }));
-    },
+function togglePhase(key) { expandedPhases[key] = !expandedPhases[key] }
+function toggleFormChildren(id) { expandedForms[id] = !expandedForms[id] }
 
-    async loadAllPhases() {
-      try {
-        const response = await fetch(
-          `/m/audit.core/api/mission-phases/hierarchy/${this.selectedAudit.id}`
-        );
-        const data = await response.json();
-        this.availableParents = this.flattenHierarchy(data.data || []);
-      } catch (err) {
-        console.error('loadAllPhases error:', err);
-      }
-    },
+function expandAll() {
+  groupedData.value.forEach(g =>
+    g.phases.forEach(ph => { expandedPhases[phaseKey(g, ph)] = true })
+  )
+}
+function collapseAll() {
+  groupedData.value.forEach(g =>
+    g.phases.forEach(ph => { expandedPhases[phaseKey(g, ph)] = false })
+  )
+}
 
-    flattenHierarchy(phases, list = []) {
-      phases.forEach(phase => {
-        list.push(phase);
-        if (phase.children && phase.children.length > 0) {
-          this.flattenHierarchy(phase.children, list);
-        }
-      });
-      return list;
-    },
+// ── Navigation scroll ─────────────────────────────────────────
+function scrollToPhase(key) {
+  expandedPhases[key] = true
+  nextTick(() => {
+    document.getElementById('phase-' + key)
+      ?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  })
+}
 
-    toggleExpand(phaseId) {
-      if (this.expandedIds.has(phaseId)) {
-        this.expandedIds.delete(phaseId);
-      } else {
-        this.expandedIds.add(phaseId);
-      }
-    },
-
-    expandAll() {
-      const collectIds = (phases) => {
-        phases.forEach(phase => {
-          this.expandedIds.add(phase.id);
-          if (phase.children && phase.children.length > 0) {
-            collectIds(phase.children);
-          }
-        });
-      };
-      collectIds(this.hierarchy);
-    },
-
-    collapseAll() {
-      this.expandedIds.clear();
-    },
-
-    openCreateModal(parentPhase) {
-      this.currentStep = 1;
-      this.form = {
-        id: null,
-        code: '',
-        label: '',
-        description: '',
-        phase_type: null,
-        logo_preparation: null,
-        logo_verification: null,
-        logo_conclusion: null,
-        logo_suivi: null,
-        parent_id: parentPhase ? parentPhase.id : null,
-        parentLevel: parentPhase ? (parentPhase._level || parentPhase.level || 1) : 1,
-        weight: 0,
-        is_decomposable: false,
-        mission_type_id: this.selectedAudit.id,
-      };
-      this.generatedCodeFull = '';
-      this.showModal = true;
-    },
-
-    editPhase(phase) {
-      this.currentStep = 1;
-      this.form = {
-        id: phase.id,
-        code: phase.code,
-        label: phase.label,
-        description: phase.description || '',
-        phase_type: phase.phase_type || null,
-        logo_preparation: phase.logo_preparation || null,
-        logo_verification: phase.logo_verification || null,
-        logo_conclusion: phase.logo_conclusion || null,
-        logo_suivi: phase.logo_suivi || null,
-        parent_id: phase.parent_id,
-        parentLevel: phase._level || phase.level || 1,
-        weight: phase.weight || 0,
-        is_decomposable: phase.is_decomposable || false,
-        mission_type_id: this.selectedAudit.id,
-      };
-      this.generatedCodeFull = phase.code_full;
-      this.showModal = true;
-    },
-
-    generateCodeFull() {
-      if (!this.form.code) {
-        this.generatedCodeFull = '';
-        return;
-      }
-
-      const parentLevel = this.form.parentLevel;
-      
-      if (parentLevel === 1) {
-        const parentNum = this.form.parent_id ? this.findPhaseCodeNum(this.form.parent_id) : 1;
-        const childNum = this.countSiblingsAtLevel(2, this.form.parent_id) + 1;
-        this.generatedCodeFull = `P${parentNum}N${childNum}`;
-      } else if (parentLevel === 2) {
-        const parent = this.findPhaseById(this.form.parent_id);
-        const childNum = this.countSiblingsAtLevel(3, this.form.parent_id) + 1;
-        this.generatedCodeFull = `${parent.code_full}.1N3.${childNum}`;
-      } else {
-        const parent = this.findPhaseById(this.form.parent_id);
-        const childNum = this.countSiblingsAtLevel(parentLevel + 1, this.form.parent_id) + 1;
-        this.generatedCodeFull = `${parent.code_full}.1N${parentLevel + 1}.${childNum}`;
-      }
-    },
-
-    findPhaseById(phaseId) {
-      const search = (phases) => {
-        for (const p of phases) {
-          if (p.id === phaseId) return p;
-          if (p.children && p.children.length > 0) {
-            const found = search(p.children);
-            if (found) return found;
-          }
-        }
-        return null;
-      };
-      return search(this.availableParents) || {};
-    },
-
-    findPhaseCodeNum(phaseId) {
-      const phase = this.findPhaseById(phaseId);
-      return phase.code_full ? phase.code_full.match(/^P(\d+)/)?.[1] || 1 : 1;
-    },
-
-    countSiblingsAtLevel(level, parentId) {
-      const parent = this.findPhaseById(parentId);
-      return parent && parent.children ? parent.children.length : 0;
-    },
-
-    nextStep() {
-      if (this.currentStep < this.steps.length) this.currentStep++;
-    },
-
-    previousStep() {
-      if (this.currentStep > 1) this.currentStep--;
-    },
-
-    async savePhase() {
-      this.saving = true;
-      this.error = null;
-
-      try {
-        const payload = {
-          code: this.form.code,
-          code_full: this.generatedCodeFull,
-          label: this.form.label,
-          description: this.form.description,
-          phase_type: this.form.phase_type,
-          logo_preparation: this.form.logo_preparation,
-          logo_verification: this.form.logo_verification,
-          logo_conclusion: this.form.logo_conclusion,
-          logo_suivi: this.form.logo_suivi,
-          parent_id: this.form.parent_id,
-          weight: this.form.weight,
-          is_decomposable: this.form.is_decomposable,
-          mission_type_id: this.form.mission_type_id,
-        };
-
-        const method = this.form.id ? 'PUT' : 'POST';
-        const url = this.form.id
-          ? `/m/audit.core/api/mission-phases/${this.form.id}`
-          : '/m/audit.core/api/mission-phases';
-
-        const response = await fetch(url, {
-          method,
-          headers: { 
-            'Content-Type': 'application/json',
-            'X-CSRF-TOKEN': this.getCsrfToken(),
-          },
-          body: JSON.stringify(payload),
-        });
-
-        if (!response.ok) {
-          const err = await response.json();
-          throw new Error(err.error || 'Erreur sauvegarde');
-        }
-
-        this.successMessage = `Phase ${this.form.code} ${this.form.id ? 'modifiée' : 'créée'} ✅`;
-        this.closeModal();
-        await this.loadPhases();
-
-      } catch (err) {
-        this.error = `Erreur: ${err.message}`;
-      } finally {
-        this.saving = false;
-      }
-    },
-
-    async deletePhase(phaseId) {
-      if (!confirm('Supprimer cette phase et TOUS ses enfants?')) return;
-
-      try {
-        const response = await fetch(`/m/audit.core/api/mission-phases/${phaseId}`, {
-          method: 'DELETE',
-          headers: {
-            'Content-Type': 'application/json',
-            'X-CSRF-TOKEN': this.getCsrfToken(),
-          },
-        });
-
-        if (!response.ok) {
-          const err = await response.json();
-          throw new Error(err.error || 'Erreur suppression');
-        }
-
-        this.successMessage = 'Phase supprimée en cascade ✅';
-        await this.loadPhases();
-
-      } catch (err) {
-        this.error = `Erreur: ${err.message}`;
-      }
-    },
-
-    closeModal() {
-      this.showModal = false;
-      this.currentStep = 1;
-    },
-  },
-};
+// ── Modal aperçu ─────────────────────────────────────────────
+const previewModal = reactive({
+  show: false, label: '', url: '', icon: '', type: '', loading: true,
+})
+function openPreview({ label, url, icon, type }) {
+  Object.assign(previewModal, { label, url, icon: icon || '', type, loading: true, show: true })
+}
 </script>
 
 <style scoped>
-.mission-phases-container {
-  padding: 20px;
-  background: #f8f9fa;
-  min-height: 100vh;
+.mp-wrapper {
+  padding: 24px;
+  font-family: 'Segoe UI', system-ui, sans-serif;
 }
 
-.phases-header {
-  border-left: 4px solid #0d6efd;
+/* Header icon */
+.mp-header-icon {
+  width: 44px; height: 44px; border-radius: 10px;
+  background: linear-gradient(135deg, #2E86AB1A, #2E86AB33);
+  color: #2E86AB;
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
 }
 
-/* AUDIT SELECTOR */
-.audit-selector-section {
-  margin-top: 30px;
-  margin-bottom: 50px;
+/* Type block */
+.mp-type-badge {
+  width: 36px; height: 36px; border-radius: 8px;
+  color: #fff; font-weight: 700;
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+  box-shadow: 0 2px 8px rgba(0,0,0,.18);
 }
 
-.audit-cards-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-  gap: 20px;
-  padding: 20px 0;
+/* Ligne verticale colorée du groupe */
+.mp-phases-indent {
+  border-left: 3px solid var(--type-color, #dee2e6);
 }
 
-.audit-card {
-  display: flex;
-  align-items: center;
-  gap: 20px;
-  padding: 25px;
-  background: white;
-  border: 3px solid;
-  border-radius: 12px;
-  cursor: pointer;
-  transition: all 0.3s ease;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+/* Pills navigation rapide */
+.btn-phase-pill {
+  font-size: 0.68rem; padding: 3px 11px;
+  border-radius: 20px; font-weight: 600;
+  transition: transform .15s, box-shadow .15s;
+}
+.btn-phase-pill:hover { transform: translateY(-1px); box-shadow: 0 3px 8px rgba(0,0,0,.12); }
+
+/* Phase card */
+.mp-phase-card {
+  border: 1px solid #E9ECEF; border-radius: 10px;
+  overflow: hidden; box-shadow: 0 2px 10px rgba(0,0,0,.04);
+  transition: box-shadow .2s;
+}
+.mp-phase-card:hover { box-shadow: 0 4px 20px rgba(0,0,0,.08); }
+
+/* Phase header */
+.mp-phase-header {
+  border-left: 4px solid transparent;
+  background: #F8F9FA; border-bottom: 1px solid #EAECF0;
+  transition: background .15s;
+}
+.mp-phase-header:hover { background: #EFF2F7; }
+
+.mp-phase-icon-wrap {
+  width: 36px; height: 36px; border-radius: 8px;
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
 }
 
-.audit-card:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+/* Table */
+.mp-table th { letter-spacing: .04em; padding-top: 9px; padding-bottom: 9px; }
+.mp-form-row td { padding-top: 11px; padding-bottom: 11px; }
+.mp-form-row:hover td { background: #F5F7FF; }
+
+.mp-form-icon-wrap {
+  width: 28px; height: 28px; border-radius: 6px;
+  background: #F1F3F4;
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
 }
 
-.audit-icon {
-  width: 80px;
-  height: 80px;
-  border-radius: 12px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 40px;
-  flex-shrink: 0;
+/* Child rows */
+.mp-child-row td {
+  padding-top: 7px; padding-bottom: 7px;
+  background: #FAFBFC; border-bottom: 1px dashed #EEF0F2;
+}
+.mp-child-icon-wrap {
+  width: 20px; height: 20px; border-radius: 4px; background: #EAECEF;
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
 }
 
-.audit-content {
-  flex: 1;
-  min-width: 0;
+/* Modal */
+:deep(.mp-preview-dialog)  { max-width: 92vw !important; }
+:deep(.mp-modal-header)    { padding: 14px 20px; border-bottom: 1px solid #EAECF0; background: #F8F9FA; }
+:deep(.mp-modal-footer)    { padding: 10px 20px; border-top: 1px solid #EAECF0; background: #F8F9FA; }
+
+.mp-modal-icon {
+  width: 36px; height: 36px; border-radius: 8px;
+  background: #2E86AB1A; color: #2E86AB;
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
 }
 
-.audit-code {
-  margin: 0 0 8px 0;
-  font-weight: 700;
-  font-size: 18px;
-  color: #212529;
+/* Iframe */
+.mp-iframe-wrap { position: relative; height: 78vh; background: #F8F9FA; }
+.mp-iframe-loader {
+  position: absolute; inset: 0; z-index: 2;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  background: #F8F9FA;
+}
+.mp-iframe {
+  width: 100%; height: 100%; border: none; transition: opacity .3s;
 }
 
-.audit-label {
-  margin: 0 0 6px 0;
-  font-size: 16px;
-  font-weight: 500;
-  color: #495057;
-}
-
-.audit-description {
-  color: #6c757d;
-  display: block;
-  line-height: 1.4;
-}
-
-.audit-arrow {
-  font-size: 28px;
-  color: #ccc;
-  flex-shrink: 0;
-  transition: all 0.3s ease;
-}
-
-.audit-card:hover .audit-arrow {
-  color: inherit;
-  transform: translateX(4px);
-}
-
-/* SELECTED AUDIT BAR */
-.selected-audit-bar {
-  background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
-  border-radius: 8px !important;
-}
-
-.selected-audit-info {
-  display: flex;
-  align-items: center;
-}
-
-.audit-icon-small {
-  width: 48px;
-  height: 48px;
-  border-radius: 8px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 24px;
-  color: white;
-  font-weight: bold;
-}
-
-/* PHASES TABLE */
-.phases-table-wrapper {
-  overflow-x: auto;
-}
-
-.table {
-  font-size: 0.95rem;
-}
-
-.table thead {
-  background: #f0f1f3;
-}
-
-/* MODAL */
-.modal-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1050;
-}
-
-.modal-content {
-  background: white;
-  border-radius: 8px;
-  width: 90%;
-  max-width: 700px;
-  max-height: 90vh;
-  overflow-y: auto;
-  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
-}
-
-.modal-header {
-  border-bottom: 1px solid #dee2e6;
-  padding: 1.5rem;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.modal-header h5 {
-  margin: 0;
-  font-weight: 600;
-}
-
-.modal-body {
-  padding: 2rem 1.5rem;
-}
-
-.modal-footer {
-  border-top: 1px solid #dee2e6;
-  padding: 1.5rem;
-  display: flex;
-  gap: 10px;
-  justify-content: flex-end;
-}
-
-.step-indicators {
-  display: flex;
-  justify-content: space-between;
-  margin-bottom: 2rem;
-  flex-wrap: wrap;
-}
-
-.step {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  opacity: 0.5;
-  transition: opacity 0.3s;
-  flex: 1;
-  min-width: 60px;
-}
-
-.step.active {
-  opacity: 1;
-}
-
-.step.completed {
-  opacity: 1;
-}
-
-.step-number {
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  background: #dee2e6;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: 600;
-  margin-bottom: 8px;
-  color: #666;
-}
-
-.step.active .step-number {
-  background: #0d6efd;
-  color: white;
-}
-
-.step.completed .step-number {
-  background: #28a745;
-  color: white;
-}
-
-.step-label {
-  font-size: 0.75rem;
-  text-align: center;
-  max-width: 60px;
-}
-
-.form-control, .form-select {
-  border: 1px solid #dee2e6;
-  border-radius: 6px;
-  padding: 0.6rem 0.75rem;
-}
-
-.form-control:focus, .form-select:focus {
-  border-color: #0d6efd;
-  box-shadow: 0 0 0 3px rgba(13, 110, 253, 0.1);
-}
-
-.btn {
-  border-radius: 6px;
-  padding: 0.6rem 1rem;
-  font-weight: 500;
-  transition: all 0.3s;
-}
-
-.btn:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-.alert {
-  border-radius: 6px;
-  border: none;
-  padding: 1rem;
-  margin-bottom: 1rem;
-}
-
-@media (max-width: 768px) {
-  .audit-cards-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .audit-card {
-    padding: 20px;
-    gap: 15px;
-  }
-
-  .audit-icon {
-    width: 60px;
-    height: 60px;
-    font-size: 32px;
-  }
-
-  .step-indicators {
-    justify-content: space-around;
-  }
-
-  .step {
-    min-width: 50px;
-  }
-}
+/* Utilitaires */
+.fs-10 { font-size: .625rem  !important; }
+.fs-11 { font-size: .688rem  !important; }
+.fs-12 { font-size: .75rem   !important; }
+.fs-13 { font-size: .8125rem !important; }
+.fs-14 { font-size: .875rem  !important; }
+.fs-16 { font-size: 1rem     !important; }
+.fs-20 { font-size: 1.25rem  !important; }
+.fs-48 { font-size: 3rem     !important; }
+.min-w-0 { min-width: 0; }
 </style>

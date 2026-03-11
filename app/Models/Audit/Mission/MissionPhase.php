@@ -1,30 +1,46 @@
 <?php
 
 namespace App\Models\Audit\Mission;
+
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\{BelongsTo, HasMany};
 use Illuminate\Database\Eloquent\Builder;
 
-
-
-
 // ════════════════════════════════════════════════════════════════════════════════════
-// 📊 MISSION PHASE - AVEC CODES SÉRIALISÉS
+// 📊 MISSION PHASE
+// ⚠️  Table dans la base TENANT (fruitiva) — connexion 'tenant'
+//     PAS dans ddmparam (connexion 'param')
 // ════════════════════════════════════════════════════════════════════════════════════
 
 class MissionPhase extends Model
 {
-    protected $table = 'mission_phases';
-    protected $fillable = [
-        'code', 'code_full', 'label', 'parent_id', 'level',
-        'mission_type_id', 'weight', 'is_decomposable', 'status'
-    ];
-    protected $casts = ['is_decomposable' => 'boolean'];
+    // ── CORRECTION CLEF — évite l'erreur ddmparam.mission_phases ─────────
+    protected $connection = 'tenant';
 
+    protected $table = 'mission_phases';
+
+    protected $fillable = [
+        'code', 'code_full', 'label', 'description', 'phase_type',
+        'logo_preparation', 'logo_verification', 'logo_conclusion', 'logo_suivi',
+        'parent_id', 'level', 'mission_type_id',
+        'weight', 'is_decomposable', 'status',
+    ];
+
+    protected $casts = [
+        'is_decomposable' => 'boolean',
+        'level'           => 'integer',
+        'weight'          => 'integer',
+        'mission_type_id' => 'integer',
+        'parent_id'       => 'integer',
+    ];
+
+    // ════════════════════════════════════════════════════════════════════════
     // RELATIONS
+    // ════════════════════════════════════════════════════════════════════════
+
     public function missionType(): BelongsTo
     {
-        return $this->belongsTo(MissionType::class);
+        return $this->belongsTo(MissionType::class, 'mission_type_id');
     }
 
     public function parent(): BelongsTo
@@ -42,7 +58,10 @@ class MissionPhase extends Model
         return $this->hasMany(MissionPhaseAssignment::class, 'mission_phase_id');
     }
 
+    // ════════════════════════════════════════════════════════════════════════
     // HELPERS
+    // ════════════════════════════════════════════════════════════════════════
+
     public function isLeaf(): bool
     {
         return $this->children()->count() === 0;
@@ -51,7 +70,7 @@ class MissionPhase extends Model
     public function getAncestors(): array
     {
         $ancestors = [];
-        $current = $this;
+        $current   = $this;
         while ($current->parent) {
             $current = $current->parent;
             array_unshift($ancestors, $current);
@@ -82,48 +101,33 @@ class MissionPhase extends Model
         return $this->assignments()->count();
     }
 
-    // ════════════════════════════════════════════════════════════════════════════════════
-    // 🔢 GÉNÉRATION DE CODE INTELLIGENT - SÉRIALISÉ
-    // ════════════════════════════════════════════════════════════════════════════════════
+    // ════════════════════════════════════════════════════════════════════════
+    // GÉNÉRATION CODE — compatible format fruitiva
+    // Niveau 1 : P1, P2, P3, P4
+    // Niveau 2 : P1.E1, P1.E2, P2.E12 …
+    // ════════════════════════════════════════════════════════════════════════
 
-    /**
-     * Génère le code full pour une phase
-     * Niveaux 1: P1, P2, P3, ... (par type)
-     * Niveaux 2+: P1E1, P1E2, P1E1A1, etc.
-     */
     public static function generateCodeFull(?MissionPhase $parent, int $sequence): string
     {
-        if (!$parent) {
-            // Niveau 1: P{sequence}
-            return "P{$sequence}";
-        }
+        if (!$parent) return "P{$sequence}";
 
-        // Niveaux 2+: parent_code + lettre + sequence
-        $letters = ['E', 'A', 'T', 'S', 'X']; // Lettres par niveau de parent
+        $letters     = ['E', 'A', 'T', 'S', 'X'];
         $letterIndex = min($parent->level, count($letters) - 1);
-        $letter = $letters[$letterIndex];
 
-        return $parent->code_full . $letter . $sequence;
+        return $parent->code_full . $letters[$letterIndex] . $sequence;
     }
 
-    /**
-     * Récupère ou génère le numéro de séquence suivant
-     * Compte les frères/sœurs du même parent
-     */
     public static function getNextSequenceForParent(?int $parentId, int $typeId): int
     {
         $query = self::where('mission_type_id', $typeId);
-
-        if ($parentId) {
-            $query->where('parent_id', $parentId);
-        } else {
-            $query->whereNull('parent_id');
-        }
-
+        $parentId ? $query->where('parent_id', $parentId) : $query->whereNull('parent_id');
         return $query->count() + 1;
     }
 
+    // ════════════════════════════════════════════════════════════════════════
     // SCOPES
+    // ════════════════════════════════════════════════════════════════════════
+
     public function scopeMainPhases(Builder $query): Builder
     {
         return $query->where('level', 1)->whereNull('parent_id');
@@ -137,67 +141,5 @@ class MissionPhase extends Model
     public function scopeActive(Builder $query): Builder
     {
         return $query->where('status', 'active');
-    }
-}
-
-class MissionPhaseAssignment extends Model
-{
-    protected $table = 'mission_phase_assignments';
-    protected $fillable = [
-        'mission_id', 'mission_phase_id', 'status', 'progress', 'actual_weight',
-        'start_date', 'end_date', 'planned_start', 'planned_end',
-        'owner_id', 'team_members', 'description', 'findings', 'conclusions', 'attachments'
-    ];
-    protected $casts = [
-        'start_date' => 'date',
-        'end_date' => 'date',
-        'planned_start' => 'date',
-        'planned_end' => 'date',
-        'team_members' => 'json',
-        'attachments' => 'json',
-        'progress' => 'integer',
-    ];
-
-    public function phase(): BelongsTo
-    {
-        return $this->belongsTo(MissionPhase::class, 'mission_phase_id');
-    }
-
-    public function owner(): BelongsTo
-    {
-        return $this->belongsTo(\App\Models\User::class, 'owner_id');
-    }
-
-    public function isLate(): bool
-    {
-        return $this->planned_end && now()->isAfter($this->planned_end) && $this->status !== 'completed';
-    }
-
-    public function getDaysRemaining(): ?int
-    {
-        return $this->planned_end ? now()->diffInDays($this->planned_end, false) : null;
-    }
-
-    public function getStatusColor(): string
-    {
-        return match($this->status) {
-            'pending' => '#6c757d',
-            'started' => '#0dcaf0',
-            'in_progress' => '#0d6efd',
-            'completed' => '#198754',
-            'skipped' => '#ffc107',
-            'cancelled' => '#dc3545',
-            default => '#6c757d'
-        };
-    }
-
-    public function scopeByMission(Builder $query, int $missionId): Builder
-    {
-        return $query->where('mission_id', $missionId);
-    }
-
-    public function scopeCompleted(Builder $query): Builder
-    {
-        return $query->where('status', 'completed');
     }
 }

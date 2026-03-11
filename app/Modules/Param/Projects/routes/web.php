@@ -327,7 +327,7 @@ use App\Http\Controllers\Param\UnavailabilityController;
 // ROUTES INDISPONIBILITÉS - VERSION COMPLÈTE AVEC TOUS LES ENDPOINTS
 // ============================================================================
 
-Route::prefix('param/projects/unavailabilities')
+Route::prefix('unavailabilities')
     ->name('unavailabilities.')
     ->middleware(['auth', 'verified'])
     ->group(function () {

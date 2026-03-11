@@ -26,7 +26,7 @@ import 'vue3-toastify/dist/index.css';
 import 'primevue/resources/themes/lara-light-blue/theme.css';
 import 'primevue/resources/primevue.min.css';
 import 'primeicons/primeicons.css';
-
+import '@tabler/icons-webfont/dist/tabler-icons.css'
 import '@/scss/app.scss';
 import '@/scss/icons.scss';
 import 'bootstrap-vue-next/dist/bootstrap-vue-next.css';

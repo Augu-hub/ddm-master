@@ -22,6 +22,7 @@ return Application::configure(basePath: dirname(__DIR__))
             // ⬇️ Contexte “module courant” (sélection + partage ctx Inertia)
             'bind.module' => \App\Http\Middleware\BindModuleMiddleware::class,
             'share.module' => \App\Http\Middleware\ShareModuleContextMiddleware::class,
+            'audit.session' => \App\Http\Middleware\EnsureTenantSession::class,
         
         ]);
 
