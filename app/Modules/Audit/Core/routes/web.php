@@ -218,12 +218,19 @@ Route::middleware($authMiddleware)->prefix('api/audit-universe')->name('api.audi
     Route::get('/activities', [AuditUniverseController::class, 'getActivities'])->name('activities');
     Route::get('/activities/{activityId}', [AuditUniverseController::class, 'getActivityDetails'])->name('activity-details');
 
-}); // Fin api/audit-universe
+   
 
-// ════════════════════════════════════════════════════════════════════════════════════════
-// 📊 API REST - MISSION PHASES (ENDPOINTS EXISTANTS)
-// ════════════════════════════════════════════════════════════════════════════════════════
+}); 
+Route::middleware($authMiddleware)->prefix('api/audit-universe')->name('api.audit-universe.')->group(function () {
 
+// Fin api/audit-universe
+ Route::post('/load-risks',   [AuditUniverseController::class, 'loadRisks'])  ->name('load-risks');
+    Route::post('/save',         [AuditUniverseController::class, 'save'])        ->name('save');
+    Route::get( '/saved',        [AuditUniverseController::class, 'getSaved'])    ->name('saved');
+    Route::post('/create-risk',  [AuditUniverseController::class, 'createRisk'])  ->name('create-risk');
+    Route::put( '/update-risk/{id}', [AuditUniverseController::class, 'updateRiskField'])->name('update-risk');
+    
+}); 
 Route::prefix('api/mission-phases')->name('api.mission-phases.')->group(function () {
 
     // ⚠️ ROUTES SPÉCIFIQUES D'ABORD (avant les routes génériques /{phase})
