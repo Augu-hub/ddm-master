@@ -2,10 +2,12 @@
 
 namespace App\Providers;
 
+use App\Services\MistralFrequencyAssistant;
+use App\Services\MistralImpactAssistant;
 use App\Support\TenantManager;
 use Illuminate\Support\ServiceProvider;
 use Inertia\Inertia;
-use App\Models\Param\Entite;
+use App\Models\Param;
 class AppServiceProvider extends ServiceProvider
 {
     public function register(): void
@@ -14,6 +16,8 @@ class AppServiceProvider extends ServiceProvider
         $this->app->singleton(TenantManager::class, function () {
             return new TenantManager();
         });
+        $this->app->singleton(MistralImpactAssistant::class);
+        $this->app->singleton(MistralFrequencyAssistant::class);
     }
 
   public function boot()
@@ -26,10 +30,10 @@ class AppServiceProvider extends ServiceProvider
             },
         ]);
         */
-        
+
         // ✅ OU remplacez-le par ceci :
         Inertia::share([
-          
+
         ]);
     }
 }

@@ -49,7 +49,7 @@ return [
             'port' => env('DB_PORT', '3306'),
             'database' => env('DB_DATABASE', 'ddmparam'),
             'username' => env('DB_USERNAME', 'root'),
-            'password' => env('DB_PASSWORD', ''),
+            'password' => env('DB_PASSWORD', 'Elfolano@1200'),
             'unix_socket' => env('DB_SOCKET', ''),
             'charset' => env('DB_CHARSET', 'utf8mb4'),
             'collation' => env('DB_COLLATION', 'utf8mb4_unicode_ci'),
@@ -68,7 +68,7 @@ return [
     'port'      => env('TENANT_DB_PORT', env('DB_PORT', '3306')),
     'database'  => env('TENANT_DB_DATABASE', ''), // laissé vide, sera injecté
     'username'  => env('TENANT_DB_USERNAME', env('DB_USERNAME', 'root')),
-    'password'  => env('TENANT_DB_PASSWORD', env('DB_PASSWORD', '')),
+    'password'  => env('TENANT_DB_PASSWORD', env('DB_PASSWORD', 'Elfolano@1200')),
     'unix_socket' => env('TENANT_DB_SOCKET', env('DB_SOCKET', '')),
     'charset'   => env('DB_CHARSET', 'utf8mb4'),
     'collation' => env('DB_COLLATION', 'utf8mb4_unicode_ci'),

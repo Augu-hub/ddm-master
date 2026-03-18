@@ -39,7 +39,7 @@ class NavMenuController extends Controller
                 'count' => $modules->count(),
                 'codes' => $modules->pluck('code')->toArray(),
             ]);
-            
+
             return response()->json([
                 'modules' => $modules->map(fn($m) => [
                     'code' => $m->code,
@@ -124,7 +124,10 @@ class NavMenuController extends Controller
             ->where('visible', true)
             ->orderBy('sort')
             ->with(['children' => function ($q) {
-                $q->where('visible', true)->orderBy('sort');
+                $q->where('visible', true)->orderBy('sort')
+                    ->with(['children' => function ($q2) {
+                        $q2->where('visible', true)->orderBy('sort');
+                    }]);
             }])
             ->get();
 

@@ -13,12 +13,14 @@ class TenantManager
 
     public function __construct()
     {
-        $this->tenantId = session('tenant_id');
+        // Ne pas lire la session ici — le singleton est résolu avant
+        // que la session soit démarrée. On lit à la demande.
     }
 
     public function currentId(): ?int
     {
-        return $this->tenantId;
+        // Lecture fraîche à chaque appel pour garantir que la session est dispo
+        return $this->tenantId ?? ((int) session('tenant_id') ?: null);
     }
 
     public function currentDatabase(): ?string
@@ -45,7 +47,7 @@ class TenantManager
 
         try {
             $tenant = Tenant::findOrFail($tenantId);
-            
+
             // Vérifier l'accès utilisateur
             $userId = auth()->id();
             $hasAccess = DB::table('tenant_user')
@@ -58,11 +60,11 @@ class TenantManager
             }
 
             $this->configureConnection($tenant);
-            
+
             // Stocker le tenant actuel
             app()->instance('currentTenantId', $tenantId);
             app()->instance('currentTenant', $tenant);
-            
+
             Log::info('TenantManager: Connection established', [
                 'tenant_id' => $tenantId,
                 'database' => $tenant->db_name
@@ -102,10 +104,10 @@ class TenantManager
         // Purge et reconnexion
         DB::purge('tenant');
         DB::reconnect('tenant');
-        
+
         // Test de connexion
         DB::connection('tenant')->getPdo();
-        
+
         // Stocker en session
         session([
             'tenant_db' => $tenant->db_name,
@@ -128,7 +130,7 @@ class TenantManager
     {
         try {
             $tenant = Tenant::findOrFail($tenantId);
-            
+
             // Vérifier l'accès
             $userId = auth()->id();
             $hasAccess = DB::table('tenant_user')
@@ -143,9 +145,9 @@ class TenantManager
             $this->configureConnection($tenant);
             session(['tenant_id' => $tenantId]);
             app()->instance('currentTenantId', $tenantId);
-            
+
             return true;
-            
+
         } catch (\Exception $e) {
             Log::error('Failed to switch tenant', [
                 'tenant_id' => $tenantId,

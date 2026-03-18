@@ -77,8 +77,7 @@ createInertiaApp({
   setup({ el, App, props, plugin }) {
     const app = createApp({ render: () => h(App, props) });
 
-    app
-      .use(plugin)
+    app.use(plugin)
       .use(createPinia())
       .use(ZiggyVue)
       .use(createBootstrap())

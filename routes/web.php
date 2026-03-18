@@ -152,7 +152,7 @@ Route::get('/api-simple/audit-menus', function () {
     try {
         // 1. Trouver le module AUDIT (code = 'audit.core')
         $auditModule = Module::where('code', 'audit.core')->first();
-        
+
         if (!$auditModule) {
             return response()->json([
                 'success' => false,
@@ -160,7 +160,7 @@ Route::get('/api-simple/audit-menus', function () {
                 'data' => []
             ]);
         }
-        
+
         // 2. Charger les menus AUDIT
         $menus = Menu::where('module_id', $auditModule->id)
                      ->whereNull('parent_id')
@@ -168,14 +168,14 @@ Route::get('/api-simple/audit-menus', function () {
                      ->orderBy('sort')
                      ->get()
                      ->toArray();
-        
+
         return response()->json([
             'success' => true,
             'message' => 'AUDIT menus loaded',
             'data' => $menus,
             'count' => count($menus)
         ]);
-        
+
     } catch (\Exception $e) {
         return response()->json([
             'success' => false,
@@ -232,7 +232,7 @@ Route::patch('/programmation-missions/{id}/start', [AuditorMissionsController::c
 Route::patch('missions/{id}/start', [AuditorMissionsController::class, 'start'])
 ->name('missions.start');
 
-       
+
     });
 
 
@@ -251,7 +251,7 @@ Route::get('missions/{mission}/phases', [AuditorMissionsController::class, 'phas
     ->name('auditor.missions.phases');
 
     Route::get('/auditor/missions', [AuditorMissionsController::class, 'index'])->name('auditor.missions');
- 
+
 
 use App\Http\Controllers\Audit\MissionTypeController;
 use App\Http\Controllers\Audit\MissionFormController;
@@ -441,7 +441,7 @@ Route::prefix('m/audit.core')->middleware(['web','auth','audit.session'])->group
 
         // Affichage du formulaire (sans FRO existant)
         // GET  /m/audit.core/ac/preparation/reunion-ouverture?mission_id=X&assignment_id=Y
-      
+
     });
 
     // ──────────────────────────────────────────────────────────────────
@@ -520,7 +520,7 @@ Route::middleware(['web', 'auth', 'audit.session'])
         // AUDITOR — Mes missions & phases
         // ══════════════════════════════════════════════════════════════════
 
-      Route::post('auditor/missions/{missionId}/phases/{assignmentId}/start', 
+      Route::post('auditor/missions/{missionId}/phases/{assignmentId}/start',
     [AuditorMissionsController::class, 'startPhase']);
 Route::prefix('ac')->group(function () {
     // ── Phase 1 : Preparation ──
@@ -547,8 +547,8 @@ Route::prefix('ac')->group(function () {
     Route::post('/{form}/valider',     [PriseDeConnaissanceController::class, 'valider'])->name('valider');
     Route::get('/{form}/pdf',          [PriseDeConnaissanceController::class, 'pdf'])->name('pdf');
 });
-       
-       
+
+
         // analyse-processus-ci
         Route::get('analyse-processus-ci', [App\Http\Controllers\Auditor\AnalyseProcessusCiController::class, 'index'])->name('audit.ac.preparation.analyse-processus-ci');
         Route::get('analyse-processus-ci/{form}/edit', [App\Http\Controllers\Auditor\AnalyseProcessusCiController::class, 'edit'])->name('auditor.ac.analyse-processus-ci.edit');
@@ -1165,3 +1165,5 @@ Route::prefix('ap')->group(function () {
 
 
  });
+
+

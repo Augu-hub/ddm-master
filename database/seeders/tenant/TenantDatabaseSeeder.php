@@ -2,6 +2,7 @@
 
 namespace Database\Seeders\Tenant;
 
+use Database\Seeders\FruitivaRiskMatrixSeeder;
 use Illuminate\Database\Seeder;
 
 class TenantDatabaseSeeder extends Seeder
@@ -10,6 +11,7 @@ class TenantDatabaseSeeder extends Seeder
     {
         $this->call([
             TenantProcessReferenceSeeder::class, // ← références Processus (maturité, criticité, RACI, IDEA, etc.)
+            FruitivaRiskMatrixSeeder::class,
         ]);
     }
 }
