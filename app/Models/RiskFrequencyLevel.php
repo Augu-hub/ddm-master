@@ -2,11 +2,12 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\SoftDeletes;
-use Illuminate\Database\Eloquent\Factories\HasFactory;
-use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class RiskFrequencyLevel extends Model
 {
@@ -38,6 +39,18 @@ class RiskFrequencyLevel extends Model
         return $this->belongsTo(RiskMatrixConfig::class, 'matrix_config_id');
     }
 
+    /**
+     * Critères d'évaluation associés à ce niveau de fréquence.
+     * Triés par sort_order directement dans la relation pour éviter
+     * le recours à un closure dans with() (risque de collection vide).
+     */
+    public function criteria(): HasMany
+    {
+        return $this->hasMany(RiskFrequencyCriterion::class, 'frequency_level_id')
+            ->orderBy('sort_order')
+            ->orderBy('id');
+    }
+
     // ─── Scopes ───────────────────────────────────────────────────────────────
 
     public function scopeForTenant(Builder $query, int $tenantId): Builder
@@ -57,9 +70,6 @@ class RiskFrequencyLevel extends Model
 
     // ─── Méthodes métier ──────────────────────────────────────────────────────
 
-    /**
-     * Libellé complet affiché dans l'UI : "Probable — 1 fois / 5 ans"
-     */
     public function getFullLabelAttribute(): string
     {
         return $this->recurrence
@@ -67,9 +77,6 @@ class RiskFrequencyLevel extends Model
             : $this->label;
     }
 
-    /**
-     * Retourne une représentation pour le front (utilisée dans les selects Vue).
-     */
     public function toOption(): array
     {
         return [

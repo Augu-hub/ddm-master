@@ -16,6 +16,7 @@ class FrequencyLevelController extends Controller
 {
     /**
      * Liste des niveaux de fréquence pour une config de matrice donnée.
+     * Les critères de chaque niveau sont chargés en eager loading (relation ordonnée).
      */
     public function index(Request $request): Response
     {
@@ -37,9 +38,13 @@ class FrequencyLevelController extends Controller
             ?: optional($matrixConfigs->firstWhere('is_active', true))['id']
                 ?: optional($matrixConfigs->first())['id'];
 
+        // Eager-load criteria via la relation (déjà triée par sort_order dans le modèle).
+        // On utilise une chaîne simple (pas de closure) pour éviter les conflits
+        // de chargement eager avec les relations imbriquées.
         $frequencyLevels = $selectedConfigId
             ? RiskFrequencyLevel::forTenant($tenantId)
                 ->forConfig($selectedConfigId)
+                ->with('criteria')
                 ->ordered()
                 ->get()
                 ->map(fn ($l) => [
@@ -51,6 +56,12 @@ class FrequencyLevelController extends Controller
                     'full_label'  => $l->full_label,
                     'color_code'  => $l->color_code,
                     'sort_order'  => $l->sort_order,
+                    'criteria'    => $l->criteria->map(fn ($c) => [
+                        'id'          => $c->id,
+                        'designation' => $c->designation,
+                        'description' => $c->description,
+                        'sort_order'  => $c->sort_order,
+                    ])->values()->all(),
                 ])
             : collect();
 
@@ -91,8 +102,8 @@ class FrequencyLevelController extends Controller
      */
     public function update(UpdateFrequencyLevelRequest $request, int $frequency_level): RedirectResponse
     {
-        $tenantId         = (int) (session('tenant_id') ?? 1);
-        $frequency_level  = $this->findLevelForTenant($frequency_level, $tenantId);
+        $tenantId        = (int) (session('tenant_id') ?? 1);
+        $frequency_level = $this->findLevelForTenant($frequency_level, $tenantId);
 
         $frequency_level->update($request->validated());
 
@@ -104,8 +115,8 @@ class FrequencyLevelController extends Controller
      */
     public function destroy(Request $request, int $frequency_level): RedirectResponse
     {
-        $tenantId         = (int) (session('tenant_id') ?? 1);
-        $frequency_level  = $this->findLevelForTenant($frequency_level, $tenantId);
+        $tenantId        = (int) (session('tenant_id') ?? 1);
+        $frequency_level = $this->findLevelForTenant($frequency_level, $tenantId);
 
         $label = $frequency_level->label;
         $frequency_level->delete();

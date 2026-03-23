@@ -2,11 +2,12 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\SoftDeletes;
-use Illuminate\Database\Eloquent\Factories\HasFactory;
-use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class RiskImpactLevel extends Model
 {
@@ -37,6 +38,18 @@ class RiskImpactLevel extends Model
         return $this->belongsTo(RiskMatrixConfig::class, 'matrix_config_id');
     }
 
+    /**
+     * Critères d'évaluation associés à ce niveau d'impact.
+     * Triés par sort_order directement dans la relation pour éviter
+     * le recours à un closure dans with() (risque de collection vide).
+     */
+    public function criteria(): HasMany
+    {
+        return $this->hasMany(RiskImpactCriterion::class, 'impact_level_id')
+            ->orderBy('sort_order')
+            ->orderBy('id');
+    }
+
     // ─── Scopes ───────────────────────────────────────────────────────────────
 
     public function scopeForTenant(Builder $query, int $tenantId): Builder
@@ -56,17 +69,11 @@ class RiskImpactLevel extends Model
 
     // ─── Méthodes métier ──────────────────────────────────────────────────────
 
-    /**
-     * Score max possible avec ce niveau d'impact (impact × freq_max).
-     */
     public function maxCriticality(): int
     {
         return $this->score * $this->matrixConfig->matrix_size;
     }
 
-    /**
-     * Retourne une représentation pour le front (utilisée dans les selects Vue).
-     */
     public function toOption(): array
     {
         return [

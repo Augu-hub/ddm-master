@@ -6,6 +6,7 @@ use App\Models\RiskCriticalityZone;
 use App\Models\RiskFrequencyLevel;
 use App\Models\RiskImpactLevel;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -147,5 +148,15 @@ class RiskRegister extends Model
             'criticality_score'   => $score,
             'criticality_zone_id' => $zone?->id,
         ]);
+    }
+
+    public function nomenclatures(): BelongsToMany
+    {
+        return $this->belongsToMany(
+            RiskNomenclature::class,
+            'risk_register_nomenclatures',
+            'risk_register_id',
+            'risk_nomenclature_id'
+        );
     }
 }

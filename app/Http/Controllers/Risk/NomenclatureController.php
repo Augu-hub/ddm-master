@@ -2,374 +2,416 @@
 
 namespace App\Http\Controllers\Risk;
 
+use App\Enums\NomenclatureType;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\StoreNomenclatureRequest;
+use App\Http\Requests\UpdateNomenclatureRequest;
 use App\Models\RiskAppetiteLevel;
 use App\Models\RiskNomenclature;
-use App\Services\MistralNomenclatureAssistant;
-use Inertia\Inertia;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Log;
+use Inertia\Inertia;
+use Inertia\Response;
 
-/**
- * ════════════════════════════════════════════════════════════════════════════
- * NOMENCLATURE CONTROLLER — Gestion des nomenclatures et appétances de risques
- *
- * Routes (montées sous prefix m/risk.core — risk.core.*) :
- *   GET  /nomenclature           → index        (page principale Inertia)
- *   POST /nomenclature/appetites → storeAppetite
- *   PUT  /nomenclature/appetites/{id} → updateAppetite
- *   DEL  /nomenclature/appetites/{id} → destroyAppetite
- *   POST /nomenclature/nomenclatures  → storeNomenclature
- *   PUT  /nomenclature/nomenclatures/{id} → updateNomenclature
- *   DEL  /nomenclature/nomenclatures/{id} → destroyNomenclature
- *   POST /nomenclature/ai/suggest-domains   → aiSuggestDomains
- *   POST /nomenclature/ai/suggest-families  → aiSuggestFamilies
- *   POST /nomenclature/ai/suggest-types     → aiSuggestTypes
- * ════════════════════════════════════════════════════════════════════════════
- */
 class NomenclatureController extends Controller
 {
-    // ────────────────────────────────────────────────────────────────────────
-    // PAGE PRINCIPALE
-    // ────────────────────────────────────────────────────────────────────────
+    // ---------------------------------------------------------------
+    // Helpers privés
+    // ---------------------------------------------------------------
 
-    public function index(Request $request)
+    private function tenantId(): int
     {
-        try {
-            $tenantId = auth()->user()->tenant_id ?? 1;
-
-            $appetites = RiskAppetiteLevel::where('tenant_id', $tenantId)
-                ->orderBy('sort_order')
-                ->get();
-
-            $nomenclatures = RiskNomenclature::where('tenant_id', $tenantId)
-                ->with('appetite:id,code,label,color')
-                ->orderBy('level')
-                ->orderBy('sort_order')
-                ->orderBy('code')
-                ->get();
-
-            Log::info('✅ Nomenclature dashboard loaded', [
-                'appetites_count'     => $appetites->count(),
-                'nomenclatures_count' => $nomenclatures->count(),
-                'tenant_id'           => $tenantId,
-            ]);
-
-            return Inertia::render('dashboards/Risk/Nomenclature/index', [
-                'appetites'      => $appetites,
-                'nomenclatures'  => $nomenclatures,
-            ]);
-
-        } catch (\Exception $e) {
-            Log::error('❌ Nomenclature index error: ' . $e->getMessage());
-            return back()->with('error', 'Erreur: ' . $e->getMessage());
-        }
+        return (int) (session('tenant_id') ?? 1);
     }
 
-    // ────────────────────────────────────────────────────────────────────────
-    // CRUD APPÉTANCES
-    // ────────────────────────────────────────────────────────────────────────
-
-    public function storeAppetite(Request $request)
+    private function findForTenant(int $id): RiskNomenclature
     {
-        try {
-            $tenantId = auth()->user()->tenant_id ?? 1;
-
-            $validated = $request->validate([
-                'code'        => 'required|string|max:20',
-                'label'       => 'required|string|max:100',
-                'description' => 'nullable|string|max:500',
-                'score_min'   => 'required|integer|min:0|max:25',
-                'score_max'   => 'required|integer|min:0|max:25|gte:score_min',
-                'color'       => 'required|string|regex:/^#[0-9A-Fa-f]{6}$/',
-                'sort_order'  => 'nullable|integer|min:0',
-            ]);
-
-            // Vérifier unicité du code pour ce tenant
-            if (RiskAppetiteLevel::where('tenant_id', $tenantId)->where('code', $validated['code'])->exists()) {
-                return response()->json(['success' => false, 'error' => "Le code \"{$validated['code']}\" existe déjà."], 422);
-            }
-
-            $appetite = RiskAppetiteLevel::create([
-                'tenant_id'   => $tenantId,
-                'code'        => strtoupper($validated['code']),
-                'label'       => $validated['label'],
-                'description' => $validated['description'] ?? null,
-                'score_min'   => $validated['score_min'],
-                'score_max'   => $validated['score_max'],
-                'color'       => $validated['color'],
-                'sort_order'  => $validated['sort_order'] ?? 0,
-                'is_active'   => true,
-            ]);
-
-            Log::info('✅ Appétance créée', ['id' => $appetite->id, 'code' => $appetite->code]);
-
-            return response()->json(['success' => true, 'message' => "Appétance \"{$appetite->code}\" créée.", 'appetite' => $appetite]);
-
-        } catch (\Illuminate\Validation\ValidationException $e) {
-            return response()->json(['success' => false, 'errors' => $e->errors()], 422);
-        } catch (\Exception $e) {
-            Log::error('❌ storeAppetite: ' . $e->getMessage());
-            return response()->json(['success' => false, 'error' => $e->getMessage()], 500);
-        }
+        return RiskNomenclature::where('id', $id)
+            ->where('tenant_id', $this->tenantId())
+            ->firstOrFail();
     }
 
-    public function updateAppetite(Request $request, int $id)
+    private function findAppetiteForTenant(int $id): RiskAppetiteLevel
     {
-        try {
-            $tenantId = auth()->user()->tenant_id ?? 1;
-            $appetite = RiskAppetiteLevel::where('tenant_id', $tenantId)->findOrFail($id);
-
-            $validated = $request->validate([
-                'label'       => 'sometimes|string|max:100',
-                'description' => 'nullable|string|max:500',
-                'score_min'   => 'sometimes|integer|min:0|max:25',
-                'score_max'   => 'sometimes|integer|min:0|max:25',
-                'color'       => 'sometimes|string|regex:/^#[0-9A-Fa-f]{6}$/',
-                'sort_order'  => 'nullable|integer|min:0',
-                'is_active'   => 'sometimes|boolean',
-            ]);
-
-            $appetite->update($validated);
-
-            return response()->json(['success' => true, 'message' => "Appétance mise à jour.", 'appetite' => $appetite->fresh()]);
-
-        } catch (\Exception $e) {
-            Log::error('❌ updateAppetite: ' . $e->getMessage());
-            return response()->json(['success' => false, 'error' => $e->getMessage()], 500);
-        }
+        return RiskAppetiteLevel::where('id', $id)
+            ->where('tenant_id', $this->tenantId())
+            ->firstOrFail();
     }
 
-    public function destroyAppetite(int $id)
+    private function buildTypeMeta(RiskNomenclature $root): array
     {
-        try {
-            $tenantId = auth()->user()->tenant_id ?? 1;
-            $appetite = RiskAppetiteLevel::where('tenant_id', $tenantId)->findOrFail($id);
-
-            // Vérifier si des nomenclatures utilisent cette appétance
-            $usedCount = RiskNomenclature::where('tenant_id', $tenantId)->where('appetite_id', $id)->count();
-            if ($usedCount > 0) {
-                return response()->json([
-                    'success' => false,
-                    'error'   => "Impossible de supprimer : $usedCount nomenclature(s) utilisent cette appétance.",
-                ], 422);
-            }
-
-            $code = $appetite->code;
-            $appetite->delete();
-
-            return response()->json(['success' => true, 'message' => "Appétance \"$code\" supprimée."]);
-
-        } catch (\Exception $e) {
-            Log::error('❌ destroyAppetite: ' . $e->getMessage());
-            return response()->json(['success' => false, 'error' => $e->getMessage()], 500);
-        }
+        $enum = NomenclatureType::tryFrom($root->type_code ?? '');
+        return [
+            'label'       => $enum?->label()      ?? $root->label,
+            'color'       => $root->resolvedColor(),
+            'icon'        => $root->resolvedIcon(),
+            'badge_class' => $enum?->badgeClass() ?? 'secondary',
+        ];
     }
 
-    // ────────────────────────────────────────────────────────────────────────
-    // CRUD NOMENCLATURES
-    // ────────────────────────────────────────────────────────────────────────
-
-    public function storeNomenclature(Request $request)
+    private function formatNode(RiskNomenclature $node, array $appetiteMap): array
     {
-        try {
-            $tenantId = auth()->user()->tenant_id ?? 1;
+        $appetiteId   = $node->appetite_id;
+        $appetiteData = $appetiteId ? ($appetiteMap[$appetiteId] ?? null) : null;
 
-            $validated = $request->validate([
-                'code'        => 'required|string|max:30',
-                'label'       => 'required|string|max:150',
-                'description' => 'nullable|string|max:500',
-                'level'       => 'required|integer|in:1,2,3',
-                'parent_id'   => 'nullable|integer|exists:risk_nomenclatures,id',
-                'appetite_id' => 'nullable|integer|exists:risk_appetite_levels,id',
-                'color'       => 'nullable|string|regex:/^#[0-9A-Fa-f]{6}$/',
-                'icon'        => 'nullable|string|max:50',
-                'sort_order'  => 'nullable|integer|min:0',
-            ]);
+        return [
+            'id'          => $node->id,
+            'code'        => $node->code,
+            'label'       => $node->label,
+            'description' => $node->description,
+            'level'       => $node->level,
+            'type_code'   => $node->type_code,
+            'parent_id'   => $node->parent_id,
+            'appetite_id' => $appetiteId,
+            'appetite'    => $appetiteData,
+        ];
+    }
 
-            // Vérifier unicité code pour ce tenant
-            if (RiskNomenclature::where('tenant_id', $tenantId)->where('code', $validated['code'])->exists()) {
-                return response()->json(['success' => false, 'error' => "Le code \"{$validated['code']}\" existe déjà."], 422);
+    // ---------------------------------------------------------------
+    // index — page Inertia
+    // ---------------------------------------------------------------
+
+    public function index(): Response
+    {
+        $tenantId = $this->tenantId();
+
+        $appetites = RiskAppetiteLevel::where('tenant_id', $tenantId)
+            ->orderBy('sort_order')
+            ->get(['id', 'code', 'label', 'color', 'score_min', 'score_max', 'is_active'])
+            ->toArray();
+
+        $appetiteMap = collect($appetites)
+            ->where('is_active', true)
+            ->keyBy('id')
+            ->toArray();
+
+        $roots = RiskNomenclature::forTenant($tenantId)
+            ->roots()
+            ->active()
+            ->with(['children', 'children.children'])
+            ->orderBy('type_code')
+            ->get()
+            ->map(function (RiskNomenclature $root) use ($appetiteMap) {
+                $data              = $this->formatNode($root, $appetiteMap);
+                $data['type_meta'] = $this->buildTypeMeta($root);
+                $data['children']  = $root->children->map(function ($child) use ($appetiteMap) {
+                    $c             = $this->formatNode($child, $appetiteMap);
+                    $c['children'] = $child->children
+                        ->map(fn($gc) => $this->formatNode($gc, $appetiteMap))
+                        ->values()->toArray();
+                    return $c;
+                })->values()->toArray();
+                return $data;
+            });
+
+        return Inertia::render('dashboards/Risk/Nomenclature/index', [
+            'tree'      => $roots,
+            'appetites' => array_values($appetites),
+        ]);
+    }
+
+    // ---------------------------------------------------------------
+    // tree — endpoint JSON pour NomenclatureTreePicker
+    // ---------------------------------------------------------------
+
+    public function tree(): JsonResponse
+    {
+        $tenantId = $this->tenantId();
+
+        $roots = RiskNomenclature::forTenant($tenantId)
+            ->roots()
+            ->active()
+            ->with(['children', 'children.children'])
+            ->orderBy('type_code')
+            ->get()
+            ->map(function (RiskNomenclature $root) {
+                $meta = $this->buildTypeMeta($root);
+                return [
+                    'id'         => $root->id,
+                    'code'       => $root->code,
+                    'label'      => $root->label,
+                    'level'      => $root->level,
+                    'type_code'  => $root->type_code,
+                    'type_label' => $meta['label'],
+                    'type_color' => $meta['color'],
+                    'type_icon'  => $meta['icon'],
+                    'children'   => $root->children->map(fn($child) => [
+                        'id'        => $child->id,
+                        'code'      => $child->code,
+                        'label'     => $child->label,
+                        'level'     => $child->level,
+                        'type_code' => $child->type_code,
+                        'children'  => $child->children->map(fn($gc) => [
+                            'id'        => $gc->id,
+                            'code'      => $gc->code,
+                            'label'     => $gc->label,
+                            'level'     => $gc->level,
+                            'type_code' => $gc->type_code,
+                            'children'  => [],
+                        ])->values(),
+                    ])->values(),
+                ];
+            });
+
+        return response()->json($roots);
+    }
+
+    // ---------------------------------------------------------------
+    // store — nouvelle nomenclature
+    // ---------------------------------------------------------------
+
+    public function store(StoreNomenclatureRequest $request): JsonResponse
+    {
+        $tenantId = $this->tenantId();
+        $data     = $request->validated();
+        $parent   = $this->findForTenant((int) $data['parent_id']);
+
+        if (!$parent->canHaveChildren()) {
+            return response()->json(
+                ['message' => 'Niveau maximum atteint (3 niveaux)'], 422
+            );
+        }
+
+        $nomenclature = RiskNomenclature::create([
+            'tenant_id'   => $tenantId,
+            'parent_id'   => $parent->id,
+            'level'       => $parent->level + 1,
+            'type_code'   => $parent->type_code,
+            'code'        => $this->generateCode($parent),
+            'label'       => $data['label'],
+            'description' => $data['description'] ?? null,
+            'is_active'   => true,
+        ]);
+
+        return response()->json([
+            'nomenclature' => $nomenclature,
+            'message'      => 'Nomenclature creee avec succes',
+        ], 201);
+    }
+
+    // ---------------------------------------------------------------
+    // update — modifier nomenclature
+    // ---------------------------------------------------------------
+
+    public function update(UpdateNomenclatureRequest $request, int $id): JsonResponse
+    {
+        $nomenclature = $this->findForTenant($id);
+
+        if ($nomenclature->isRoot()) {
+            return response()->json(
+                ['message' => 'Les types racines ne sont pas modifiables'], 403
+            );
+        }
+
+        $data = $request->validated();
+        $nomenclature->update([
+            'label'       => $data['label'],
+            'description' => $data['description'] ?? $nomenclature->description,
+        ]);
+
+        return response()->json([
+            'nomenclature' => $nomenclature->fresh(),
+            'message'      => 'Nomenclature mise a jour',
+        ]);
+    }
+
+    // ---------------------------------------------------------------
+    // assignAppetite — assigne ou retire une appétance à une nomenclature
+    // ---------------------------------------------------------------
+
+    public function assignAppetite(Request $request, int $id): JsonResponse
+    {
+        $nomenclature = $this->findForTenant($id);
+
+        if ($nomenclature->isRoot()) {
+            return response()->json(
+                ['message' => 'Impossible d\'assigner une appetance a une racine'], 403
+            );
+        }
+
+        $request->validate([
+            'appetite_id' => ['nullable', 'integer'],
+        ]);
+
+        $appetiteId = $request->input('appetite_id');
+
+        if ($appetiteId !== null) {
+            $exists = RiskAppetiteLevel::where('id', $appetiteId)
+                ->where('tenant_id', $this->tenantId())
+                ->where('is_active', true)
+                ->exists();
+
+            if (!$exists) {
+                return response()->json(['message' => 'Appetance invalide'], 422);
             }
+        }
 
-            // Vérifier cohérence parent / level
-            if ($validated['level'] > 1 && !$validated['parent_id']) {
-                return response()->json(['success' => false, 'error' => "Un parent est requis pour les niveaux 2 et 3."], 422);
-            }
+        $nomenclature->update(['appetite_id' => $appetiteId]);
 
-            $nomenclature = RiskNomenclature::create([
-                'tenant_id'   => $tenantId,
-                'parent_id'   => $validated['parent_id'] ?? null,
-                'appetite_id' => $validated['appetite_id'] ?? null,
-                'code'        => strtoupper($validated['code']),
-                'label'       => $validated['label'],
-                'description' => $validated['description'] ?? null,
-                'level'       => $validated['level'],
-                'color'       => $validated['color'] ?? null,
-                'icon'        => $validated['icon'] ?? null,
-                'sort_order'  => $validated['sort_order'] ?? 0,
-                'is_active'   => true,
-            ]);
+        $appetite = $appetiteId
+            ? RiskAppetiteLevel::find($appetiteId, ['id', 'code', 'label', 'color'])
+            : null;
 
-            // Eager load appetite pour la réponse
-            $nomenclature->load('appetite:id,code,label,color');
+        return response()->json([
+            'nomenclature_id' => $nomenclature->id,
+            'appetite_id'     => $appetiteId,
+            'appetite'        => $appetite,
+            'message'         => $appetiteId
+                ? 'Appetance assignee avec succes'
+                : 'Appetance retiree',
+        ]);
+    }
 
-            Log::info('✅ Nomenclature créée', ['id' => $nomenclature->id, 'code' => $nomenclature->code, 'level' => $nomenclature->level]);
+    // ---------------------------------------------------------------
+    // destroy — supprimer nomenclature
+    // ---------------------------------------------------------------
 
+    public function destroy(int $id): JsonResponse
+    {
+        $nomenclature = $this->findForTenant($id);
+
+        if ($nomenclature->isRoot()) {
+            return response()->json(
+                ['message' => 'Les types racines ne peuvent pas etre supprimes'], 403
+            );
+        }
+
+        if ($nomenclature->children()->exists()) {
+            return response()->json(
+                ['message' => 'Impossible de supprimer : des sous-elements existent'], 422
+            );
+        }
+
+        if ($nomenclature->riskRegisters()->exists()) {
+            return response()->json(
+                ['message' => 'Cette nomenclature est liee a des risques existants'], 422
+            );
+        }
+
+        $nomenclature->delete();
+
+        return response()->json(['message' => 'Nomenclature supprimee']);
+    }
+
+    // ---------------------------------------------------------------
+    // storeAppetite — créer un niveau d'appétance
+    // ---------------------------------------------------------------
+
+    public function storeAppetite(Request $request): JsonResponse
+    {
+        $tenantId = $this->tenantId();
+
+        $data = $request->validate([
+            'code'      => ['required', 'string', 'max:20'],
+            'label'     => ['required', 'string', 'max:100'],
+            'color'     => ['required', 'string', 'regex:/^#[0-9A-Fa-f]{6}$/'],
+            'score_min' => ['required', 'integer', 'min:0'],
+            'score_max' => ['required', 'integer', 'min:0', 'gte:score_min'],
+        ]);
+
+        // Vérifier unicité du code pour ce tenant
+        $codeExists = RiskAppetiteLevel::where('tenant_id', $tenantId)
+            ->where('code', $data['code'])
+            ->exists();
+
+        if ($codeExists) {
             return response()->json([
-                'success'      => true,
-                'message'      => "Nomenclature \"{$nomenclature->code}\" créée.",
-                'nomenclature' => $nomenclature,
-            ], 201);
-
-        } catch (\Illuminate\Validation\ValidationException $e) {
-            return response()->json(['success' => false, 'errors' => $e->errors()], 422);
-        } catch (\Exception $e) {
-            Log::error('❌ storeNomenclature: ' . $e->getMessage());
-            return response()->json(['success' => false, 'error' => $e->getMessage()], 500);
+                'errors' => ['code' => ['Ce code existe deja pour ce tenant']],
+            ], 422);
         }
+
+        // sort_order = dernier + 1
+        $lastOrder = RiskAppetiteLevel::where('tenant_id', $tenantId)
+            ->max('sort_order') ?? -1;
+
+        $appetite = RiskAppetiteLevel::create([
+            'tenant_id'  => $tenantId,
+            'code'       => strtoupper(trim($data['code'])),
+            'label'      => $data['label'],
+            'color'      => $data['color'],
+            'score_min'  => $data['score_min'],
+            'score_max'  => $data['score_max'],
+            'sort_order' => $lastOrder + 1,
+            'is_active'  => true,
+        ]);
+
+        return response()->json([
+            'appetite' => $appetite,
+            'message'  => 'Niveau d\'appetance cree avec succes',
+        ], 201);
     }
 
-    public function updateNomenclature(Request $request, int $id)
+    // ---------------------------------------------------------------
+    // updateAppetite — modifier un niveau d'appétance
+    // ---------------------------------------------------------------
+
+    public function updateAppetite(Request $request, int $id): JsonResponse
     {
-        try {
-            $tenantId     = auth()->user()->tenant_id ?? 1;
-            $nomenclature = RiskNomenclature::where('tenant_id', $tenantId)->findOrFail($id);
+        $appetite = $this->findAppetiteForTenant($id);
 
-            $validated = $request->validate([
-                'label'       => 'sometimes|string|max:150',
-                'description' => 'nullable|string|max:500',
-                'appetite_id' => 'nullable|integer|exists:risk_appetite_levels,id',
-                'color'       => 'nullable|string|regex:/^#[0-9A-Fa-f]{6}$/',
-                'icon'        => 'nullable|string|max:50',
-                'sort_order'  => 'nullable|integer|min:0',
-                'is_active'   => 'sometimes|boolean',
-            ]);
+        $data = $request->validate([
+            'label'     => ['required', 'string', 'max:100'],
+            'color'     => ['required', 'string', 'regex:/^#[0-9A-Fa-f]{6}$/'],
+            'score_min' => ['required', 'integer', 'min:0'],
+            'score_max' => ['required', 'integer', 'min:0', 'gte:score_min'],
+        ]);
 
-            $nomenclature->update($validated);
-            $nomenclature->load('appetite:id,code,label,color');
+        $appetite->update([
+            'label'     => $data['label'],
+            'color'     => $data['color'],
+            'score_min' => $data['score_min'],
+            'score_max' => $data['score_max'],
+        ]);
 
+        return response()->json([
+            'appetite' => $appetite->fresh(),
+            'message'  => 'Niveau d\'appetance mis a jour',
+        ]);
+    }
+
+    // ---------------------------------------------------------------
+    // destroyAppetite — supprimer un niveau d'appétance
+    // ---------------------------------------------------------------
+
+    public function destroyAppetite(int $id): JsonResponse
+    {
+        $appetite = $this->findAppetiteForTenant($id);
+
+        // Vérifier qu'aucune nomenclature n'utilise ce niveau
+        $inUse = RiskNomenclature::where('tenant_id', $this->tenantId())
+            ->where('appetite_id', $id)
+            ->exists();
+
+        if ($inUse) {
             return response()->json([
-                'success'      => true,
-                'message'      => "Nomenclature mise à jour.",
-                'nomenclature' => $nomenclature,
-            ]);
-
-        } catch (\Exception $e) {
-            Log::error('❌ updateNomenclature: ' . $e->getMessage());
-            return response()->json(['success' => false, 'error' => $e->getMessage()], 500);
+                'message' => 'Ce niveau est assigne a des nomenclatures — retirez-le d\'abord',
+            ], 422);
         }
+
+        $appetite->delete();
+
+        return response()->json(['message' => 'Niveau d\'appetance supprime']);
     }
 
-    public function destroyNomenclature(int $id)
+    // ---------------------------------------------------------------
+    // generateCode — privé
+    // ---------------------------------------------------------------
+
+    private function generateCode(RiskNomenclature $parent): string
     {
-        try {
-            $tenantId     = auth()->user()->tenant_id ?? 1;
-            $nomenclature = RiskNomenclature::where('tenant_id', $tenantId)->findOrFail($id);
+        $last = RiskNomenclature::withTrashed()
+            ->where('parent_id', $parent->id)
+            ->orderByRaw('CAST(SUBSTRING_INDEX(code, "-", -1) AS UNSIGNED) DESC')
+            ->value('code');
 
-            // Vérifier s'il a des enfants
-            $childrenCount = RiskNomenclature::where('tenant_id', $tenantId)->where('parent_id', $id)->count();
-            if ($childrenCount > 0) {
-                return response()->json([
-                    'success' => false,
-                    'error'   => "Impossible de supprimer : $childrenCount enfant(s) dépendent de cette entrée.",
-                ], 422);
-            }
-
-            $code = $nomenclature->code;
-            $nomenclature->delete();
-
-            return response()->json(['success' => true, 'message' => "\"$code\" supprimé."]);
-
-        } catch (\Exception $e) {
-            Log::error('❌ destroyNomenclature: ' . $e->getMessage());
-            return response()->json(['success' => false, 'error' => $e->getMessage()], 500);
+        $seq = 1;
+        if ($last) {
+            $parts = explode('-', $last);
+            $seq   = (int) end($parts) + 1;
         }
-    }
 
-    // ────────────────────────────────────────────────────────────────────────
-    // IA — SUGGESTIONS MISTRAL
-    // ────────────────────────────────────────────────────────────────────────
+        $pad = ($parent->level === 1) ? 3 : 2;
 
-    public function aiSuggestDomains(Request $request, MistralNomenclatureAssistant $mistral)
-    {
-        try {
-            $data = $request->validate([
-                'sector'           => 'required|string|min:3|max:100',
-                'existing_domains' => 'nullable|array',
-            ]);
-
-            if (!MistralNomenclatureAssistant::validatePayloadSafety($data)) {
-                return response()->json(['success' => false, 'error' => 'Données invalides.'], 400);
-            }
-
-            $result = $mistral->suggestDomains($data);
-
-            return response()->json([
-                'success' => true,
-                'domains' => $result['domains'] ?? [],
-                'source'  => 'Mistral',
-            ]);
-
-        } catch (\Exception $e) {
-            Log::error('❌ aiSuggestDomains: ' . $e->getMessage());
-            return response()->json(['success' => false, 'error' => $e->getMessage()], 500);
-        }
-    }
-
-    public function aiSuggestFamilies(Request $request, MistralNomenclatureAssistant $mistral)
-    {
-        try {
-            $data = $request->validate([
-                'domain_code'  => 'required|string|max:10',
-                'domain_label' => 'required|string|min:3|max:100',
-                'sector'       => 'nullable|string|max:100',
-            ]);
-
-            if (!MistralNomenclatureAssistant::validatePayloadSafety($data)) {
-                return response()->json(['success' => false, 'error' => 'Données invalides.'], 400);
-            }
-
-            $result = $mistral->suggestFamilies($data);
-
-            return response()->json([
-                'success'  => true,
-                'families' => $result['families'] ?? [],
-                'source'   => 'Mistral',
-            ]);
-
-        } catch (\Exception $e) {
-            Log::error('❌ aiSuggestFamilies: ' . $e->getMessage());
-            return response()->json(['success' => false, 'error' => $e->getMessage()], 500);
-        }
-    }
-
-    public function aiSuggestTypes(Request $request, MistralNomenclatureAssistant $mistral)
-    {
-        try {
-            $data = $request->validate([
-                'family_code'  => 'required|string|max:15',
-                'family_label' => 'required|string|min:3|max:100',
-                'domain_label' => 'required|string|max:100',
-                'sector'       => 'nullable|string|max:100',
-            ]);
-
-            if (!MistralNomenclatureAssistant::validatePayloadSafety($data)) {
-                return response()->json(['success' => false, 'error' => 'Données invalides.'], 400);
-            }
-
-            $result = $mistral->suggestTypes($data);
-
-            return response()->json([
-                'success' => true,
-                'types'   => $result['types'] ?? [],
-                'source'  => 'Mistral',
-            ]);
-
-        } catch (\Exception $e) {
-            Log::error('❌ aiSuggestTypes: ' . $e->getMessage());
-            return response()->json(['success' => false, 'error' => $e->getMessage()], 500);
-        }
+        return $parent->code . '-' . str_pad($seq, $pad, '0', STR_PAD_LEFT);
     }
 }

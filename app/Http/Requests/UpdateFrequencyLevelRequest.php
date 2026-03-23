@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests;
 
+use App\Models\RiskFrequencyLevel;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -14,7 +15,10 @@ class UpdateFrequencyLevelRequest extends FormRequest
 
     public function rules(): array
     {
-        $configId = $this->route('frequency_level')->matrix_config_id;
+        // Route model binding est désactivé → résolution manuelle
+        $levelId  = (int) $this->route('frequency_level');
+        $level    = RiskFrequencyLevel::findOrFail($levelId);
+        $configId = $level->matrix_config_id;
 
         return [
             'label'       => ['required', 'string', 'max:100'],
@@ -22,11 +26,11 @@ class UpdateFrequencyLevelRequest extends FormRequest
                 'required',
                 'integer',
                 'min:1',
-                'max:5',
+                'max:10',
                 Rule::unique('risk_frequency_levels', 'score')
                     ->where('matrix_config_id', $configId)
                     ->whereNull('deleted_at')
-                    ->ignore($this->route('frequency_level')->id),
+                    ->ignore($levelId),
             ],
             'description' => ['nullable', 'string', 'max:500'],
             'recurrence'  => ['nullable', 'string', 'max:100'],

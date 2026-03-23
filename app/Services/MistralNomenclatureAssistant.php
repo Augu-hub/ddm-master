@@ -2,237 +2,106 @@
 
 namespace App\Services;
 
-use Illuminate\Support\Facades\Http;
-use Illuminate\Support\Facades\Log;
-
-/**
- * ════════════════════════════════════════════════════════════════════════════
- * SERVICE IA — Suggestions de nomenclatures de risques
- * Modèle : Mistral Small (mistral-small-latest)
- *
- * Trois types de suggestions :
- *   1. suggestDomains()   → Domaines (Niveau 1) pour un secteur d'activité
- *   2. suggestFamilies()  → Familles (Niveau 2) pour un domaine donné
- *   3. suggestTypes()     → Types précis (Niveau 3) pour une famille donnée
- *
- * Référentiels utilisés dans les prompts :
- *   ISO 31000, COSO ERM, Basel II/III, FERMA, OHSAS 18001
- * ════════════════════════════════════════════════════════════════════════════
- */
-class MistralNomenclatureAssistant
+class MistralNomenclatureAssistant extends MistralAssistant
 {
-    protected string $apiKey;
-    protected string $baseUrl  = 'https://api.mistral.ai/v1';
-    protected string $model    = 'mistral-small-latest';
+    protected int   $maxTokens   = 2000;
+    protected float $temperature = 0.4;
 
-    public function __construct()
+    // ---------------------------------------------------------------
+    // Prompt système
+    // ---------------------------------------------------------------
+
+    protected function systemPrompt(): string
     {
-        $this->apiKey = config('services.mistral.api_key', '');
+        return <<<PROMPT
+Tu es un expert en gestion des risques ISO 31000 / COSO specialise dans la construction
+de nomenclatures de risques hierarchiques pour les entreprises.
 
-        if (!$this->apiKey) {
-            Log::error('🚨 MISTRAL_API_KEY non configurée (NomenclatureAssistant)');
-        } else {
-            Log::info('✅ MistralNomenclatureAssistant initialisé');
-        }
+Ton role est de suggerer des nomenclatures de risques structurees sur 2 niveaux :
+- Niveau 2 : sous-categories directes d'un type de risque racine (ex: RC -> Risque fiscal)
+- Niveau 3 : sous-elements d'un niveau 2 (ex: Risque fiscal -> Fraude a la TVA)
+
+Regles absolues :
+1. Reponds UNIQUEMENT en JSON valide, sans texte avant ni apres.
+2. Le JSON doit respecter exactement le schema fourni.
+3. Les labels doivent etre en francais, concis (3 a 6 mots), professionnels.
+4. Les descriptions doivent etre courtes (1 phrase max, 80 caracteres max).
+5. Propose entre 3 et 5 elements de niveau 2, chacun avec 2 a 4 enfants de niveau 3.
+6. Adapte les suggestions au secteur d'activite fourni.
+7. Ne repete jamais les nomenclatures deja existantes fournies dans le contexte.
+
+Schema JSON attendu :
+{
+  "suggestions": [
+    {
+      "label": "string",
+      "description": "string",
+      "children": [
+        { "label": "string", "description": "string" },
+        { "label": "string", "description": "string" }
+      ]
+    }
+  ]
+}
+PROMPT;
     }
 
-    // ────────────────────────────────────────────────────────────────────────
-    // 1. SUGGESTIONS DE DOMAINES (Niveau 1)
-    // ────────────────────────────────────────────────────────────────────────
+    // ---------------------------------------------------------------
+    // Prompt utilisateur
+    // ---------------------------------------------------------------
 
-    /**
-     * Suggère des domaines de risques (Niveau 1) pour un secteur donné.
-     *
-     * @param  array{sector: string, existing_domains: string[]}  $payload
-     * @return array{domains: array{code: string, label: string, description: string}[]}
-     */
-    public function suggestDomains(array $payload): array
+    protected function buildUserPrompt(array $params): string
     {
-        try {
-            $sector   = $payload['sector']           ?? 'industrie agroalimentaire';
-            $existing = implode(', ', $payload['existing_domains'] ?? []);
+        $typeCode  = $params['type_code'];
+        $typeLabel = $params['type_label'];
+        $sector    = $params['sector'];
+        $context   = $params['context'] ?? '';
+        $existing  = $params['existing'] ?? [];
 
-            $prompt = "Tu es expert en gestion des risques (ISO 31000, COSO ERM, FERMA).\n\n"
-                . "Secteur d'activité: \"$sector\"\n"
-                . ($existing ? "Domaines déjà définis: $existing\n\n" : "\n")
-                . "Propose 6 domaines de risques pertinents pour ce secteur, "
-                . "en suivant les référentiels ISO 31000 et COSO ERM.\n\n"
-                . "Réponds UNIQUEMENT en JSON valide :\n"
-                . "{\n"
-                . "  \"domains\": [\n"
-                . "    {\"code\": \"RC\", \"label\": \"Risque de conformité\", \"description\": \"Non-respect des lois et réglements\"},\n"
-                . "    ...\n"
-                . "  ]\n"
-                . "}\n\n"
-                . "RÈGLES:\n"
-                . "- Codes courts de 2 lettres majuscules (ex: RC, RF, RI, RO, RS, RM)\n"
-                . "- Labels clairs et professionnels\n"
-                . "- Descriptions concises (1 phrase)\n"
-                . "- Ne pas répéter les domaines déjà définis\n"
-                . "- Adaptés au secteur spécifié";
+        $existingStr = !empty($existing)
+            ? 'Nomenclatures deja existantes a NE PAS repeter : ' . implode(', ', $existing)
+            : 'Aucune nomenclature existante.';
 
-            return $this->callMistral($prompt, 'DOMAIN_SUGGEST');
+        $contextStr = $context
+            ? "Contexte supplementaire : {$context}"
+            : '';
 
-        } catch (\Exception $e) {
-            Log::error('❌ suggestDomains: ' . $e->getMessage());
-            return ['domains' => []];
-        }
+        return <<<PROMPT
+Type de risque cible : {$typeCode} - {$typeLabel}
+Secteur d'activite   : {$sector}
+{$contextStr}
+
+{$existingStr}
+
+Genere des suggestions de nomenclatures de risques de niveau 2 et 3
+pour le type "{$typeLabel}" adaptes au secteur "{$sector}".
+Respecte exactement le schema JSON demande.
+PROMPT;
     }
 
-    // ────────────────────────────────────────────────────────────────────────
-    // 2. SUGGESTIONS DE FAMILLES (Niveau 2)
-    // ────────────────────────────────────────────────────────────────────────
+    // ---------------------------------------------------------------
+    // Parsing de la réponse
+    // ---------------------------------------------------------------
 
-    /**
-     * Suggère des familles de risques (Niveau 2) pour un domaine donné.
-     *
-     * @param  array{domain_code: string, domain_label: string, sector: string}  $payload
-     * @return array{families: array{code: string, label: string, description: string}[]}
-     */
-    public function suggestFamilies(array $payload): array
+    protected function parseResponse(array $json, array $params): array
     {
-        try {
-            $domainCode  = $payload['domain_code']  ?? '';
-            $domainLabel = $payload['domain_label'] ?? '';
-            $sector      = $payload['sector']       ?? 'entreprise';
+        $suggestions = $json['suggestions'] ?? [];
 
-            $prompt = "Tu es expert en gestion des risques (ISO 31000, COSO ERM, Basel II).\n\n"
-                . "Domaine de risque: \"$domainLabel\" (code: $domainCode)\n"
-                . "Secteur: $sector\n\n"
-                . "Propose 5 à 6 familles (sous-catégories) pour ce domaine.\n\n"
-                . "Réponds UNIQUEMENT en JSON valide :\n"
-                . "{\n"
-                . "  \"families\": [\n"
-                . "    {\"code\": \"$domainCode-RH\", \"label\": \"Ressources humaines\", \"description\": \"Risques liés au capital humain\"},\n"
-                . "    ...\n"
-                . "  ]\n"
-                . "}\n\n"
-                . "RÈGLES:\n"
-                . "- Codes format: {DOMAINE}-{2-3 LETTRES} (ex: RO-RH, RO-PROD)\n"
-                . "- Labels professionnels et précis\n"
-                . "- Descriptions brèves (1 phrase)\n"
-                . "- Familles cohérentes avec le domaine \"$domainLabel\"";
-
-            return $this->callMistral($prompt, 'FAMILY_SUGGEST');
-
-        } catch (\Exception $e) {
-            Log::error('❌ suggestFamilies: ' . $e->getMessage());
-            return ['families' => []];
-        }
-    }
-
-    // ────────────────────────────────────────────────────────────────────────
-    // 3. SUGGESTIONS DE TYPES PRÉCIS (Niveau 3)
-    // ────────────────────────────────────────────────────────────────────────
-
-    /**
-     * Suggère des types précis de risques (Niveau 3) pour une famille donnée.
-     *
-     * @param  array{family_code: string, family_label: string, domain_label: string, sector: string}  $payload
-     * @return array{types: array{code: string, label: string, description: string}[]}
-     */
-    public function suggestTypes(array $payload): array
-    {
-        try {
-            $familyCode  = $payload['family_code']  ?? '';
-            $familyLabel = $payload['family_label'] ?? '';
-            $domainLabel = $payload['domain_label'] ?? '';
-            $sector      = $payload['sector']       ?? 'entreprise';
-
-            $prompt = "Tu es expert en gestion des risques opérationnels (ISO 31000, Basel II/III).\n\n"
-                . "Famille de risques: \"$familyLabel\" (code: $familyCode)\n"
-                . "Domaine parent: \"$domainLabel\"\n"
-                . "Secteur: $sector\n\n"
-                . "Propose 5 à 7 risques précis et concrets pour cette famille.\n\n"
-                . "Réponds UNIQUEMENT en JSON valide :\n"
-                . "{\n"
-                . "  \"types\": [\n"
-                . "    {\"code\": \"$familyCode-001\", \"label\": \"Perte de compétences clés\", \"description\": \"Départ non anticipé d'experts ou opérateurs\"},\n"
-                . "    ...\n"
-                . "  ]\n"
-                . "}\n\n"
-                . "RÈGLES:\n"
-                . "- Codes format: {FAMILLE}-{001, 002, ...}\n"
-                . "- Labels: risques concrets et actionnables\n"
-                . "- Descriptions: conséquence principale en 1 phrase\n"
-                . "- Risques spécifiques à la famille \"$familyLabel\" et au secteur $sector";
-
-            return $this->callMistral($prompt, 'TYPE_SUGGEST');
-
-        } catch (\Exception $e) {
-            Log::error('❌ suggestTypes: ' . $e->getMessage());
-            return ['types' => []];
-        }
-    }
-
-    // ────────────────────────────────────────────────────────────────────────
-    // APPEL API MISTRAL (identique à MistralMPAAssistant)
-    // ────────────────────────────────────────────────────────────────────────
-
-    protected function callMistral(string $prompt, string $context = 'GENERIC'): array
-    {
-        if (!$this->apiKey) {
-            Log::error("🚨 [$context] Mistral API key manquante");
-            return [];
+        if (empty($suggestions) || !is_array($suggestions)) {
+            throw new \RuntimeException(
+                "L'assistant n'a retourne aucune suggestion. Reformulez le secteur."
+            );
         }
 
-        Log::info("🤖 [$context] Appel Mistral — " . strlen($prompt) . " chars");
-
-        $response = Http::withHeaders([
-            'Authorization' => 'Bearer ' . $this->apiKey,
-            'Content-Type'  => 'application/json',
-        ])->timeout(30)->post($this->baseUrl . '/chat/completions', [
-            'model'       => $this->model,
-            'temperature' => 0.7,
-            'max_tokens'  => 1200,
-            'messages'    => [
-                ['role' => 'user', 'content' => $prompt],
-            ],
-        ]);
-
-        if (!$response->successful()) {
-            Log::error("❌ [$context] Mistral HTTP {$response->status()}: {$response->body()}");
-            return [];
-        }
-
-        $content = $response->json('choices.0.message.content', '');
-        Log::info("✅ [$context] Réponse reçue: " . substr($content, 0, 200));
-
-        return $this->parseJson($content, $context);
-    }
-
-    protected function parseJson(string $content, string $context): array
-    {
-        // Nettoyer les balises markdown
-        $clean = preg_replace('/```json|```/i', '', $content);
-        $clean = trim($clean);
-
-        // Extraire le JSON si entouré de texte
-        if (preg_match('/\{.*\}/s', $clean, $m)) {
-            $clean = $m[0];
-        }
-
-        $decoded = json_decode($clean, true);
-
-        if (json_last_error() !== JSON_ERROR_NONE) {
-            Log::error("❌ [$context] JSON invalide: " . json_last_error_msg());
-            Log::debug("[$context] Contenu brut: $content");
-            return [];
-        }
-
-        return $decoded;
-    }
-
-    public static function validatePayloadSafety(array $data): bool
-    {
-        $dangerous = ['DROP', 'DELETE', 'INSERT', 'SELECT', '<script', 'eval(', 'exec('];
-        $str = strtoupper(json_encode($data));
-        foreach ($dangerous as $kw) {
-            if (str_contains(strtoupper($str), strtoupper($kw))) {
-                Log::warning('⚠️ Payload suspect détecté', ['data' => $data]);
-                return false;
-            }
-        }
-        return true;
+        return array_values(array_map(function (array $item) {
+            return [
+                'label'       => trim($item['label']       ?? ''),
+                'description' => trim($item['description'] ?? ''),
+                'children'    => array_values(array_map(fn($c) => [
+                    'label'       => trim($c['label']       ?? ''),
+                    'description' => trim($c['description'] ?? ''),
+                ], $item['children'] ?? [])),
+            ];
+        }, $suggestions));
     }
 }

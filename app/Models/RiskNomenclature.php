@@ -2,42 +2,29 @@
 
 namespace App\Models;
 
+use App\Enums\NomenclatureType;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
-use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
-/**
- * ════════════════════════════════════════════════════════════════════════════
- * MODEL: RiskNomenclature
- * ════════════════════════════════════════════════════════════════════════════
- *
- * Hiérarchie à 3 niveaux via auto-référence (parent_id).
- *
- *   Niveau 1 → Domaine     : RO, RF, RI …
- *   Niveau 2 → Famille     : RO-RH, RO-PROD …
- *   Niveau 3 → Type précis : RO-RH-001, RO-PROD-002 …
- *
- * Héritage de l'appétance (Approche B) :
- *   La méthode resolvedAppetite() remonte la hiérarchie jusqu'à trouver
- *   un nœud ayant un appetite_id défini. Résolution :
- *     niveau 3 → niveau 2 → niveau 1 → null
- */
 class RiskNomenclature extends Model
 {
     use SoftDeletes;
 
-    protected $table = 'risk_nomenclatures';
+    protected $connection = 'tenant';
+    protected $table      = 'risk_nomenclatures';
 
     protected $fillable = [
         'tenant_id',
         'parent_id',
         'appetite_id',
+        'level',
+        'type_code',
         'code',
         'label',
         'description',
-        'level',
         'color',
         'icon',
         'sort_order',
@@ -45,115 +32,81 @@ class RiskNomenclature extends Model
     ];
 
     protected $casts = [
-        'tenant_id'  => 'integer',
-        'parent_id'  => 'integer',
-        'appetite_id'=> 'integer',
-        'level'      => 'integer',
-        'sort_order' => 'integer',
-        'is_active'  => 'boolean',
+        'level'     => 'integer',
+        'parent_id' => 'integer',
+        'is_active' => 'boolean',
     ];
 
-    // ────────────────────────────────────────────────────────────────────────
-    // RELATIONS
-    // ────────────────────────────────────────────────────────────────────────
+    // --- Relations ---
 
-    /**
-     * Nœud parent (null si niveau 1 — racine)
-     */
     public function parent(): BelongsTo
     {
-        return $this->belongsTo(RiskNomenclature::class, 'parent_id');
+        return $this->belongsTo(self::class, 'parent_id');
     }
 
-    /**
-     * Enfants directs
-     */
     public function children(): HasMany
     {
-        return $this->hasMany(RiskNomenclature::class, 'parent_id')
+        return $this->hasMany(self::class, 'parent_id')
+            ->where('is_active', true)
             ->orderBy('sort_order')
             ->orderBy('code');
     }
 
-    /**
-     * Appétance définie directement sur ce nœud (peut être null)
-     */
-    public function appetite(): BelongsTo
+    public function childrenDeep(): HasMany
     {
-        return $this->belongsTo(RiskAppetiteLevel::class, 'appetite_id');
+        return $this->hasMany(self::class, 'parent_id')
+            ->where('is_active', true)
+            ->with('childrenDeep')
+            ->orderBy('sort_order')
+            ->orderBy('code');
     }
 
-    /**
-     * Risques rattachés à cette nomenclature
-     */
-    public function risks(): HasMany
+    public function riskRegisters(): BelongsToMany
     {
-        return $this->hasMany(Risk::class, 'nomenclature_id');
+        return $this->belongsToMany(
+            RiskRegister::class,
+            'risk_register_nomenclatures',
+            'risk_nomenclature_id',
+            'risk_register_id'
+        );
     }
 
-    // ────────────────────────────────────────────────────────────────────────
-    // HÉRITAGE D'APPÉTANCE (Approche B)
-    // ────────────────────────────────────────────────────────────────────────
+    // --- Helpers ---
 
-    /**
-     * Retourne l'appétance effective en remontant la hiérarchie.
-     *
-     * Ordre de résolution :
-     *   1. Ce nœud lui-même (appetite_id non null)
-     *   2. Son parent direct
-     *   3. Le grand-parent (niveau 1)
-     *   4. null → aucune appétance définie
-     *
-     * Les relations parent sont eager-loadées si déjà chargées,
-     * sinon on fait des requêtes ascendantes.
-     */
-    public function resolvedAppetite(): ?RiskAppetiteLevel
+    public function isRoot(): bool
     {
-        // Ce nœud a une appétance directe → on l'utilise
-        if ($this->appetite_id !== null) {
-            return $this->appetite ?? RiskAppetiteLevel::find($this->appetite_id);
-        }
-
-        // Remontée vers le parent
-        $parent = $this->parent ?? ($this->parent_id ? static::find($this->parent_id) : null);
-
-        if ($parent === null) {
-            return null; // On est à la racine, rien de défini
-        }
-
-        return $parent->resolvedAppetite();
+        return $this->level === 1;
     }
 
-    /**
-     * Indique si l'appétance est héritée (non définie directement ici)
-     */
-    public function isAppetiteInherited(): bool
+    public function canHaveChildren(): bool
     {
-        return $this->appetite_id === null && $this->resolvedAppetite() !== null;
+        return $this->level < 3;
     }
 
-    /**
-     * Retourne le nœud ancêtre qui porte l'appétance effective
-     * (utile pour l'affichage "hérite de RO-PROD")
-     */
-    public function appetiteOwner(): ?self
+    public function typeEnum(): ?NomenclatureType
     {
-        if ($this->appetite_id !== null) {
-            return $this;
-        }
-
-        $parent = $this->parent ?? ($this->parent_id ? static::find($this->parent_id) : null);
-
-        return $parent?->appetiteOwner();
+        return NomenclatureType::tryFrom($this->type_code ?? '');
     }
 
-    // ────────────────────────────────────────────────────────────────────────
-    // SCOPES
-    // ────────────────────────────────────────────────────────────────────────
-
-    public function scopeByTenant($query, int $tenantId)
+    // Couleur : priorité à la valeur DB, fallback enum
+    public function resolvedColor(): string
     {
-        return $query->where('tenant_id', $tenantId);
+        if ($this->color) return $this->color;
+        return $this->typeEnum()?->color() ?? '#6c757d';
+    }
+
+    // Icône : priorité à la valeur DB, fallback enum
+    public function resolvedIcon(): string
+    {
+        if ($this->icon) return $this->icon;
+        return $this->typeEnum()?->icon() ?? 'ti ti-folder';
+    }
+
+    // --- Scopes ---
+
+    public function scopeRoots($query)
+    {
+        return $query->where('level', 1);
     }
 
     public function scopeActive($query)
@@ -161,95 +114,8 @@ class RiskNomenclature extends Model
         return $query->where('is_active', true);
     }
 
-    public function scopeRoots($query)
+    public function scopeForTenant($query, int $tenantId)
     {
-        return $query->whereNull('parent_id');
-    }
-
-    public function scopeByLevel($query, int $level)
-    {
-        return $query->where('level', $level);
-    }
-
-    public function scopeOrdered($query)
-    {
-        return $query->orderBy('sort_order')->orderBy('code');
-    }
-
-    // ────────────────────────────────────────────────────────────────────────
-    // MÉTHODES UTILITAIRES
-    // ────────────────────────────────────────────────────────────────────────
-
-    /**
-     * Retourne l'arbre complet du tenant sous forme de collection imbriquée.
-     * Utilisé pour construire le sélecteur hiérarchique côté Vue.
-     */
-    public static function treeForTenant(int $tenantId): Collection
-    {
-        $all = static::byTenant($tenantId)
-            ->active()
-            ->with('appetite')
-            ->ordered()
-            ->get();
-
-        return static::buildTree($all, null);
-    }
-
-    private static function buildTree(Collection $all, ?int $parentId): Collection
-    {
-        return $all
-            ->filter(fn ($n) => $n->parent_id === $parentId)
-            ->map(function ($node) use ($all) {
-                $node->setRelation('children', static::buildTree($all, $node->id));
-                return $node;
-            })
-            ->values();
-    }
-
-    /**
-     * Retourne le chemin complet depuis la racine : "RO > RO-PROD > RO-PROD-002"
-     */
-    public function breadcrumb(string $separator = ' > '): string
-    {
-        $parts = [$this->label];
-
-        $parent = $this->parent ?? ($this->parent_id ? static::find($this->parent_id) : null);
-
-        while ($parent !== null) {
-            array_unshift($parts, $parent->label);
-            $parent = $parent->parent ?? ($parent->parent_id ? static::find($parent->parent_id) : null);
-        }
-
-        return implode($separator, $parts);
-    }
-
-    /**
-     * Représentation complète pour l'API / Inertia
-     */
-    public function toApiArray(): array
-    {
-        $resolvedAppetite = $this->resolvedAppetite();
-
-        return [
-            'id'               => $this->id,
-            'code'             => $this->code,
-            'label'            => $this->label,
-            'description'      => $this->description,
-            'level'            => $this->level,
-            'parent_id'        => $this->parent_id,
-            'color'            => $this->color,
-            'icon'             => $this->icon,
-            'sort_order'       => $this->sort_order,
-            'is_active'        => $this->is_active,
-
-            // Appétance directe (peut être null)
-            'appetite_id'      => $this->appetite_id,
-            'appetite'         => $this->appetite?->only(['id', 'code', 'label', 'color']),
-
-            // Appétance effective après héritage
-            'resolved_appetite'         => $resolvedAppetite?->only(['id', 'code', 'label', 'color']),
-            'is_appetite_inherited'     => $this->isAppetiteInherited(),
-            'appetite_owner_code'       => $this->appetiteOwner()?->code,
-        ];
+        return $query->where('tenant_id', $tenantId);
     }
 }

@@ -23,7 +23,7 @@ class StoreImpactLevelRequest extends FormRequest
                 'required',
                 'integer',
                 'min:1',
-                'max:5',
+                'max:10',
                 Rule::unique('risk_impact_levels', 'score')
                     ->where('matrix_config_id', $configId)
                     ->whereNull('deleted_at'),
@@ -37,8 +37,8 @@ class StoreImpactLevelRequest extends FormRequest
     public function messages(): array
     {
         return [
-            'score.unique'      => 'Ce score est déjà utilisé pour cette configuration de matrice.',
-            'color_code.regex'  => 'La couleur doit être au format hexadécimal (#RRGGBB).',
+            'score.unique'     => 'Ce score est déjà utilisé pour cette configuration de matrice.',
+            'color_code.regex' => 'La couleur doit être au format hexadécimal (#RRGGBB).',
         ];
     }
 }

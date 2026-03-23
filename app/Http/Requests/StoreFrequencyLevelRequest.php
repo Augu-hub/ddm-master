@@ -23,13 +23,13 @@ class StoreFrequencyLevelRequest extends FormRequest
                 'required',
                 'integer',
                 'min:1',
-                'max:5',
+                'max:10',
                 Rule::unique('risk_frequency_levels', 'score')
                     ->where('matrix_config_id', $configId)
                     ->whereNull('deleted_at'),
             ],
             'description'      => ['nullable', 'string', 'max:500'],
-            'recurrence'       => ['nullable', 'string', 'max:100'],  // ex: "1 fois / 5 ans"
+            'recurrence'       => ['nullable', 'string', 'max:100'],
             'color_code'       => ['required', 'string', 'regex:/^#[0-9A-Fa-f]{6}$/'],
             'sort_order'       => ['required', 'integer', 'min:0'],
         ];

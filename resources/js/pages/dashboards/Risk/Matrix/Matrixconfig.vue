@@ -8,7 +8,7 @@
                 <div class="d-flex align-items-center gap-2">
                     <i class="ti ti-adjustments-alt text-primary fs-5"></i>
                     <h4 class="m-0 fw-semibold">Configurations de matrice</h4>
-                    <small class="text-muted ms-1">3×3, 4×4, 5×5</small>
+                    <small class="text-muted ms-1">3×3 à 10×10</small>
                 </div>
                 <b-button size="sm" variant="primary" @click="openForm()">
                     <i class="ti ti-plus me-1"></i>Nouvelle configuration
@@ -86,24 +86,36 @@
                                           placeholder="ex : Matrice standard 5×5" required />
                             <div v-if="errors.name" class="text-danger small mt-1">{{ errors.name }}</div>
                         </b-col>
-                        <b-col md="3">
+                        <b-col md="4">
                             <label class="form-label mb-1">
                                 Taille
                                 <span v-if="editingId" class="text-muted fw-normal small">(non modifiable)</span>
                                 <span v-else class="text-danger">*</span>
                             </label>
-                            <div class="d-flex gap-1">
-                                <button v-for="size in [3,4,5]" :key="size" type="button"
-                                        class="btn btn-sm flex-fill"
-                                        :class="form.matrix_size === size ? 'btn-primary' : 'btn-outline-secondary'"
-                                        :disabled="!!editingId"
-                                        @click="!editingId && (form.matrix_size = size)">
-                                    {{ size }}×{{ size }}
-                                </button>
+                            <!-- 2 lignes : [3 4 5] puis [6 7 8 9 10] -->
+                            <div class="size-picker" :class="{ 'size-picker--disabled': !!editingId }">
+                                <div class="size-row">
+                                    <button v-for="size in [3,4,5]" :key="size" type="button"
+                                            class="btn btn-sm size-btn"
+                                            :class="form.matrix_size === size ? 'btn-primary' : 'btn-outline-secondary'"
+                                            :disabled="!!editingId"
+                                            @click="!editingId && (form.matrix_size = size)">
+                                        {{ size }}×{{ size }}
+                                    </button>
+                                </div>
+                                <div class="size-row">
+                                    <button v-for="size in [6,7,8,9,10]" :key="size" type="button"
+                                            class="btn btn-sm size-btn"
+                                            :class="form.matrix_size === size ? 'btn-primary' : 'btn-outline-secondary'"
+                                            :disabled="!!editingId"
+                                            @click="!editingId && (form.matrix_size = size)">
+                                        {{ size }}×{{ size }}
+                                    </button>
+                                </div>
                             </div>
                             <div v-if="errors.matrix_size" class="text-danger small mt-1">{{ errors.matrix_size }}</div>
                         </b-col>
-                        <b-col md="4">
+                        <b-col md="3">
                             <label class="form-label mb-1">Description</label>
                             <b-form-input class="form-control-sm" v-model.trim="form.description"
                                           placeholder="Description de la configuration..." />
@@ -111,7 +123,11 @@
 
                         <!-- Aperçu zones par défaut -->
                         <b-col cols="12" v-if="!editingId">
-                            <small class="text-muted">Zones créées automatiquement :</small>
+                            <small class="text-muted">
+                                Zones créées automatiquement
+                                <span class="badge bg-secondary ms-1">{{ defaultZones.length }} zones</span>
+                                <span class="text-muted ms-1">— score max {{ form.matrix_size * form.matrix_size }}</span>
+                            </small>
                             <div class="d-flex flex-wrap gap-1 mt-1">
                                 <span v-for="zone in defaultZones" :key="zone.label"
                                       class="apt-badge"
@@ -274,9 +290,10 @@ const props = defineProps({
     configs: { type: Array, default: () => [] },
 })
 
+// Zones par defaut pour chaque taille de matrice (miroir du PHP RiskCriticalityZone::defaultZonesForSize)
 const DEFAULT_ZONES = {
     3: [
-        { label: 'Faible',   min_score: 1, max_score: 3, color_code: '#22c55e' },
+        { label: 'Faible',    min_score: 1, max_score: 3, color_code: '#22c55e' },
         { label: 'Modéré',   min_score: 4, max_score: 6, color_code: '#eab308' },
         { label: 'Critique', min_score: 7, max_score: 9, color_code: '#ef4444' },
     ],
@@ -292,6 +309,41 @@ const DEFAULT_ZONES = {
         { label: 'Modéré',      min_score: 10, max_score: 14, color_code: '#eab308' },
         { label: 'Élevé',       min_score: 15, max_score: 19, color_code: '#f97316' },
         { label: 'Critique',    min_score: 20, max_score: 25, color_code: '#ef4444' },
+    ],
+    6: [
+        { label: 'Négligeable', min_score: 1,  max_score: 6,  color_code: '#22c55e' },
+        { label: 'Faible',      min_score: 7,  max_score: 13, color_code: '#84cc16' },
+        { label: 'Modéré',      min_score: 14, max_score: 22, color_code: '#eab308' },
+        { label: 'Élevé',       min_score: 23, max_score: 29, color_code: '#f97316' },
+        { label: 'Critique',    min_score: 30, max_score: 36, color_code: '#ef4444' },
+    ],
+    7: [
+        { label: 'Négligeable', min_score: 1,  max_score: 9,  color_code: '#22c55e' },
+        { label: 'Faible',      min_score: 10, max_score: 19, color_code: '#84cc16' },
+        { label: 'Modéré',      min_score: 20, max_score: 29, color_code: '#eab308' },
+        { label: 'Élevé',       min_score: 30, max_score: 39, color_code: '#f97316' },
+        { label: 'Critique',    min_score: 40, max_score: 49, color_code: '#ef4444' },
+    ],
+    8: [
+        { label: 'Négligeable', min_score: 1,  max_score: 12, color_code: '#22c55e' },
+        { label: 'Faible',      min_score: 13, max_score: 25, color_code: '#84cc16' },
+        { label: 'Modéré',      min_score: 26, max_score: 38, color_code: '#eab308' },
+        { label: 'Élevé',       min_score: 39, max_score: 51, color_code: '#f97316' },
+        { label: 'Critique',    min_score: 52, max_score: 64, color_code: '#ef4444' },
+    ],
+    9: [
+        { label: 'Négligeable', min_score: 1,  max_score: 16, color_code: '#22c55e' },
+        { label: 'Faible',      min_score: 17, max_score: 32, color_code: '#84cc16' },
+        { label: 'Modéré',      min_score: 33, max_score: 48, color_code: '#eab308' },
+        { label: 'Élevé',       min_score: 49, max_score: 64, color_code: '#f97316' },
+        { label: 'Critique',    min_score: 65, max_score: 81, color_code: '#ef4444' },
+    ],
+    10: [
+        { label: 'Négligeable', min_score: 1,  max_score: 20,  color_code: '#22c55e' },
+        { label: 'Faible',      min_score: 21, max_score: 40,  color_code: '#84cc16' },
+        { label: 'Modéré',      min_score: 41, max_score: 60,  color_code: '#eab308' },
+        { label: 'Élevé',       min_score: 61, max_score: 80,  color_code: '#f97316' },
+        { label: 'Critique',    min_score: 81, max_score: 100, color_code: '#ef4444' },
     ],
 }
 
@@ -364,4 +416,10 @@ const fillPercent = (count, size) => Math.round((count / size) * 100)
 .matrix-size-badge { width:56px; height:56px; border-radius:10px; display:flex; flex-direction:column; align-items:center; justify-content:center; background-color:rgba(0,0,0,.05); flex-shrink:0 }
 .apt-badge { padding:.1rem .5rem; border-radius:12px; font-size:.7rem; font-weight:700; border:1px solid; display:inline-flex; align-items:center }
 .color-dot { width:8px; height:8px; border-radius:50%; display:inline-block; flex-shrink:0 }
+
+/* Sélecteur de taille en 2 rangées */
+.size-picker { display:flex; flex-direction:column; gap:3px }
+.size-picker--disabled { opacity:.6; pointer-events:none }
+.size-row { display:flex; gap:3px }
+.size-btn { flex:1; padding:.1rem .2rem; font-size:.68rem; min-width:0; white-space:nowrap }
 </style>

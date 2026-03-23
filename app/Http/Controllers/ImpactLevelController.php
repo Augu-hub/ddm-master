@@ -16,12 +16,12 @@ class ImpactLevelController extends Controller
 {
     /**
      * Liste des niveaux d'impact pour une config de matrice donnée.
+     * Les critères de chaque niveau sont chargés en eager loading (relation ordonnée).
      */
     public function index(Request $request): Response
     {
         $tenantId = (int) (session('tenant_id') ?? 1);
 
-        // Configs disponibles pour ce tenant
         $matrixConfigs = RiskMatrixConfig::forTenant($tenantId)
             ->orderBy('is_active', 'desc')
             ->orderBy('name')
@@ -34,15 +34,17 @@ class ImpactLevelController extends Controller
                 'is_active'    => $c->is_active,
             ]);
 
-        // Config sélectionnée (paramètre GET ou active par défaut)
         $selectedConfigId = $request->integer('config_id')
             ?: optional($matrixConfigs->firstWhere('is_active', true))['id']
                 ?: optional($matrixConfigs->first())['id'];
 
-        // Niveaux d'impact de la config sélectionnée
+        // Eager-load criteria via la relation (déjà triée par sort_order dans le modèle).
+        // On utilise une chaîne simple (pas de closure) pour éviter les conflits
+        // de chargement eager avec les relations imbriquées.
         $impactLevels = $selectedConfigId
             ? RiskImpactLevel::forTenant($tenantId)
                 ->forConfig($selectedConfigId)
+                ->with('criteria')
                 ->ordered()
                 ->get()
                 ->map(fn ($l) => [
@@ -52,6 +54,12 @@ class ImpactLevelController extends Controller
                     'description' => $l->description,
                     'color_code'  => $l->color_code,
                     'sort_order'  => $l->sort_order,
+                    'criteria'    => $l->criteria->map(fn ($c) => [
+                        'id'          => $c->id,
+                        'designation' => $c->designation,
+                        'description' => $c->description,
+                        'sort_order'  => $c->sort_order,
+                    ])->values()->all(),
                 ])
             : collect();
 
@@ -69,11 +77,9 @@ class ImpactLevelController extends Controller
     {
         $tenantId = (int) (session('tenant_id') ?? 1);
 
-        // Vérifie que la config appartient bien au tenant
         $config = RiskMatrixConfig::forTenant($tenantId)
             ->findOrFail($request->integer('matrix_config_id'));
 
-        // Vérifie qu'on ne dépasse pas la taille de la matrice
         $existingCount = RiskImpactLevel::forConfig($config->id)->count();
         if ($existingCount >= $config->matrix_size) {
             return back()->withErrors([
@@ -124,8 +130,8 @@ class ImpactLevelController extends Controller
         $tenantId = (int) (session('tenant_id') ?? 1);
 
         $request->validate([
-            'items'          => ['required', 'array'],
-            'items.*.id'     => ['required', 'integer'],
+            'items'              => ['required', 'array'],
+            'items.*.id'         => ['required', 'integer'],
             'items.*.sort_order' => ['required', 'integer', 'min:0'],
         ]);
 

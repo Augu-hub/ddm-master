@@ -252,9 +252,15 @@ const props = defineProps({
 
 const CELL_SIZE = computed(() => {
     const size = props.matrixData?.config?.matrix_size ?? 5;
-    return size <= 3 ? 88 : size === 4 ? 80 : 72;
+    if (size <= 3) return 88;
+    if (size === 4) return 80;
+    if (size === 5) return 72;
+    if (size === 6) return 64;
+    if (size === 7) return 58;
+    if (size === 8) return 52;
+    if (size === 9) return 46;
+    return 42; // 10x10
 });
-
 const currentConfigId = ref(props.selectedConfigId);
 const hoveredCell = ref(null);
 const pinnedCell = ref(null);
