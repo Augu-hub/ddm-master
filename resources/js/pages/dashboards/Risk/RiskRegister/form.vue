@@ -17,6 +17,9 @@
                         Converti depuis l'incident {{ fromIncident.code_origine }}
                     </small>
                 </div>
+                <!-- Bouton Import bibliothèque (création uniquement) -->
+                <LibraryImportPicker v-if="!isEdit" @apply="applyLibraryImport" />
+
                 <!-- Bouton Mistral AI -->
                 <MistralRiskSuggester
                     :secteur="secteurEntite"
@@ -38,39 +41,12 @@
                     <!-- ── Colonne principale ──────────────────────────────────────── -->
                     <div class="col-lg-8">
 
-                        <!-- Identification -->
+                        <!-- 1. Localisation -->
                         <div class="card border-0 shadow-sm mb-4">
                             <div class="card-header bg-transparent border-0 pb-0 pt-3">
-                <span class="fw-semibold text-muted small text-uppercase" style="letter-spacing:.05em">
-                  <i class="ti ti-id me-1"></i>Identification
-                </span>
-                            </div>
-                            <div class="card-body">
-                                <div class="mb-3">
-                                    <label class="form-label fw-semibold">Libellé <span class="text-danger">*</span></label>
-                                    <input
-                                        v-model="form.libelle"
-                                        type="text"
-                                        class="form-control"
-                                        :class="{ 'is-invalid': errors.libelle }"
-                                        placeholder="Intitulé du risque…"
-                                        maxlength="255"
-                                    />
-                                    <div v-if="errors.libelle" class="invalid-feedback">{{ errors.libelle }}</div>
-                                </div>
-                                <div>
-                                    <label class="form-label fw-semibold">Description</label>
-                                    <textarea v-model="form.description" class="form-control" rows="2" placeholder="Description générale…"></textarea>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Localisation -->
-                        <div class="card border-0 shadow-sm mb-4">
-                            <div class="card-header bg-transparent border-0 pb-0 pt-3">
-                <span class="fw-semibold text-muted small text-uppercase" style="letter-spacing:.05em">
-                  <i class="ti ti-sitemap me-1"></i>Localisation du risque
-                </span>
+                                <span class="fw-semibold text-muted small text-uppercase" style="letter-spacing:.05em">
+                                    <i class="ti ti-sitemap me-1"></i>Localisation du risque
+                                </span>
                             </div>
                             <div class="card-body">
                                 <!-- Arbre entité → activité -->
@@ -101,12 +77,69 @@
                             </div>
                         </div>
 
-                        <!-- Analyse du risque -->
+                        <!-- 2. Identification -->
                         <div class="card border-0 shadow-sm mb-4">
                             <div class="card-header bg-transparent border-0 pb-0 pt-3">
-                <span class="fw-semibold text-muted small text-uppercase" style="letter-spacing:.05em">
-                  <i class="ti ti-clipboard-text me-1"></i>Analyse du risque
-                </span>
+                                <span class="fw-semibold text-muted small text-uppercase" style="letter-spacing:.05em">
+                                    <i class="ti ti-id me-1"></i>Identification
+                                </span>
+                            </div>
+                            <div class="card-body">
+                                <div class="mb-3">
+                                    <label class="form-label fw-semibold">Libellé <span class="text-danger">*</span></label>
+                                    <input
+                                        id="field-libelle"
+                                        v-model="form.libelle"
+                                        type="text"
+                                        class="form-control"
+                                        :class="{ 'is-invalid': errors.libelle }"
+                                        placeholder="Intitulé du risque…"
+                                        maxlength="255"
+                                    />
+                                    <div v-if="errors.libelle" class="invalid-feedback">{{ errors.libelle }}</div>
+                                </div>
+                                <div>
+                                    <label class="form-label fw-semibold">Description</label>
+                                    <textarea v-model="form.description" class="form-control" rows="2" placeholder="Description générale…"></textarea>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 3. Contexte & Parties prenantes -->
+                        <div class="card border-0 shadow-sm mb-4">
+                            <div class="card-header bg-transparent border-0 pb-0 pt-3">
+                                <span class="fw-semibold text-muted small text-uppercase" style="letter-spacing:.05em">
+                                    <i class="ti ti-users me-1"></i>Contexte &amp; Parties prenantes
+                                </span>
+                            </div>
+                            <div class="card-body">
+                                <div class="row g-3">
+                                    <div class="col-12">
+                                        <label class="form-label fw-semibold">Entité partenaire impliquée</label>
+                                        <textarea v-model="form.entite_partenaire_impliquee" class="form-control" rows="2" placeholder="Entité(s) partenaire(s) concernée(s) par ce risque…"></textarea>
+                                    </div>
+                                    <div class="col-12">
+                                        <label class="form-label fw-semibold">Outils utilisés</label>
+                                        <textarea v-model="form.outils_utilises" class="form-control" rows="2" placeholder="Logiciels, systèmes ou outils impliqués…"></textarea>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label fw-semibold">Vraisemblance d'apparition</label>
+                                        <input v-model="form.vraisemblance_apparition" type="text" class="form-control" placeholder="Ex : Rare, Occasionnel, Fréquent…" maxlength="255" />
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label fw-semibold">Critère du risque</label>
+                                        <input v-model="form.critere_risque" type="text" class="form-control" placeholder="Critère de référence applicable…" maxlength="255" />
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 4. Analyse du risque -->
+                        <div class="card border-0 shadow-sm mb-4">
+                            <div class="card-header bg-transparent border-0 pb-0 pt-3">
+                                <span class="fw-semibold text-muted small text-uppercase" style="letter-spacing:.05em">
+                                    <i class="ti ti-clipboard-text me-1"></i>Analyse du risque
+                                </span>
                             </div>
                             <div class="card-body">
                                 <div class="row g-3">
@@ -117,6 +150,14 @@
                                     <div class="col-12">
                                         <label class="form-label fw-semibold">Conséquences / impacts</label>
                                         <textarea v-model="form.consequences" class="form-control" rows="3" placeholder="Quels seraient les impacts si ce risque se matérialisait ?"></textarea>
+                                    </div>
+                                    <div class="col-12">
+                                        <label class="form-label fw-semibold">Conséquences sur d'autres processus</label>
+                                        <textarea v-model="form.consequences_autres_processus" class="form-control" rows="2" placeholder="Processus impactés en cascade…"></textarea>
+                                    </div>
+                                    <div class="col-12">
+                                        <label class="form-label fw-semibold">Coût des conséquences</label>
+                                        <textarea v-model="form.cout_consequences" class="form-control" rows="2" placeholder="Estimation qualitative ou quantitative des coûts engendrés…"></textarea>
                                     </div>
                                     <div class="col-12">
                                         <label class="form-label fw-semibold">Contrôles existants</label>
@@ -136,65 +177,11 @@
                     <div class="col-lg-4">
                         <div class="card border-0 shadow-sm sticky-top" style="top:80px">
                             <div class="card-header bg-transparent border-0 pb-0 pt-3">
-                <span class="fw-semibold text-muted small text-uppercase" style="letter-spacing:.05em">
-                  <i class="ti ti-flame me-1"></i>Évaluation
-                </span>
+                                <span class="fw-semibold text-muted small text-uppercase" style="letter-spacing:.05em">
+                                    <i class="ti ti-settings me-1"></i>Gestion
+                                </span>
                             </div>
                             <div class="card-body">
-
-                                <!-- Impact -->
-                                <div class="mb-3">
-                                    <label class="form-label fw-semibold">Niveau d'impact</label>
-                                    <div class="d-flex flex-column gap-2">
-                                        <label
-                                            v-for="lvl in impactLevels"
-                                            :key="lvl.id"
-                                            class="d-flex align-items-center gap-2 p-2 rounded-2"
-                                            :style="form.impact_level_id === lvl.id
-                        ? `background:${lvl.color}20;border:1px solid ${lvl.color}60;cursor:pointer`
-                        : 'border:1px solid var(--bs-border-color);cursor:pointer'"
-                                        >
-                                            <input type="radio" v-model="form.impact_level_id" :value="lvl.id" class="form-check-input mt-0" @change="computeCriticality" />
-                                            <span class="badge rounded-pill" :style="`background:${lvl.color};color:#fff`">{{ lvl.score }}</span>
-                                            <span class="small fw-semibold">{{ lvl.label }}</span>
-                                        </label>
-                                    </div>
-                                </div>
-
-                                <!-- Fréquence -->
-                                <div class="mb-3">
-                                    <label class="form-label fw-semibold">Niveau de fréquence</label>
-                                    <div class="d-flex flex-column gap-2">
-                                        <label
-                                            v-for="lvl in frequencyLevels"
-                                            :key="lvl.id"
-                                            class="d-flex align-items-center gap-2 p-2 rounded-2"
-                                            :style="form.frequency_level_id === lvl.id
-                        ? `background:${lvl.color}20;border:1px solid ${lvl.color}60;cursor:pointer`
-                        : 'border:1px solid var(--bs-border-color);cursor:pointer'"
-                                        >
-                                            <input type="radio" v-model="form.frequency_level_id" :value="lvl.id" class="form-check-input mt-0" @change="computeCriticality" />
-                                            <span class="badge rounded-pill" :style="`background:${lvl.color};color:#fff`">{{ lvl.score }}</span>
-                                            <span class="small fw-semibold">{{ lvl.label }}</span>
-                                        </label>
-                                    </div>
-                                </div>
-
-                                <!-- Résultat criticité preview -->
-                                <div
-                                    v-if="critPreview"
-                                    class="rounded-3 p-3 text-center mb-3"
-                                    :style="`background:${critPreview.color}15;border:2px solid ${critPreview.color}40`"
-                                >
-                                    <div class="small text-muted mb-1">Criticité estimée</div>
-                                    <div class="fw-bold fs-5" :style="`color:${critPreview.color}`">Score {{ critPreview.score }}</div>
-                                    <div class="small text-muted">Le calcul définitif est fait côté serveur</div>
-                                </div>
-                                <div v-else class="text-center text-muted small py-2 mb-3">
-                                    Sélectionnez impact + fréquence
-                                </div>
-
-                                <hr class="my-3" />
 
                                 <!-- Owner -->
                                 <div class="mb-3">
@@ -211,8 +198,41 @@
                                     </select>
                                 </div>
 
+                                <!-- Risque réalisé -->
+                                <div class="mb-3">
+                                    <div class="form-check form-switch">
+                                        <input
+                                            id="risque_realise"
+                                            v-model="form.risque_realise"
+                                            class="form-check-input"
+                                            type="checkbox"
+                                            role="switch"
+                                        />
+                                        <label class="form-check-label fw-semibold" for="risque_realise">
+                                            Risque réalisé
+                                        </label>
+                                    </div>
+                                    <small class="text-muted">Cocher si le risque s'est effectivement matérialisé.</small>
+                                </div>
+
+                                <!-- Coût du risque -->
+                                <div class="mb-3">
+                                    <label class="form-label fw-semibold">Coût du risque</label>
+                                    <div class="input-group">
+                                        <input
+                                            v-model="form.cout_risque"
+                                            type="number"
+                                            step="0.01"
+                                            min="0"
+                                            class="form-control"
+                                            placeholder="0.00"
+                                        />
+                                        <span class="input-group-text text-muted">€</span>
+                                    </div>
+                                </div>
+
                                 <!-- Lien incident -->
-                                <div v-if="form.incident_id" class="alert alert-info border-0 py-2 small mb-0">
+                                <div v-if="form.incident_id" class="alert alert-info border-0 py-2 small mt-2 mb-0">
                                     <i class="ti ti-link me-1"></i>
                                     Lié à l'incident {{ fromIncident?.code_origine }}
                                 </div>
@@ -220,6 +240,7 @@
                             </div>
                         </div>
                     </div>
+
                 </div>
 
                 <!-- Boutons soumission -->
@@ -242,35 +263,40 @@ import { router, Link } from '@inertiajs/vue3'
 import VerticalLayout from '@/layoutsparam/VerticalLayout.vue'
 import ActivityTreePicker from './activitytreepicker.vue'
 import MistralRiskSuggester from './mistralrisksuggester.vue'
+import LibraryImportPicker from './LibraryImportPicker.vue'
 
 // ── Props ──────────────────────────────────────────────────────────────────
 const props = defineProps({
-    risk:             { type: Object, default: null },
-    entities:         { type: Array,  default: () => [] },
-    nomenclatures:    { type: Array,  default: () => [] },
-    impactLevels:     { type: Array,  default: () => [] },
-    frequencyLevels:  { type: Array,  default: () => [] },
-    fromIncident:     { type: Object, default: null },
+    risk:          { type: Object, default: null },
+    entities:      { type: Array,  default: () => [] },
+    nomenclatures: { type: Array,  default: () => [] },
+    fromIncident:  { type: Object, default: null },
 })
 
 const isEdit = computed(() => !!props.risk)
 
 // ── Formulaire ─────────────────────────────────────────────────────────────
 const form = ref({
-    libelle:              props.risk?.libelle             ?? props.fromIncident?.libelle             ?? '',
-    description:          props.risk?.description         ?? props.fromIncident?.description         ?? '',
-    entity_id:            props.risk?.entity_id           ?? '',
-    activity_id:          props.risk?.activity_id         ?? '',
-    nomenclature_id:      props.risk?.nomenclature_id     ?? '',
-    causes:               props.risk?.causes              ?? '',
-    consequences:         props.risk?.consequences        ?? '',
-    controles_existants:  props.risk?.controles_existants ?? '',
-    owner:                props.risk?.owner               ?? '',
-    plan_traitement:      props.risk?.plan_traitement     ?? '',
-    impact_level_id:      props.risk?.impact_level_id     ?? null,
-    frequency_level_id:   props.risk?.frequency_level_id  ?? null,
-    statut:               props.risk?.statut              ?? 'draft',
-    incident_id:          props.risk?.incident_id         ?? props.fromIncident?.incident_id ?? null,
+    libelle:                       props.risk?.libelle                       ?? props.fromIncident?.libelle      ?? '',
+    description:                   props.risk?.description                   ?? props.fromIncident?.description  ?? '',
+    entity_id:                     props.risk?.entity_id                     ?? '',
+    activity_id:                   props.risk?.activity_id                   ?? '',
+    nomenclature_id:               props.risk?.nomenclature_id               ?? '',
+    causes:                        props.risk?.causes                        ?? '',
+    consequences:                  props.risk?.consequences                  ?? '',
+    consequences_autres_processus: props.risk?.consequences_autres_processus ?? '',
+    cout_consequences:             props.risk?.cout_consequences             ?? '',
+    controles_existants:           props.risk?.controles_existants           ?? '',
+    owner:                         props.risk?.owner                         ?? '',
+    entite_partenaire_impliquee:   props.risk?.entite_partenaire_impliquee   ?? '',
+    outils_utilises:              props.risk?.outils_utilises              ?? '',
+    vraisemblance_apparition:      props.risk?.vraisemblance_apparition      ?? '',
+    plan_traitement:               props.risk?.plan_traitement               ?? '',
+    critere_risque:                props.risk?.critere_risque                ?? '',
+    statut:                        props.risk?.statut                        ?? 'draft',
+    risque_realise:                props.risk?.risque_realise                ?? false,
+    cout_risque:                   props.risk?.cout_risque                   ?? null,
+    incident_id:                   props.risk?.incident_id                   ?? props.fromIncident?.incident_id ?? null,
 })
 
 const errors     = ref({})
@@ -316,28 +342,10 @@ const nomenCtx = ref({ domaine: '', famille: '', type: '' })
 function onNomenclatureChange() {
     const n = props.nomenclatures.find(n => n.id === form.value.nomenclature_id)
     if (!n) { nomenCtx.value = { domaine: '', famille: '', type: '' }; return }
-    // Adapter selon la structure réelle de risk_nomenclatures
     nomenCtx.value = {
         domaine: n.level === 1 ? n.label : '',
         famille: n.level === 2 ? n.label : '',
         type:    n.level === 3 ? n.label : n.label,
-    }
-}
-
-// ── Criticité preview (côté client uniquement) ────────────────────────────
-const critPreview = ref(null)
-
-function computeCriticality() {
-    if (!form.value.impact_level_id || !form.value.frequency_level_id) {
-        critPreview.value = null
-        return
-    }
-    const impact = props.impactLevels.find(l => l.id === form.value.impact_level_id)
-    const freq   = props.frequencyLevels.find(l => l.id === form.value.frequency_level_id)
-    if (!impact || !freq) return
-    critPreview.value = {
-        score: parseFloat(impact.score) * parseFloat(freq.score),
-        color: impact.color,   // color_code renvoyé par le controller sous la clé 'color'
     }
 }
 
@@ -348,6 +356,38 @@ function applyMistral(suggestion) {
     form.value.consequences        = suggestion.consequences
     form.value.controles_existants = suggestion.controles_existants
     form.value.plan_traitement     = suggestion.plan_traitement
+    nextTick(() => {
+        document.getElementById('field-libelle')?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    })
+}
+
+// ── Application import depuis bibliothèque ────────────────────────────────
+function applyLibraryImport(item) {
+    form.value.libelle                       = item.libelle                       ?? form.value.libelle
+    form.value.description                   = item.description                   ?? form.value.description
+    form.value.causes                        = item.causes                        ?? form.value.causes
+    form.value.consequences                  = item.consequences                  ?? form.value.consequences
+    form.value.consequences_autres_processus = item.consequences_autres_processus ?? form.value.consequences_autres_processus
+    form.value.cout_consequences             = item.cout_consequences             ?? form.value.cout_consequences
+    form.value.controles_existants           = item.controles_existants           ?? form.value.controles_existants
+    form.value.plan_traitement               = item.plan_traitement               ?? form.value.plan_traitement
+    form.value.critere_risque                = item.critere_risque                ?? form.value.critere_risque
+    form.value.entite_partenaire_impliquee   = item.entite_partenaire_impliquee   ?? form.value.entite_partenaire_impliquee
+    form.value.outils_utilises              = item.outils_utilises              ?? form.value.outils_utilises
+    form.value.vraisemblance_apparition      = item.vraisemblance_apparition      ?? form.value.vraisemblance_apparition
+    form.value.owner                         = item.owner                         ?? form.value.owner
+
+    // Nomenclature — uniquement si non déjà sélectionnée
+    if (!form.value.nomenclature_id && item.nomenclature_id) {
+        form.value.nomenclature_id = item.nomenclature_id
+        nextTick(() => onNomenclatureChange())
+    }
+
+    // Coût — uniquement pour les incidents (montant évalué)
+    if (item._type === 'incident' && item.cout_risque) {
+        form.value.cout_risque = item.cout_risque
+    }
+
     nextTick(() => {
         document.getElementById('field-libelle')?.scrollIntoView({ behavior: 'smooth', block: 'center' })
     })
@@ -369,9 +409,6 @@ function submitForm() {
 
 // ── Init ───────────────────────────────────────────────────────────────────
 onMounted(() => {
-    if (form.value.impact_level_id && form.value.frequency_level_id) {
-        computeCriticality()
-    }
     if (form.value.nomenclature_id) {
         onNomenclatureChange()
     }

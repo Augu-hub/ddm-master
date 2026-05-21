@@ -10,8 +10,10 @@ use App\Http\Controllers\MistralImpactController;
 use App\Http\Controllers\MistralImpactCriteriaController;
 use App\Http\Controllers\Risk\MistralNomenclatureController;
 use App\Http\Controllers\Risk\NomenclatureController;
+use App\Http\Controllers\RiskEvaluationController;
 use App\Http\Controllers\RiskIncidentController;
 use App\Http\Controllers\RiskIncidentLibraryController;
+use App\Http\Controllers\RiskLibraryController;
 use App\Http\Controllers\RiskMatrixConfigController;
 use App\Http\Controllers\RiskMatrixController;
 use App\Http\Controllers\RiskRegisterController;
@@ -64,16 +66,33 @@ Route::prefix('incident-library')->name('incident-library.')->group(function () 
 
 // ── REGISTRE DES RISQUES ──────────────────────────────────────────────────
 Route::prefix('risks')->name('risks.')->group(function () {
-    Route::post('/mistral/suggest',       [MistralRiskController::class,  'suggest'])   ->name('mistral.suggest');
-    Route::get('/entity/{entityId}/tree', [RiskRegisterController::class, 'entityTree'])->name('entity-tree')->whereNumber('entityId');
-    Route::get('/',                       [RiskRegisterController::class, 'index'])     ->name('index');
+    Route::post('/mistral/suggest',       [MistralRiskController::class,  'suggest'])      ->name('mistral.suggest');
+    Route::get('/entity/{entityId}/tree', [RiskRegisterController::class, 'entityTree'])   ->name('entity-tree')   ->whereNumber('entityId');
+    Route::get('/library-items',          [RiskRegisterController::class, 'libraryItems']) ->name('library-items');
+    Route::get('/',                       [RiskRegisterController::class, 'index'])        ->name('index');
     Route::get('/create',                 [RiskRegisterController::class, 'create'])    ->name('create');
     Route::post('/',                      [RiskRegisterController::class, 'store'])     ->name('store');
     Route::get('/{id}/edit',              [RiskRegisterController::class, 'edit'])      ->name('edit')    ->whereNumber('id');
     Route::put('/{id}',                   [RiskRegisterController::class, 'update'])    ->name('update')  ->whereNumber('id');
     Route::delete('/{id}',               [RiskRegisterController::class, 'destroy'])   ->name('destroy') ->whereNumber('id');
-    Route::post('/{id}/archive',          [RiskRegisterController::class, 'archive'])   ->name('archive') ->whereNumber('id');
-    Route::post('/{id}/activate',         [RiskRegisterController::class, 'activate'])  ->name('activate')->whereNumber('id');
+    Route::post('/{id}/archive',          [RiskRegisterController::class, 'archive'])         ->name('archive')          ->whereNumber('id');
+    Route::post('/{id}/activate',         [RiskRegisterController::class, 'activate'])        ->name('activate')         ->whereNumber('id');
+    Route::post('/{id}/move-to-library',  [RiskRegisterController::class, 'moveToLibrary'])   ->name('move-to-library')  ->whereNumber('id');
+    Route::post('/{id}/remove-from-library', [RiskRegisterController::class, 'removeFromLibrary'])->name('remove-from-library')->whereNumber('id');
+});
+
+// ── ÉVALUATION DES RISQUES ────────────────────────────────────────────────
+Route::prefix('evaluation')->name('evaluation.')->group(function () {
+    Route::get('/inherente',  [RiskEvaluationController::class, 'inherente']) ->name('inherente');
+    Route::get('/residuelle', [RiskEvaluationController::class, 'residuelle'])->name('residuelle');
+    Route::get('/cible',      [RiskEvaluationController::class, 'cible'])     ->name('cible');
+    Route::post('/{id}/save', [RiskEvaluationController::class, 'save'])      ->name('save')->whereNumber('id');
+});
+
+// ── BIBLIOTHÈQUE DES RISQUES ──────────────────────────────────────────────
+Route::prefix('risk-library')->name('risk-library.')->group(function () {
+    Route::get('/',                          [RiskLibraryController::class, 'index'])            ->name('index');
+    Route::post('/{id}/remove-from-library', [RiskLibraryController::class, 'removeFromLibrary'])->name('remove-from-library')->whereNumber('id');
 });
 
 // ── CONFIGURATION MATRICE ─────────────────────────────────────────────────

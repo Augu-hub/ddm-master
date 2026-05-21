@@ -10,7 +10,14 @@
                     </h4>
                     <small class="text-muted">Identification, évaluation et suivi des risques</small>
                 </div>
-                <Link :href="route('risk.core.risks.create')" class="btn btn-primary btn-sm"> <i class="ti ti-plus me-1"></i>Nouveau risque </Link>
+                <div class="d-flex gap-2">
+                    <Link :href="route('risk.core.risk-library.index')" class="btn btn-outline-secondary btn-sm">
+                        <i class="ti ti-books me-1"></i>Bibliothèque
+                    </Link>
+                    <Link :href="route('risk.core.risks.create')" class="btn btn-primary btn-sm">
+                        <i class="ti ti-plus me-1"></i>Nouveau risque
+                    </Link>
+                </div>
             </div>
 
             <!-- Stats -->
@@ -129,7 +136,7 @@
                             </template>
                         </Column>
 
-                        <Column header="Actions" style="min-width: 150px" :exportable="false">
+                        <Column header="Actions" style="min-width: 180px" :exportable="false">
                             <template #body="{ data }">
                                 <div class="d-flex gap-1" @click.stop>
                                     <Link :href="route('risk.core.risks.edit', data.id)" class="btn btn-outline-primary btn-sm" title="Modifier">
@@ -150,6 +157,14 @@
                                         @click="confirmArchive(data)"
                                     >
                                         <i class="ti ti-archive"></i>
+                                    </button>
+                                    <button
+                                        class="btn btn-sm"
+                                        :class="data.moved_to_library_at ? 'btn-warning' : 'btn-outline-info'"
+                                        :title="data.moved_to_library_at ? 'Retirer de la bibliothèque' : 'Transférer en bibliothèque'"
+                                        @click="data.moved_to_library_at ? confirmRemoveLibrary(data) : confirmMoveToLibrary(data)"
+                                    >
+                                        <i :class="data.moved_to_library_at ? 'ti ti-book-off' : 'ti ti-books'"></i>
                                     </button>
                                     <button class="btn btn-outline-danger btn-sm" title="Supprimer" @click="confirmDelete(data)">
                                         <i class="ti ti-trash"></i>
@@ -240,6 +255,33 @@
                 </button>
             </div>
         </BModal>
+
+        <BModal v-model="showMoveLibraryModal" title="Transférer en bibliothèque" size="sm" hide-footer>
+            <p class="mb-3">
+                Transférer <strong>{{ targetRisk?.code_risk }}</strong> dans la bibliothèque des risques ?
+            </p>
+            <div class="d-flex justify-content-end gap-2">
+                <button class="btn btn-outline-secondary btn-sm" @click="showMoveLibraryModal = false">Annuler</button>
+                <button class="btn btn-info btn-sm text-white" :disabled="submitting" @click="doMoveToLibrary">
+                    <span v-if="submitting" class="spinner-border spinner-border-sm me-1"></span>
+                    <i v-else class="ti ti-books me-1"></i>Transférer
+                </button>
+            </div>
+        </BModal>
+
+        <BModal v-model="showRemoveLibraryModal" title="Retirer de la bibliothèque" size="sm" hide-footer>
+            <p class="mb-3">
+                Retirer <strong>{{ targetRisk?.code_risk }}</strong> de la bibliothèque ?<br>
+                <small class="text-muted">Le risque restera visible dans le registre.</small>
+            </p>
+            <div class="d-flex justify-content-end gap-2">
+                <button class="btn btn-outline-secondary btn-sm" @click="showRemoveLibraryModal = false">Annuler</button>
+                <button class="btn btn-warning btn-sm" :disabled="submitting" @click="doRemoveFromLibrary">
+                    <span v-if="submitting" class="spinner-border spinner-border-sm me-1"></span>
+                    <i v-else class="ti ti-book-off me-1"></i>Retirer
+                </button>
+            </div>
+        </BModal>
     </VerticalLayout>
 </template>
 
@@ -287,6 +329,8 @@ const showDetail = ref(false);
 const detailRisk = ref(null);
 const showArchiveModal = ref(false);
 const showDeleteModal = ref(false);
+const showMoveLibraryModal = ref(false);
+const showRemoveLibraryModal = ref(false);
 const submitting = ref(false);
 const targetRisk = ref(null);
 
@@ -334,6 +378,34 @@ function doDelete() {
         onFinish: () => {
             submitting.value = false;
         },
+    });
+}
+
+function confirmMoveToLibrary(risk) {
+    targetRisk.value = risk;
+    showMoveLibraryModal.value = true;
+}
+
+function confirmRemoveLibrary(risk) {
+    targetRisk.value = risk;
+    showRemoveLibraryModal.value = true;
+}
+
+function doMoveToLibrary() {
+    submitting.value = true;
+    router.post(route('risk.core.risks.move-to-library', targetRisk.value.id), {}, {
+        preserveScroll: true,
+        onSuccess: () => { showMoveLibraryModal.value = false; },
+        onFinish:  () => { submitting.value = false; },
+    });
+}
+
+function doRemoveFromLibrary() {
+    submitting.value = true;
+    router.post(route('risk.core.risks.remove-from-library', targetRisk.value.id), {}, {
+        preserveScroll: true,
+        onSuccess: () => { showRemoveLibraryModal.value = false; },
+        onFinish:  () => { submitting.value = false; },
     });
 }
 </script>
