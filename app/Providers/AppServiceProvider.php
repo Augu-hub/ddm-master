@@ -4,8 +4,9 @@ namespace App\Providers;
 
 use App\Support\TenantManager;
 use Illuminate\Support\ServiceProvider;
+use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
-use App\Models\Param\Entite;
+
 class AppServiceProvider extends ServiceProvider
 {
     public function register(): void
@@ -16,20 +17,41 @@ class AppServiceProvider extends ServiceProvider
         });
     }
 
-  public function boot()
+    public function boot(): void
     {
-        // ⛔️ SUPPRIMEZ ou COMENTEZ ce code s'il existe
-        /*
-        Inertia::share([
-            'entities' => function () {
-                // ANCIEN CODE - À SUPPRIMER
-            },
-        ]);
-        */
+        // Extension du disque tenant_uploads
+        Storage::extend('tenant_uploads', function ($app, $config) {
+            // Récupération de l'ID du tenant (à adapter selon votre implémentation)
+            $tenantId = null;
+            
+            // Méthode 1: si vous avez une classe Tenant avec une méthode current()
+            if (function_exists('tenant') && method_exists(tenant(), 'id')) {
+                $tenantId = tenant()->id;
+            }
+            // Méthode 2: via le TenantManager (si vous l'avez)
+            elseif (app()->bound(TenantManager::class)) {
+                $tenantId = app(TenantManager::class)->getTenantId();
+            }
+            // Méthode 3: via la session
+            else {
+                $tenantId = session('tenant_id', 'global');
+            }
+            
+            $root = storage_path("app/tenant_uploads/{$tenantId}");
+            if (!is_dir($root)) {
+                mkdir($root, 0755, true);
+            }
+            
+            return new \Illuminate\Filesystem\FilesystemAdapter(
+                new \Illuminate\Filesystem\Filesystem(),
+                $root,
+                $config
+            );
+        });
         
-        // ✅ OU remplacez-le par ceci :
+        // Partage Inertia (si nécessaire)
         Inertia::share([
-          
+            // vos variables partagées
         ]);
     }
 }

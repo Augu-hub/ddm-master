@@ -41,7 +41,8 @@ return [
         'api_key' => env('HUGGINGFACE_API_KEY'),
     ],
     'mistral' => [
-    'api_key' => env('MISTRAL_API_KEY'),
+    'key'     => env('MISTRAL_API_KEY'),   // ← ajoute cette ligne
+    'api_key' => env('MISTRAL_API_KEY'),   // ← garde l'ancienne si d'autres contrôleurs l'utilisent
 ],
 
 ];

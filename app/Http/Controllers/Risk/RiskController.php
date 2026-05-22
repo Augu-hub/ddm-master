@@ -9,695 +9,609 @@ use App\Models\Audit\AuditFrequencyLevel;
 use App\Models\Audit\AuditImpactLevel;
 use App\Models\Audit\AuditMatrix;
 use App\Models\Audit\AuditSession;
-use App\Models\Audit\AuditExercise;
+use App\Services\RiskAISuggestionService;
 use Inertia\Inertia;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 /**
- * ════════════════════════════════════════════════════════════════════════════════════
- * 🎯 RISK CONTROLLER FINAL V8 - AVEC DONNÉES AUDIT CHARGÉES
- * ════════════════════════════════════════════════════════════════════════════════════
- * 
- * ✅ Utilise audit_frequency_levels, audit_impact_levels, audit_matrix
- * ✅ Données HEX colors pré-chargées depuis migration
- * ✅ Une seule session ACTIVE à la fois
- * ✅ Criticité = frequency_level * impact_level
- * ✅ Entités/Processus/Activités chargées
- * ✅ AI suggestions et control procedure generation
- * ✅ Multi-tenant support
+ * ════════════════════════════════════════════════════════════════════════════════
+ * RISK CONTROLLER V13
+ * ════════════════════════════════════════════════════════════════════════════════
+ * ✅ Pas de filtre tenant_id — toutes les données sont accessibles
+ * ✅ Codification hiérarchique : MP_CODE.PR_CODE.AC_CODE-NNN
+ * ✅ Suggestions IA via Mistral (sans code)
+ * ════════════════════════════════════════════════════════════════════════════════
  */
 class RiskController extends Controller
 {
+    public function __construct(
+        private RiskAISuggestionService $aiService
+    ) {}
+
     private function t()
     {
         return DB::connection('tenant');
     }
 
-    /**
-     * GET /dashboard/audit/risk - Dashboard principal
-     * 🎯 Affiche la session active + risques + statistiques
-     */
+    private array $_frequencies = [];
+    private array $_impacts     = [];
+    private array $_matrix      = [];
+
+    private function loadLevels(): void
+    {
+        if (empty($this->_frequencies)) {
+            $this->_frequencies = AuditFrequencyLevel::orderBy('level')->get()->keyBy('id')->toArray();
+        }
+        if (empty($this->_impacts)) {
+            $this->_impacts = AuditImpactLevel::orderBy('level')->get()->keyBy('id')->toArray();
+        }
+        if (empty($this->_matrix)) {
+            $this->_matrix = AuditMatrix::all()
+                ->keyBy(fn($m) => "{$m->impact_level}_{$m->frequency_level}")
+                ->toArray();
+        }
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════
+    // GET — Dashboard principal
+    // ══════════════════════════════════════════════════════════════════════════
     public function index(Request $request)
     {
         try {
-            $tenantId = auth()->user()->tenant_id ?? 1;
+            $activeSession = AuditSession::where('status', 'active')->first();
 
-            // ✅ RÉCUPÉRER LA SESSION ACTIVE (UNE SEULE)
-            $activeSession = AuditSession::where('tenant_id', $tenantId)
-                ->where('status', 'active')
-                ->first();
+            $frequencies = AuditFrequencyLevel::orderBy('level')->get()
+                ->map(fn($f) => ['id'=>$f->id,'code'=>$f->code,'label'=>$f->label,'level'=>$f->level,'color'=>$f->color,'description'=>$f->description])
+                ->toArray();
 
-            // ✅ CHARGER LES DONNÉES - AUDIT TABLES AVEC COULEURS HEX
-            $riskTypes = RiskType::where('tenant_id', $tenantId)
-                ->where('is_active', true)
-                ->orderBy('sort_order')
-                ->get();
-            
-            // ✅ AUDIT_FREQUENCY_LEVELS (avec couleurs HEX)
-            $frequencies = AuditFrequencyLevel::where('tenant_id', $tenantId)
-                ->orderBy('level')
-                ->get()
-                ->map(fn($f) => [
-                    'id' => $f->id,
-                    'code' => $f->code,
-                    'label' => $f->label,
-                    'level' => $f->level,
-                    'color' => $f->color, // ✅ HEX color #RRGGBB
-                    'description' => $f->description,
-                ]);
-            
-            // ✅ AUDIT_IMPACT_LEVELS (avec couleurs HEX)
-            $impacts = AuditImpactLevel::where('tenant_id', $tenantId)
-                ->orderBy('level')
-                ->get()
-                ->map(fn($i) => [
-                    'id' => $i->id,
-                    'code' => $i->code,
-                    'label' => $i->label,
-                    'level' => $i->level,
-                    'color' => $i->color, // ✅ HEX color #RRGGBB
-                    'description' => $i->description,
+            $impacts = AuditImpactLevel::orderBy('level')->get()
+                ->map(fn($i) => ['id'=>$i->id,'code'=>$i->code,'label'=>$i->label,'level'=>$i->level,'color'=>$i->color,'description'=>$i->description])
+                ->toArray();
+
+            $riskTypes = RiskType::where('is_active', true)->orderBy('sort_order')->get()
+                ->map(fn($t) => ['id'=>$t->id,'code'=>$t->code,'label'=>$t->label,'color'=>$t->color??'#6c757d'])
+                ->toArray();
+
+            $matrix = AuditMatrix::orderBy('impact_level')->orderBy('frequency_level')->get()
+                ->map(fn($m) => ['id'=>$m->id,'impact_level'=>$m->impact_level,'frequency_level'=>$m->frequency_level,
+                    'criticality_score'=>$m->criticality_score,'label'=>$m->label,'qualification'=>$m->qualification,'color'=>$m->color])
+                ->toArray();
+
+            $entities        = $this->loadTenantTable('entities',   fn($q) => $q->orderBy('name'));
+            $processes       = $this->loadTenantTable('processes',  fn($q) => $q->orderBy('code'));
+            $activities      = $this->loadTenantTable('activities', fn($q) => $q->orderBy('code'));
+            $macroProcesses  = $this->loadMacroProcesses();
+            $entityFunctions = $this->loadEntityFunctions();
+
+            $allSessions = AuditSession::orderBy('created_at', 'desc')->get()
+                ->map(fn($s) => [
+                    'id'            => $s->id,
+                    'code'          => $s->code,
+                    'name'          => $s->name,
+                    'status'        => $s->status,
+                    'is_active'     => $s->status === 'active',
+                    'exercise_name' => optional($s->exercise)->name ?? 'N/A',
+                    'entity_name'   => optional($s->entity)->name  ?? 'N/A',
+                    'risks_count'   => Risk::where('audit_session_id', $s->id)->count(),
                 ]);
 
-            // ✅ AUDIT_MATRIX (avec couleurs HEX)
-            $matrix = AuditMatrix::where('tenant_id', $tenantId)
-                ->orderBy('impact_level')
-                ->orderBy('frequency_level')
-                ->get()
-                ->map(fn($m) => [
-                    'id' => $m->id,
-                    'impact_level' => $m->impact_level,
-                    'frequency_level' => $m->frequency_level,
-                    'criticality_score' => $m->criticality_score,
-                    'label' => $m->label,
-                    'qualification' => $m->qualification,
-                    'color' => $m->color, // ✅ HEX color #RRGGBB
-                ]);
+            $this->loadLevels();
 
-            // ✅ CHARGER ENTITÉS
-            $entities = [];
-            try {
-                $entities = $this->t()->table('entities')
-                    ->where('level', '<=', 1)
-                    ->orderBy('name')
-                    ->get()
-                    ->map(fn($e) => (array) $e)
-                    ->toArray();
-            } catch (\Exception $e) {
-                Log::warning('⚠️ Erreur chargement entités: ' . $e->getMessage());
-            }
-
-            // ✅ CHARGER PROCESSUS
-            $processes = [];
-            try {
-                $processes = $this->t()->table('processes')
-                    ->orderBy('code')
-                    ->get()
-                    ->map(fn($p) => (array) $p)
-                    ->toArray();
-            } catch (\Exception $e) {
-                Log::warning('⚠️ Erreur chargement processus: ' . $e->getMessage());
-            }
-
-            // ✅ CHARGER ACTIVITÉS
-            $activities = [];
-            try {
-                $activities = $this->t()->table('activities')
-                    ->orderBy('code')
-                    ->get()
-                    ->map(fn($a) => (array) $a)
-                    ->toArray();
-            } catch (\Exception $e) {
-                Log::warning('⚠️ Erreur chargement activités: ' . $e->getMessage());
-            }
-
-            Log::info('📊 Données chargées', [
-                'frequencies_count' => $frequencies->count(),
-                'impacts_count' => $impacts->count(),
-                'matrix_count' => $matrix->count(),
-                'entities_count' => count($entities),
-                'processes_count' => count($processes),
-                'activities_count' => count($activities),
-            ]);
-
-            // ✅ LISTER TOUTES LES SESSIONS (POUR MODAL SWITCH)
-            $allSessions = AuditSession::where('tenant_id', $tenantId)
-                ->with(['exercise', 'entity'])
-                ->orderBy('created_at', 'desc')
-                ->get()
-                ->map(function ($session) {
-                    $risksCount = Risk::where('audit_session_id', $session->id)->count();
-                    
-                    // ✅ COMPTER RISQUES CRITIQUES = frequency * impact >= 12
-                    $criticalCount = Risk::where('audit_session_id', $session->id)
-                        ->whereRaw('(frequency_level_id * impact_level_id) >= 12')
-                        ->count();
-
-                    return [
-                        'id' => $session->id,
-                        'code' => $session->code,
-                        'name' => $session->name,
-                        'status' => $session->status,
-                        'is_active' => $session->status === 'active',
-                        'exercise_name' => $session->exercise?->name ?? 'N/A',
-                        'entity_name' => $session->entity?->name ?? 'N/A',
-                        'start_date' => $session->start_date?->format('Y-m-d'),
-                        'end_date' => $session->end_date?->format('Y-m-d'),
-                        'risks_count' => $risksCount,
-                        'critical_count' => $criticalCount,
-                    ];
+            $risksQuery = Risk::whereNull('deleted_at');
+            if ($activeSession) {
+                $risksQuery->where(function ($q) use ($activeSession) {
+                    $q->where('audit_session_id', $activeSession->id)
+                      ->orWhereNull('audit_session_id');
                 });
-
-            // ✅ SI PAS DE SESSION ACTIVE
-            if (!$activeSession) {
-                return Inertia::render('dashboards/Audit/index', [
-                    'error' => '⚠️ Aucune session active',
-                    'activeSession' => null,
-                    'allSessions' => $allSessions,
-                    'entities' => $entities,
-                    'processes' => $processes,
-                    'activities' => $activities,
-                    'riskTypes' => $riskTypes,
-                    'frequencies' => $frequencies,
-                    'impacts' => $impacts,
-                    'matrix' => $matrix,
-                    'initialRisks' => [],
-                    'statistics' => $this->getEmptyStatistics(),
-                ]);
             }
 
-            // ✅ CHARGER RISQUES DE LA SESSION ACTIVE SEULEMENT
-            $risks = Risk::where('tenant_id', $tenantId)
-                ->where('audit_session_id', $activeSession->id)
-                ->with(['riskType'])
-                ->orderBy('code')
-                ->get()
+            $risks = $risksQuery->orderBy('code')->get()
                 ->map(fn($r) => $this->formatRisk($r));
 
-            // ✅ CALCULER STATISTIQUES
-            $statistics = $this->computeStatistics($risks);
-
-            Log::info('✅ Risk dashboard loaded', [
-                'session_id' => $activeSession->id,
-                'session_code' => $activeSession->code,
-                'risks_count' => $risks->count(),
-                'tenant_id' => $tenantId,
-            ]);
-
             return Inertia::render('dashboards/Audit/index', [
-                'activeSession' => [
-                    'id' => $activeSession->id,
-                    'code' => $activeSession->code,
-                    'name' => $activeSession->name,
-                    'status' => $activeSession->status,
-                    'exercise_name' => $activeSession->exercise?->name ?? 'N/A',
-                    'entity_name' => $activeSession->entity?->name ?? 'N/A',
-                ],
-                'allSessions' => $allSessions,
-                'entities' => $entities,
-                'processes' => $processes,
-                'activities' => $activities,
-                'riskTypes' => $riskTypes,
-                'frequencies' => $frequencies,
-                'impacts' => $impacts,
-                'matrix' => $matrix,
-                'initialRisks' => $risks->toArray(),
-                'statistics' => $statistics,
+                'allSessions'     => $allSessions,
+                'entities'        => $entities,
+                'macroProcesses'  => $macroProcesses,
+                'processes'       => $processes,
+                'activities'      => $activities,
+                'riskTypes'       => $riskTypes,
+                'frequencies'     => $frequencies,
+                'impacts'         => $impacts,
+                'matrix'          => $matrix,
+                'entityFunctions' => $entityFunctions,
+                'activeSession'   => $activeSession ? [
+                    'id'            => $activeSession->id,
+                    'code'          => $activeSession->code,
+                    'name'          => $activeSession->name,
+                    'status'        => $activeSession->status,
+                    'exercise_name' => optional($activeSession->exercise)->name ?? 'N/A',
+                    'entity_name'   => optional($activeSession->entity)->name   ?? 'N/A',
+                ] : null,
+                'initialRisks' => $risks->values()->toArray(),
+                'statistics'   => $this->computeStatistics($risks),
             ]);
 
         } catch (\Exception $e) {
-            Log::error('❌ Dashboard error: ' . $e->getMessage());
-            return back()->with('error', 'Erreur: ' . $e->getMessage());
+            Log::error('[Risk] index: ' . $e->getMessage() . "\n" . $e->getTraceAsString());
+            return back()->with('error', $e->getMessage());
         }
     }
 
-    /**
-     * POST /api/m/risk/switch-session
-     * 🔄 Change la session active
-     */
+    // ══════════════════════════════════════════════════════════════════════════
+    // POST switch-session
+    // ══════════════════════════════════════════════════════════════════════════
     public function switchSession(Request $request)
     {
         try {
-            $tenantId = auth()->user()->tenant_id ?? 1;
-            
-            $validated = $request->validate([
-                'session_id' => 'required|exists:audit_sessions,id',
-            ]);
+            $validated  = $request->validate(['session_id' => 'required|integer']);
+            $newSession = AuditSession::findOrFail($validated['session_id']);
 
-            // ✅ DÉSACTIVER AUTRES SESSIONS
-            AuditSession::where('tenant_id', $tenantId)
-                ->where('id', '!=', $validated['session_id'])
+            AuditSession::where('id', '!=', $newSession->id)
                 ->where('status', 'active')
                 ->update(['status' => 'paused', 'updated_at' => now()]);
 
-            // ✅ ACTIVER NOUVELLE SESSION
-            $newSession = AuditSession::where('tenant_id', $tenantId)
-                ->findOrFail($validated['session_id']);
             $newSession->update(['status' => 'active', 'updated_at' => now()]);
-
-            Log::info('✅ Session switched', [
-                'session_id' => $newSession->id,
-                'code' => $newSession->code,
-                'tenant_id' => $tenantId,
-            ]);
 
             return response()->json([
                 'success' => true,
-                'message' => "✅ Session '{$newSession->code}' activée",
-                'session' => [
-                    'id' => $newSession->id,
-                    'code' => $newSession->code,
-                    'name' => $newSession->name,
-                    'status' => 'active',
-                ]
+                'message' => "Session '{$newSession->code}' activée",
+                'session' => ['id' => $newSession->id, 'code' => $newSession->code, 'status' => 'active'],
             ]);
-
         } catch (\Exception $e) {
-            Log::error('❌ Switch session error: ' . $e->getMessage());
+            Log::error('[Risk] switchSession: ' . $e->getMessage());
             return response()->json(['success' => false, 'error' => $e->getMessage()], 500);
         }
     }
 
-    /**
-     * POST /api/m/risk/suggest-ai
-     * 🤖 Suggestions de libellés par type
-     */
+    // ══════════════════════════════════════════════════════════════════════════
+    // POST suggest-ai
+    // ══════════════════════════════════════════════════════════════════════════
     public function suggestAI(Request $request)
     {
         try {
-            $validated = $request->validate([
-                'process_name' => 'required|string|max:255',
-                'activity_name' => 'required|string|max:255',
+            $v = $request->validate([
+                'process_name'   => 'required|string|max:255',
+                'activity_name'  => 'required|string|max:255',
                 'risk_type_name' => 'required|string|max:255',
             ]);
-
-            $suggestions = $this->generateRiskSuggestions(
-                $validated['process_name'],
-                $validated['activity_name'],
-                $validated['risk_type_name']
+            $result = $this->aiService->generateMultipleSuggestions(
+                $v['process_name'], $v['activity_name'], $v['risk_type_name']
             );
-
             return response()->json([
-                'success' => true,
-                'suggestions' => $suggestions
+                'success'     => true,
+                'suggestions' => $result['suggestions'] ?? [],
+                'mode'        => $result['mode'] ?? 'fallback',
             ]);
-
         } catch (\Exception $e) {
-            Log::error('❌ IA suggestions error: ' . $e->getMessage());
             return response()->json(['success' => false, 'error' => $e->getMessage()], 500);
         }
     }
 
-    /**
-     * POST /api/m/risk/suggest-control
-     * 🛡️ Génère procédure de contrôle
-     */
+    // POST suggest-control
     public function suggestControl(Request $request)
     {
         try {
-            $validated = $request->validate([
-                'risk_label' => 'required|string|max:500',
+            $v = $request->validate([
+                'risk_label'    => 'required|string|max:500',
                 'activity_name' => 'required|string|max:255',
-                'process_name' => 'required|string|max:255',
+                'process_name'  => 'required|string|max:255',
             ]);
-
-            $controlProcedure = $this->generateControlProcedure(
-                $validated['risk_label'],
-                $validated['activity_name'],
-                $validated['process_name']
+            $result = $this->aiService->generateControlProcedure(
+                $v['risk_label'], $v['activity_name'], $v['process_name']
             );
-
             return response()->json([
-                'success' => true,
-                'control_procedure' => $controlProcedure
+                'success'           => true,
+                'control_procedure' => $result['control_procedure'] ?? '',
+                'mode'              => $result['mode'] ?? 'fallback',
             ]);
-
         } catch (\Exception $e) {
-            Log::error('❌ Control procedure error: ' . $e->getMessage());
             return response()->json(['success' => false, 'error' => $e->getMessage()], 500);
         }
     }
 
-    /**
-     * POST /api/m/risk
-     * 📝 Crée risque dans SESSION ACTIVE UNIQUEMENT
-     */
+    // ══════════════════════════════════════════════════════════════════════════
+    // POST / — Créer
+    // ══════════════════════════════════════════════════════════════════════════
     public function store(Request $request)
     {
         try {
-            $tenantId = auth()->user()->tenant_id ?? 1;
-            
-            $validated = $request->validate([
-                'code' => 'nullable|string|unique:risks,code',
-                'label' => 'required|string|max:500',
-                'description' => 'nullable|string|max:2000',
-                'risk_type_id' => 'required|integer|exists:risk_types,id',
-                'frequency_level_id' => 'required|integer|exists:audit_frequency_levels,id',
-                'frequency_net' => 'nullable|numeric|min:0|max:5',
-                'impact_level_id' => 'required|integer|exists:audit_impact_levels,id',
-                'impact_net' => 'nullable|numeric|min:0|max:5',
-                'entity_id' => 'nullable|integer',
-                'process_id' => 'nullable|integer',
-                'activity_id' => 'nullable|integer',
-                'owner' => 'nullable|string|max:255',
-                'control_procedure' => 'nullable|string|max:5000',
-                'status' => 'nullable|in:identified,assessed,mitigated,monitored,closed',
+            $v = $request->validate([
+                'label'              => 'required|string|max:500',
+                'description'        => 'nullable|string|max:2000',
+                'risk_type_id'       => 'required|integer',
+                'frequency_level_id' => 'required|integer',
+                'frequency_net'      => 'nullable|numeric|min:0|max:5',
+                'impact_level_id'    => 'required|integer',
+                'impact_net'         => 'nullable|numeric|min:0|max:5',
+                'entity_id'          => 'nullable|integer',
+                'process_id'         => 'nullable|integer',
+                'activity_id'        => 'nullable|integer',
+                'owner_function_id'  => 'nullable|integer',
+                'owner'              => 'nullable|string|max:255',
+                'control_procedure'  => 'nullable|string|max:5000',
+                'status'             => 'nullable|in:identified,assessed,mitigated,monitored,closed',
             ]);
 
-            // ✅ RÉCUPÉRER SESSION ACTIVE (OBLIGATOIRE)
-            $activeSession = AuditSession::where('tenant_id', $tenantId)
-                ->where('status', 'active')
-                ->first();
-            
-            if (!$activeSession) {
-                return response()->json([
-                    'success' => false,
-                    'error' => '❌ Aucune session active. Créez ou activez une session d\'audit.',
-                ], 422);
+            $activeSession = AuditSession::where('status', 'active')->first();
+            $freqLevel     = AuditFrequencyLevel::find($v['frequency_level_id']);
+            $impLevel      = AuditImpactLevel::find($v['impact_level_id']);
+
+            // Validation net ≤ brut
+            $errors = [];
+            if (!empty($v['frequency_net']) && $freqLevel && $v['frequency_net'] > $freqLevel->level)
+                $errors['frequency_net'] = ["Fréquence nette ≤ fréquence brute ({$freqLevel->level})"];
+            if (!empty($v['impact_net']) && $impLevel && $v['impact_net'] > $impLevel->level)
+                $errors['impact_net'] = ["Impact net ≤ impact brut ({$impLevel->level})"];
+            if (!empty($errors)) return response()->json(['success' => false, 'errors' => $errors], 422);
+
+            // Code hiérarchique
+            $code = $this->generateHierarchicalCode(
+                $v['process_id']  ?? null,
+                $v['activity_id'] ?? null,
+                $v['risk_type_id']
+            );
+
+            // Owner depuis fonction
+            $ownerName = $v['owner'] ?? null;
+            if (!empty($v['owner_function_id']) && empty($ownerName)) {
+                try {
+                    $func = $this->t()->table('functions')->where('id', $v['owner_function_id'])->first();
+                    if ($func) $ownerName = $func->character ? "{$func->name} ({$func->character})" : $func->name;
+                } catch (\Exception $e) {}
             }
 
-            // ✅ GÉNÉRER CODE SI ABSENT
-            if (empty($validated['code'])) {
-                $validated['code'] = $this->generateIntelligentCode($validated['risk_type_id']);
-            }
+            $data = [
+                'audit_session_id'   => $activeSession?->id,
+                'code'               => $code,
+                'label'              => $v['label'],
+                'description'        => $v['description']       ?? null,
+                'risk_type_id'       => $v['risk_type_id'],
+                'frequency_level_id' => $v['frequency_level_id'],
+                'frequency_net'      => $v['frequency_net']     ?? null,
+                'impact_level_id'    => $v['impact_level_id'],
+                'impact_net'         => $v['impact_net']        ?? null,
+                'criticality'        => ($freqLevel && $impLevel) ? $freqLevel->level * $impLevel->level : null,
+                'entity_id'          => $v['entity_id']         ?? null,
+                'process_id'         => $v['process_id']        ?? null,
+                'activity_id'        => $v['activity_id']       ?? null,
+                'owner'              => $ownerName,
+                'control_procedure'  => $v['control_procedure'] ?? null,
+                'status'             => $v['status']            ?? 'identified',
+                'year'               => now()->year,
+                'created_by'         => auth()->id(),
+            ];
 
-            // ✅ VÉRIFIER UNICITÉ CODE
-            if (Risk::where('code', $validated['code'])->exists()) {
-                return response()->json([
-                    'success' => false,
-                    'error' => "❌ Code '{$validated['code']}' existe déjà",
-                ], 422);
-            }
+            if ($this->hasColumn('risks', 'owner_function_id'))
+                $data['owner_function_id'] = $v['owner_function_id'] ?? null;
 
-            // ✅ CRÉER RISQUE DANS SESSION ACTIVE
-            $risk = Risk::create([
-                'tenant_id' => $tenantId,
-                'audit_session_id' => $activeSession->id, // ✅ SESSION ACTIVE
-                'code' => $validated['code'],
-                'label' => $validated['label'],
-                'description' => $validated['description'] ?? null,
-                'risk_type_id' => $validated['risk_type_id'],
-                'frequency_level_id' => $validated['frequency_level_id'],
-                'frequency_net' => $validated['frequency_net'] ?? null,
-                'impact_level_id' => $validated['impact_level_id'],
-                'impact_net' => $validated['impact_net'] ?? null,
-                'entity_id' => $validated['entity_id'] ?? null,
-                'process_id' => $validated['process_id'] ?? null,
-                'activity_id' => $validated['activity_id'] ?? null,
-                'owner' => $validated['owner'] ?? null,
-                'control_procedure' => $validated['control_procedure'] ?? null,
-                'status' => $validated['status'] ?? 'identified',
-                'year' => now()->year,
-                'created_by' => auth()->id(),
-            ]);
-
-            Log::info('✅ Risk created', [
-                'risk_id' => $risk->id,
-                'code' => $risk->code,
-                'session_id' => $activeSession->id,
-                'tenant_id' => $tenantId,
-            ]);
+            $this->loadLevels();
+            $risk = Risk::create($data);
 
             return response()->json([
                 'success' => true,
-                'message' => "✅ Risque '{$risk->code}' créé dans {$activeSession->code}",
-                'risk' => $this->formatRisk($risk),
+                'message' => "Risque '{$risk->code}' créé",
+                'risk'    => $this->formatRisk($risk),
             ], 201);
 
         } catch (\Illuminate\Validation\ValidationException $e) {
             return response()->json(['success' => false, 'errors' => $e->errors()], 422);
         } catch (\Exception $e) {
-            Log::error('❌ Risk store error: ' . $e->getMessage());
+            Log::error('[Risk] store: ' . $e->getMessage());
             return response()->json(['success' => false, 'error' => $e->getMessage()], 500);
         }
     }
 
-    /**
-     * PUT /api/m/risk/{id}
-     * ✏️ Modifie risque
-     */
+    // ══════════════════════════════════════════════════════════════════════════
+    // PUT /{risk} — Modifier
+    // ══════════════════════════════════════════════════════════════════════════
     public function update(Request $request, Risk $risk)
     {
         try {
-            $validated = $request->validate([
-                'code' => "nullable|string|unique:risks,code,{$risk->id}",
-                'label' => 'sometimes|string|max:500',
-                'description' => 'nullable|string|max:2000',
-                'risk_type_id' => 'nullable|integer|exists:risk_types,id',
-                'frequency_level_id' => 'nullable|integer|exists:audit_frequency_levels,id',
-                'frequency_net' => 'nullable|numeric|min:0|max:5',
-                'impact_level_id' => 'nullable|integer|exists:audit_impact_levels,id',
-                'impact_net' => 'nullable|numeric|min:0|max:5',
-                'owner' => 'nullable|string|max:255',
-                'control_procedure' => 'nullable|string|max:5000',
-                'status' => 'nullable|in:identified,assessed,mitigated,monitored,closed',
+            $v = $request->validate([
+                'label'              => 'sometimes|required|string|max:500',
+                'description'        => 'nullable|string|max:2000',
+                'risk_type_id'       => 'nullable|integer',
+                'frequency_level_id' => 'nullable|integer',
+                'frequency_net'      => 'nullable|numeric|min:0|max:5',
+                'impact_level_id'    => 'nullable|integer',
+                'impact_net'         => 'nullable|numeric|min:0|max:5',
+                'entity_id'          => 'nullable|integer',
+                'process_id'         => 'nullable|integer',
+                'activity_id'        => 'nullable|integer',
+                'owner_function_id'  => 'nullable|integer',
+                'owner'              => 'nullable|string|max:255',
+                'control_procedure'  => 'nullable|string|max:5000',
+                'status'             => 'nullable|in:identified,assessed,mitigated,monitored,closed',
             ]);
 
-            $risk->update(array_merge($validated, [
-                'updated_by' => auth()->id(),
-            ]));
+            $freqLevelId = $v['frequency_level_id'] ?? $risk->frequency_level_id;
+            $impLevelId  = $v['impact_level_id']    ?? $risk->impact_level_id;
+            $freqLevel   = $freqLevelId ? AuditFrequencyLevel::find($freqLevelId) : null;
+            $impLevel    = $impLevelId  ? AuditImpactLevel::find($impLevelId)    : null;
 
-            Log::info('✅ Risk updated', ['risk_id' => $risk->id]);
+            $errors = [];
+            if (($v['frequency_net'] ?? null) !== null && $freqLevel && $v['frequency_net'] > $freqLevel->level)
+                $errors['frequency_net'] = ["Fréquence nette ≤ fréquence brute ({$freqLevel->level})"];
+            if (($v['impact_net'] ?? null) !== null && $impLevel && $v['impact_net'] > $impLevel->level)
+                $errors['impact_net'] = ["Impact net ≤ impact brut ({$impLevel->level})"];
+            if (!empty($errors)) return response()->json(['success' => false, 'errors' => $errors], 422);
+
+            if (isset($v['frequency_level_id']) || isset($v['impact_level_id'])) {
+                $v['criticality'] = ($freqLevel && $impLevel) ? $freqLevel->level * $impLevel->level : $risk->criticality;
+            }
+
+            // Recalculer code si hiérarchie change
+            $processChanged  = isset($v['process_id'])   && $v['process_id']  !== $risk->process_id;
+            $activityChanged = isset($v['activity_id'])  && $v['activity_id'] !== $risk->activity_id;
+            $typeChanged     = isset($v['risk_type_id']) && $v['risk_type_id'] !== $risk->risk_type_id;
+            if ($processChanged || $activityChanged || $typeChanged) {
+                $v['code'] = $this->generateHierarchicalCode(
+                    $v['process_id']   ?? $risk->process_id,
+                    $v['activity_id']  ?? $risk->activity_id,
+                    $v['risk_type_id'] ?? $risk->risk_type_id,
+                    $risk->id
+                );
+            }
+
+            if (!empty($v['owner_function_id']) && empty($v['owner'])) {
+                try {
+                    $func = $this->t()->table('functions')->where('id', $v['owner_function_id'])->first();
+                    if ($func) $v['owner'] = $func->character ? "{$func->name} ({$func->character})" : $func->name;
+                } catch (\Exception $e) {}
+            }
+
+            $updateData = array_filter($v, fn($val) => $val !== null);
+            if (!$this->hasColumn('risks', 'owner_function_id')) unset($updateData['owner_function_id']);
+
+            $risk->update(array_merge($updateData, ['updated_by' => auth()->id()]));
+            $this->loadLevels();
 
             return response()->json([
                 'success' => true,
-                'message' => "✅ Risque '{$risk->code}' modifié",
-                'risk' => $this->formatRisk($risk->fresh()),
+                'message' => "Risque '{$risk->code}' modifié",
+                'risk'    => $this->formatRisk($risk->fresh()),
             ]);
 
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json(['success' => false, 'errors' => $e->errors()], 422);
         } catch (\Exception $e) {
-            Log::error('❌ Risk update error: ' . $e->getMessage());
+            Log::error('[Risk] update: ' . $e->getMessage());
             return response()->json(['success' => false, 'error' => $e->getMessage()], 500);
         }
     }
 
-    /**
-     * DELETE /api/m/risk/{id}
-     * 🗑️ Supprime risque
-     */
     public function destroy(Risk $risk)
     {
         try {
-            $riskCode = $risk->code;
-            $risk->delete();
-
-            Log::info('✅ Risk deleted', ['code' => $riskCode]);
-
-            return response()->json([
-                'success' => true,
-                'message' => "✅ Risque '{$riskCode}' supprimé",
-            ]);
-
+            $code = $risk->code; $risk->delete();
+            return response()->json(['success' => true, 'message' => "Risque '{$code}' supprimé"]);
         } catch (\Exception $e) {
-            Log::error('❌ Risk destroy error: ' . $e->getMessage());
             return response()->json(['success' => false, 'error' => $e->getMessage()], 500);
         }
     }
 
-    /**
-     * GET /api/m/risk/{id}
-     */
     public function show(Risk $risk)
     {
+        $this->loadLevels();
         return response()->json(['success' => true, 'risk' => $this->formatRisk($risk)]);
     }
 
-    // ════════════════════════════════════════════════════════════════════════════════════
-    // 🔧 UTILITAIRES PRIVÉS
-    // ════════════════════════════════════════════════════════════════════════════════════
+    // ══════════════════════════════════════════════════════════════════════════
+    // HELPERS PRIVÉS
+    // ══════════════════════════════════════════════════════════════════════════
 
-    private function formatRisk(Risk $risk): array
-    {
-        // ✅ CALCULER CRITICITÉ = frequency_level_id * impact_level_id
-        $criticityGross = ($risk->frequency_level_id && $risk->impact_level_id) 
-            ? $risk->frequency_level_id * $risk->impact_level_id 
-            : null;
-
-        // ✅ CALCULER CRITICITÉ NETTE = frequency_net * impact_net
-        $criticityNet = ($risk->frequency_net && $risk->impact_net) 
-            ? (int) ceil($risk->frequency_net * $risk->impact_net) 
-            : null;
-
-        return [
-            'id' => $risk->id,
-            'code' => $risk->code,
-            'label' => $risk->label,
-            'description' => $risk->description,
-            'risk_type_id' => $risk->risk_type_id,
-            'frequency_level_id' => $risk->frequency_level_id,
-            'frequency_net' => $risk->frequency_net,
-            'impact_level_id' => $risk->impact_level_id,
-            'impact_net' => $risk->impact_net,
-            'criticality_gross' => $criticityGross,
-            'criticality_net' => $criticityNet,
-            'owner' => $risk->owner,
-            'control_procedure' => $risk->control_procedure,
-            'status' => $risk->status,
-            'entity_id' => $risk->entity_id,
-            'process_id' => $risk->process_id,
-            'activity_id' => $risk->activity_id,
-            'audit_session_id' => $risk->audit_session_id,
-            'created_at' => $risk->created_at?->format('Y-m-d H:i'),
-        ];
-    }
-
-    private function generateRiskSuggestions(string $processName, string $activityName, string $riskTypeName): array
-    {
-        $typeCode = strtoupper(substr($riskTypeName, 0, 2));
-
-        $suggestions = [
-            'FI' => [
-                'Erreurs de saisie en comptabilité',
-                'Détournement de fonds',
-                'Non-rapprochement des comptes bancaires',
-                'Fraude aux paiements',
-                'Erreurs de facturation',
-            ],
-            'RC' => [
-                'Non-respect RGPD',
-                'Violations réglementaires',
-                'Manque de documentation obligatoire',
-                'Non-conformité aux normes OHADA',
-                'Infractions fiscales',
-            ],
-            'RI' => [
-                'Perte de données critiques',
-                'Cyberattaque ou intrusion',
-                'Panne du système d\'information',
-                'Accès non autorisé aux données',
-                'Perte de disponibilité des services',
-            ],
-            'RO' => [
-                'Interruption d\'activité',
-                'Erreur dans les processus',
-                'Défaillance des ressources humaines',
-                'Problème de qualité de service',
-                'Manque de formation du personnel',
-            ],
-            'RS' => [
-                'Changement de marché non anticipé',
-                'Perte de compétitivité',
-                'Défaillance de partenaires clés',
-                'Perte de réputation',
-                'Nouvelles réglementations',
-            ],
-        ];
-
-        return $suggestions[$typeCode] ?? [];
-    }
-
-    private function generateControlProcedure(string $riskLabel, string $activityName, string $processName): string
-    {
-        return "🔒 PROCÉDURE DE CONTRÔLE\n\n"
-            . "Risque: $riskLabel\n"
-            . "Activité: $activityName\n"
-            . "Processus: $processName\n\n"
-            . "ÉTAPES:\n"
-            . "1. Identifier les critères d'acceptabilité\n"
-            . "2. Exécuter le test de contrôle\n"
-            . "3. Documenter les résultats\n"
-            . "4. Approuver par le responsable\n"
-            . "5. Archiver les preuves";
-    }
-
-    private function generateIntelligentCode(?int $riskTypeId): string
+    private function loadMacroProcesses(): array
     {
         try {
-            if (!$riskTypeId) {
-                return 'RX-' . str_pad(rand(1, 999), 3, '0', STR_PAD_LEFT);
+            return $this->t()->table('macro_processes')->orderBy('code')->get()
+                ->map(fn($r) => (array) $r)->toArray();
+        } catch (\Exception $e) {
+            Log::warning('[Risk] loadMacroProcesses: ' . $e->getMessage());
+            return [];
+        }
+    }
+
+    private function loadEntityFunctions(): array
+    {
+        try {
+            $rows = $this->t()
+                ->table('function_assignments as fa')
+                ->join('functions as f', 'f.id', '=', 'fa.function_id')
+                ->select('fa.entity_id', 'f.id as function_id', 'f.name', 'f.character', 'f.parent_id')
+                ->orderBy('f.name')->get();
+
+            $result = [];
+            foreach ($rows as $row) {
+                $result[$row->entity_id][] = [
+                    'id'        => $row->function_id,
+                    'name'      => $row->name,
+                    'character' => $row->character,
+                    'parent_id' => $row->parent_id,
+                    'label'     => $row->character ? "{$row->name} ({$row->character})" : $row->name,
+                ];
+            }
+            return $result;
+        } catch (\Exception $e) {
+            Log::warning('[Risk] loadEntityFunctions: ' . $e->getMessage());
+            return [];
+        }
+    }
+
+    private function loadTenantTable(string $table, callable $cb = null): array
+    {
+        try {
+            $q = $this->t()->table($table);
+            if ($cb) $cb($q);
+            return $q->get()->map(fn($r) => (array) $r)->toArray();
+        } catch (\Exception $e) {
+            Log::warning("[Risk] loadTenantTable({$table}): " . $e->getMessage());
+            return [];
+        }
+    }
+
+    private function hasColumn(string $table, string $col): bool
+    {
+        try { return DB::getSchemaBuilder()->hasColumn($table, $col); }
+        catch (\Exception $e) { return false; }
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════
+    // CODIFICATION HIÉRARCHIQUE : MP_CODE.PR_CODE.AC_CODE-NNN
+    // ══════════════════════════════════════════════════════════════════════════
+    private function generateHierarchicalCode(
+        ?int $processId,
+        ?int $activityId,
+        ?int $riskTypeId,
+        ?int $excludeRiskId = null
+    ): string {
+        try {
+            $macroCode = '';
+            $procCode  = '';
+            $actCode   = '';
+
+            if ($processId) {
+                $proc = $this->t()->table('processes')->where('id', $processId)->first();
+                if ($proc) {
+                    $procCode = strtoupper(preg_replace('/[^A-Za-z0-9]/', '', $proc->code ?? ''));
+                    if (!empty($proc->macro_process_id)) {
+                        try {
+                            $macro = $this->t()->table('macro_processes')->where('id', $proc->macro_process_id)->first();
+                            if ($macro) $macroCode = strtoupper(preg_replace('/[^A-Za-z0-9]/', '', $macro->code ?? ''));
+                        } catch (\Exception $e) {}
+                    }
+                }
             }
 
-            $riskType = RiskType::find($riskTypeId);
-            if (!$riskType || !$riskType->code) {
-                return 'RX-001';
+            if ($activityId) {
+                $act = $this->t()->table('activities')->where('id', $activityId)->first();
+                if ($act) $actCode = strtoupper(preg_replace('/[^A-Za-z0-9]/', '', $act->code ?? ''));
             }
 
-            $typeCode = strtoupper(substr($riskType->code, 0, 2));
-
-            $lastRisk = Risk::where('risk_type_id', $riskTypeId)
-                ->orderBy('id', 'desc')
-                ->first();
-
-            $nextSequence = 1;
-            if ($lastRisk && preg_match('/-(\d+)$/', $lastRisk->code, $m)) {
-                $nextSequence = intval($m[1]) + 1;
+            $parts = array_filter([$macroCode, $procCode, $actCode]);
+            if (empty($parts)) {
+                $riskType = $riskTypeId ? RiskType::find($riskTypeId) : null;
+                $prefix   = strtoupper(substr($riskType?->code ?? 'RQ', 0, 3));
+            } else {
+                $prefix = implode('.', $parts);
             }
 
-            return $typeCode . '-' . str_pad($nextSequence, 3, '0', STR_PAD_LEFT);
+            // Séquence max existante pour ce préfixe
+            $query = Risk::whereNull('deleted_at')->where('code', 'like', $prefix . '-%');
+            if ($excludeRiskId) $query->where('id', '!=', $excludeRiskId);
+
+            $maxSeq = 0;
+            $query->orderBy('id', 'desc')->cursor()->each(function ($r) use (&$maxSeq, $prefix) {
+                if (preg_match('/^' . preg_quote($prefix, '/') . '-(\d+)$/', $r->code, $m)) {
+                    $n = (int) $m[1];
+                    if ($n > $maxSeq) $maxSeq = $n;
+                }
+            });
+
+            $code = $prefix . '-' . str_pad($maxSeq + 1, 3, '0', STR_PAD_LEFT);
+
+            // Anti-collision
+            if (Risk::where('code', $code)->whereNull('deleted_at')
+                ->when($excludeRiskId, fn($q) => $q->where('id', '!=', $excludeRiskId))
+                ->exists()) {
+                $code = $prefix . '-' . str_pad($maxSeq + 2, 3, '0', STR_PAD_LEFT);
+            }
+
+            return $code;
 
         } catch (\Exception $e) {
-            Log::warning('Generate code error: ' . $e->getMessage());
-            return 'RX-' . rand(100, 999);
+            Log::warning('[Risk] generateHierarchicalCode: ' . $e->getMessage());
+            return 'RQ-' . str_pad((Risk::max('id') ?? 0) + 1, 3, '0', STR_PAD_LEFT);
         }
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════
+    // FORMAT RISK
+    // ══════════════════════════════════════════════════════════════════════════
+    private function formatRisk(Risk $risk): array
+    {
+        if (empty($this->_frequencies)) $this->loadLevels();
+
+        $freqRow    = $risk->frequency_level_id ? ($this->_frequencies[$risk->frequency_level_id] ?? null) : null;
+        $impRow     = $risk->impact_level_id    ? ($this->_impacts[$risk->impact_level_id]         ?? null) : null;
+        $critGross  = ($freqRow && $impRow) ? $freqRow['level'] * $impRow['level'] : ($risk->criticality ?? null);
+        $matrixKey  = ($impRow && $freqRow) ? "{$impRow['level']}_{$freqRow['level']}" : null;
+        $matrixCell = $matrixKey ? ($this->_matrix[$matrixKey] ?? null) : null;
+        $critNet    = ($risk->frequency_net && $risk->impact_net)
+            ? round((float)$risk->frequency_net * (float)$risk->impact_net, 1) : null;
+
+        $codeHierarchy = $this->parseCodeHierarchy($risk->code);
+
+        $ownerFunctionId   = null;
+        $ownerFunctionName = null;
+        if ($this->hasColumn('risks', 'owner_function_id') && $risk->owner_function_id) {
+            $ownerFunctionId = $risk->owner_function_id;
+            try {
+                $func = $this->t()->table('functions')->where('id', $ownerFunctionId)->first();
+                if ($func) $ownerFunctionName = $func->character ? "{$func->name} ({$func->character})" : $func->name;
+            } catch (\Exception $e) {}
+        }
+
+        return [
+            'id'                   => $risk->id,
+            'code'                 => $risk->code,
+            'code_hierarchy'       => $codeHierarchy,
+            'label'                => $risk->label,
+            'description'          => $risk->description,
+            'risk_type_id'         => $risk->risk_type_id,
+            'frequency_level_id'   => $risk->frequency_level_id,
+            'frequency_level'      => $freqRow['level']  ?? null,
+            'frequency_label'      => $freqRow['label']  ?? null,
+            'frequency_color'      => $freqRow['color']  ?? null,
+            'impact_level_id'      => $risk->impact_level_id,
+            'impact_level'         => $impRow['level']   ?? null,
+            'impact_label'         => $impRow['label']   ?? null,
+            'impact_color'         => $impRow['color']   ?? null,
+            'criticality_gross'    => $critGross,
+            'matrix_label'         => $matrixCell['label']         ?? null,
+            'matrix_qualification' => $matrixCell['qualification'] ?? null,
+            'matrix_color'         => $matrixCell['color']         ?? null,
+            'frequency_net'        => $risk->frequency_net ? (float)$risk->frequency_net : null,
+            'impact_net'           => $risk->impact_net   ? (float)$risk->impact_net    : null,
+            'criticality_net'      => $critNet,
+            'owner'                => $risk->owner,
+            'owner_function_id'    => $ownerFunctionId,
+            'owner_function_name'  => $ownerFunctionName,
+            'control_procedure'    => $risk->control_procedure,
+            'status'               => $risk->status ?? 'identified',
+            'entity_id'            => $risk->entity_id,
+            'process_id'           => $risk->process_id,
+            'activity_id'          => $risk->activity_id,
+            'audit_session_id'     => $risk->audit_session_id,
+            'created_at'           => $risk->created_at?->format('Y-m-d H:i'),
+        ];
+    }
+
+    private function parseCodeHierarchy(string $code): array
+    {
+        if (!preg_match('/^(.+)-(\d+)$/', $code, $m)) {
+            return ['prefix' => $code, 'sequence' => '', 'parts' => []];
+        }
+        return [
+            'prefix'   => $m[1],
+            'sequence' => $m[2],
+            'parts'    => explode('.', $m[1]),
+        ];
     }
 
     private function computeStatistics($risks): array
     {
-        if ($risks->isEmpty()) {
-            return $this->getEmptyStatistics();
-        }
-
-        $risksArray = $risks->toArray();
-        
-        // ✅ CRITICITÉ = frequency_level_id * impact_level_id
-        $critical = collect($risksArray)->filter(function ($r) {
-            $criticality = ($r['frequency_level_id'] && $r['impact_level_id']) 
-                ? $r['frequency_level_id'] * $r['impact_level_id'] 
-                : 0;
-            return $criticality >= 12;
-        })->count();
-
-        $high = collect($risksArray)->filter(function ($r) {
-            $criticality = ($r['frequency_level_id'] && $r['impact_level_id']) 
-                ? $r['frequency_level_id'] * $r['impact_level_id'] 
-                : 0;
-            return $criticality >= 8 && $criticality < 12;
-        })->count();
-
-        $medium = collect($risksArray)->filter(function ($r) {
-            $criticality = ($r['frequency_level_id'] && $r['impact_level_id']) 
-                ? $r['frequency_level_id'] * $r['impact_level_id'] 
-                : 0;
-            return $criticality >= 5 && $criticality < 8;
-        })->count();
-
-        $low = collect($risksArray)->filter(function ($r) {
-            $criticality = ($r['frequency_level_id'] && $r['impact_level_id']) 
-                ? $r['frequency_level_id'] * $r['impact_level_id'] 
-                : 0;
-            return $criticality < 5;
-        })->count();
-
-        // ✅ MOYENNE CRITICITÉ
-        $avgCriticality = collect($risksArray)
-            ->map(function ($r) {
-                return ($r['frequency_level_id'] && $r['impact_level_id']) 
-                    ? $r['frequency_level_id'] * $r['impact_level_id'] 
-                    : 0;
-            })
-            ->avg() ?? 0;
-
+        $arr = is_array($risks) ? $risks : $risks->toArray();
+        if (empty($arr)) return ['total_risks'=>0,'critical'=>0,'high'=>0,'medium'=>0,'low'=>0,'average_criticality'=>0];
+        $c = fn($r) => $r['criticality_gross'] ?? 0;
         return [
-            'total_risks' => collect($risksArray)->count(),
-            'critical' => $critical,
-            'high' => $high,
-            'medium' => $medium,
-            'low' => $low,
-            'average_criticality' => round($avgCriticality, 2),
-        ];
-    }
-
-    private function getEmptyStatistics(): array
-    {
-        return [
-            'total_risks' => 0,
-            'critical' => 0,
-            'high' => 0,
-            'medium' => 0,
-            'low' => 0,
-            'average_criticality' => 0,
+            'total_risks'         => count($arr),
+            'critical'            => count(array_filter($arr, fn($r) => $c($r) >= 15)),
+            'high'                => count(array_filter($arr, fn($r) => $c($r) >= 9 && $c($r) < 15)),
+            'medium'              => count(array_filter($arr, fn($r) => $c($r) >= 4 && $c($r) < 9)),
+            'low'                 => count(array_filter($arr, fn($r) => $c($r) < 4)),
+            'average_criticality' => round(array_sum(array_map($c, $arr)) / count($arr), 2),
         ];
     }
 }

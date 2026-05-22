@@ -19,16 +19,6 @@
  *            ->name('auditor.missions.phases.start');
  *   });
  *
- * URL construite par la vue pour démarrer une phase :
- *   POST /m/audit.core/auditor/missions/{missionId}/phases/{assignmentId}/start
- *
- * URL des formulaires (depuis ddmparam.audit_type_forms.url_path) :
- *   Ex: /m/audit.core/ac/preparation/reunion-ouverture?mission_id=X&assignment_id=Y
- *   Ces routes sont définies dans leurs contrôleurs respectifs (AcPreparationController, etc.)
- *
- * Inertia pages rendues :
- *   dashboards/Auditor/MesMissions
- *   dashboards/Auditor/MissionPhases
  * ══════════════════════════════════════════════════════════════════════════════
  */
 
@@ -44,6 +34,27 @@ use Inertia\Inertia;
 
 class AuditorMissionsController extends Controller
 {
+    // ══════════════════════════════════════════════════════════════════════════
+    // HELPER — Construire une URL absolue correcte depuis un url_path
+    //
+    // PROBLÈME : url('m/audit.core/...') sans slash initial → Laravel coupe le
+    // préfixe et génère /reunion-lancement au lieu de /m/audit.core/ac/.../reunion-lancement
+    //
+    // SOLUTION : forcer le slash initial avec ltrim puis url('/' . $path)
+    // ══════════════════════════════════════════════════════════════════════════
+
+    private function buildUrl(string $path, array $params = []): string
+    {
+        // Garantir le slash initial pour que url() génère le chemin complet
+        $base = url('/' . ltrim($path, '/'));
+
+        if (empty($params)) {
+            return $base;
+        }
+
+        return $base . '?' . http_build_query($params);
+    }
+
     // ══════════════════════════════════════════════════════════════════════════
     // PRIVÉ — Auditeur connecté (depuis session ou email Auth)
     // ══════════════════════════════════════════════════════════════════════════
@@ -283,9 +294,6 @@ class AuditorMissionsController extends Controller
         $entities     = $this->getEntities($missionId);
         $phasesByType = $this->buildPhasesByType($missionId, $auditor->id, $monRole, $monNiveau, $mission->audit_color);
         $markingsData = $this->loadMarkings($missionId, $auditor->id, $monRole, $monNiveau);
-
-        // ── Chat messages groupés par assignment_id ───────────────────────────
-        // Tous les membres de la mission voient toutes les discussions
         $chatMessages = $this->loadChatMessages($missionId, $auditor->id);
 
         return Inertia::render('dashboards/Auditor/MissionPhases', [
@@ -296,9 +304,9 @@ class AuditorMissionsController extends Controller
             'markingsData'  => $markingsData,
             'chatMessages'  => $chatMessages,
             'auditor'       => array_merge($this->buildAuditorPayload($auditor), ['role' => $monRole]),
-            // URLs pré-construites par Laravel pour éviter toute reconstruction JS
-            'chatBaseUrl'   => url("m/audit.core/missions/{$missionId}/chat"),
-            'missionsUrl'   => url('m/audit.core/auditor/missions'),
+            // URLs pré-construites avec slash initial garanti → préfixe correct
+            'chatBaseUrl'   => $this->buildUrl("m/audit.core/missions/{$missionId}/chat"),
+            'missionsUrl'   => $this->buildUrl('m/audit.core/auditor/missions'),
         ]);
     }
 
@@ -423,7 +431,11 @@ class AuditorMissionsController extends Controller
                     ->value('atf.url_path');
 
                 if ($urlPath) {
-                    $formUrl = url($urlPath) . '?mission_id=' . $missionId . '&assignment_id=' . $assignmentId;
+                    // CORRECTION : buildUrl() garantit le slash initial → préfixe correct
+                    $formUrl = $this->buildUrl($urlPath, [
+                        'mission_id'    => $missionId,
+                        'assignment_id' => $assignmentId,
+                    ]);
                 }
             } catch (\Exception $e) {}
         }
@@ -432,27 +444,11 @@ class AuditorMissionsController extends Controller
     }
 
     // ══════════════════════════════════════════════════════════════════════════
-    // PRIVÉ — Charger les messages de chat pour la vue MissionPhases
-    //
-    // Tous les membres de la mission voient TOUTES les discussions de toutes
-    // les phases. Les messages sont groupés par assignment_id pour que la vue
-    // puisse les afficher dans chaque carte de phase.
-    //
-    // Structure retournée :
-    //   [
-    //     assignment_id => [
-    //       { id, content, type, priority, is_pinned, author_id, author_role,
-    //         author_name, author_initials, parent_id, form_code,
-    //         created_at_fr, is_mine, is_read },
-    //       ...
-    //     ],
-    //     ...
-    //   ]
+    // PRIVÉ — Chat messages groupés par assignment_id
     // ══════════════════════════════════════════════════════════════════════════
 
     private function loadChatMessages(int $missionId, int $auditorId): array
     {
-        // Tous les assignments de la mission
         $assignmentIds = DB::table('mission_phase_assignments')
             ->where('mission_programmation_id', $missionId)
             ->pluck('id')
@@ -460,8 +456,6 @@ class AuditorMissionsController extends Controller
 
         if (empty($assignmentIds)) return [];
 
-        // Récupérer tous les messages de la mission (pas de filtre par rôle :
-        // le chat entre membres d'une mission est visible par tous)
         $messages = DB::table('mission_phase_chat as c')
             ->join('auditors as a', 'c.author_id', '=', 'a.id')
             ->leftJoin('mission_phase_chat_reads as r', function ($j) use ($auditorId) {
@@ -470,7 +464,6 @@ class AuditorMissionsController extends Controller
             })
             ->where('c.mission_id', $missionId)
             ->where(function ($q) use ($assignmentIds) {
-                // Messages liés à un assignment OU messages globaux de la mission
                 $q->whereIn('c.assignment_id', $assignmentIds)
                   ->orWhereNull('c.assignment_id');
             })
@@ -500,7 +493,7 @@ class AuditorMissionsController extends Controller
 
         if ($messages->isEmpty()) return [];
 
-        // Marquer automatiquement les messages non lus comme lus au chargement de la page
+        // Marquer les non-lus comme lus au chargement
         $unreadIds = $messages
             ->filter(fn($m) => !(bool)$m->is_mine && !(bool)$m->is_read)
             ->pluck('id');
@@ -515,12 +508,9 @@ class AuditorMissionsController extends Controller
             DB::table('mission_phase_chat_reads')->insertOrIgnore($inserts);
         }
 
-        // Grouper par assignment_id
-        // Les messages sans assignment_id sont ignorés (pas de carte de phase associée)
         $result = [];
         foreach ($messages as $msg) {
             if (!$msg->assignment_id) continue;
-
             $result[$msg->assignment_id][] = [
                 'id'              => $msg->id,
                 'assignment_id'   => $msg->assignment_id,
@@ -537,7 +527,7 @@ class AuditorMissionsController extends Controller
                 'form_code'       => $msg->form_code,
                 'created_at_fr'   => $msg->created_at_fr,
                 'is_mine'         => (bool)$msg->is_mine,
-                'is_read'         => true, // marqué comme lu ci-dessus
+                'is_read'         => true,
             ];
         }
 
@@ -584,7 +574,7 @@ class AuditorMissionsController extends Controller
                     $atLabel = $at->label ?? null;
                 }
             } catch (\Exception $e) {
-                // ddmparam indisponible — on garde les défauts
+                // ddmparam indisponible — défauts conservés
             }
         }
 
@@ -628,10 +618,11 @@ class AuditorMissionsController extends Controller
         }
 
         // ── Détection colonnes optionnelles ───────────────────────────────────
-        $hasActualDates = $this->columnExists('mission_phase_assignments', 'actual_start');
-        $hasOwnerId     = $this->columnExists('mission_phase_assignments', 'owner_id');
-        $hasIsDisabled  = $this->columnExists('mission_phase_assignments', 'is_disabled');
-        $hasWeight      = $this->columnExists('mission_phases', 'weight');
+        $hasActualDates      = $this->columnExists('mission_phase_assignments', 'actual_start');
+        $hasOwnerId          = $this->columnExists('mission_phase_assignments', 'owner_id');
+        $hasIsDisabled       = $this->columnExists('mission_phase_assignments', 'is_disabled');
+        $hasWeight           = $this->columnExists('mission_phases', 'weight');
+        $hasValidationStatus = $this->columnExists('mission_phase_assignments', 'validation_status');
 
         $colorLight = $missionColor . '20';
 
@@ -674,11 +665,8 @@ class AuditorMissionsController extends Controller
             $select[] = DB::raw("TRIM(CONCAT(COALESCE(own.last_name,''),' ',COALESCE(own.first_name,''))) as owner_name");
             $select[] = DB::raw("COALESCE(omr.code, own_mpa.role,'—') as owner_role");
         }
-        if ($hasIsDisabled) $select[] = 'mpa.is_disabled';
-        if ($hasWeight)     $select[] = 'ph.weight';
-
-        // Ajouter validation_status si la colonne existe
-        $hasValidationStatus = $this->columnExists('mission_phase_assignments', 'validation_status');
+        if ($hasIsDisabled)       $select[] = 'mpa.is_disabled';
+        if ($hasWeight)           $select[] = 'ph.weight';
         if ($hasValidationStatus) $select[] = 'mpa.validation_status';
 
         $query = DB::table('mission_phase_assignments as mpa')
@@ -788,25 +776,32 @@ class AuditorMissionsController extends Controller
                 $arr['validation_status'] = $hasValidationStatus ? ($arr['validation_status'] ?? 'draft') : 'draft';
                 $arr['auditeurs_affectes'] = $audsByAssignment[$ph->assignment_id] ?? [];
                 $arr['tasks']              = $hasTasks ? ($tasksParPhase[$ph->assignment_id] ?? []) : [];
-                // ── URL formulaire (depuis ddmparam.audit_type_forms) ──────────
-                // url_path ex: /m/audit.core/ac/preparation/reunion-ouverture
-                // On y ajoute mission_id et assignment_id directement côté serveur
-                // pour que la vue n'ait rien à reconstruire.
-                $formEntry         = $ph->form_code ? ($forms[$ph->form_code] ?? null) : null;
-                $formPath          = $formEntry->url_path ?? null;
-                $arr['form_url']   = $formPath
-                    ? url($formPath) . '?mission_id=' . $missionId . '&assignment_id=' . $ph->assignment_id
+
+                // ── URL formulaire ─────────────────────────────────────────────
+                // CORRECTION : buildUrl() force le slash initial sur url_path
+                // Ex: 'm/audit.core/ac/preparation/reunion-lancement'
+                // → url('/m/audit.core/ac/preparation/reunion-lancement')
+                // → http://ddm-master.test/m/audit.core/ac/preparation/reunion-lancement ✓
+                $formEntry       = $ph->form_code ? ($forms[$ph->form_code] ?? null) : null;
+                $formPath        = $formEntry->url_path ?? null;
+                $arr['form_url'] = $formPath
+                    ? $this->buildUrl($formPath, [
+                        'mission_id'    => $missionId,
+                        'assignment_id' => $ph->assignment_id,
+                    ])
                     : null;
                 $arr['form_route'] = $formEntry->route_name ?? null;
                 $arr['form_label'] = $formEntry->label      ?? null;
                 $arr['form_icon']  = $formEntry->icon       ?? 'ti ti-file-description';
 
-                // ── URL démarrer la phase (construite ici, fiable) ─────────────
-                $arr['start_url']    = url(
+                // ── URL démarrer la phase ──────────────────────────────────────
+                // CORRECTION : buildUrl() au lieu de url() directement
+                $arr['start_url'] = $this->buildUrl(
                     "m/audit.core/auditor/missions/{$missionId}/phases/{$ph->assignment_id}/start"
                 );
+
                 // ── URL valider le formulaire ──────────────────────────────────
-                $arr['validate_url'] = url(
+                $arr['validate_url'] = $this->buildUrl(
                     "m/audit.core/auditor/missions/{$missionId}/phases/{$ph->assignment_id}/validate"
                 );
 

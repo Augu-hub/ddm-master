@@ -1,16 +1,26 @@
 <?php
 
+use App\Http\Controllers\Admin\AuditTypeFormsController;
 use App\Http\Controllers\Auditor\AnalyseProceduresController;
+use App\Http\Controllers\Auditor\AnalyseRisquesController;
+use App\Http\Controllers\Auditor\FicheTestController;
+use App\Http\Controllers\Auditor\PlanActionController;
 use App\Http\Controllers\Auditor\PriseDeConnaissanceController;
+use App\Http\Controllers\Auditor\RapportAuditController;
+use App\Http\Controllers\Auditor\RapportAuditWordController;
 use App\Http\Controllers\Auditor\ReunionOuvertureController;
+use App\Http\Controllers\Tenant\AC\ReunionClotureController;
 use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\Auditor\ReferentielMarchesController;
+use App\Http\Controllers\Auditor\ReferentielTransactionsController;
+use App\Http\Controllers\Auditor\ReferentielConformiteController;
 use Inertia\Inertia;
-
+use Illuminate\Http\Request;
 /* ====== AJOUTER CES IMPORTS EN HAUT (AVEC LES AUTRES) ====== */
 use App\Models\Master\Menu;
 use App\Models\Master\Module;
 /* ======================================================== */
-
+require __DIR__."/outils_routes.php";
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\ModuleEntryController;
 use App\Http\Controllers\ErrorController;
@@ -91,7 +101,64 @@ Route::middleware(['web','auth','verified'])->group(function () {
         Route::delete('/tenants/{tenant}',          [TenantsController::class, 'destroy'])->name('tenants.destroy')->middleware('menu.authz:tenants')->whereNumber('tenant');
         Route::post('/tenants/{tenant}/sync-users', [TenantsController::class, 'syncUsers'])->name('tenants.syncUsers')->middleware('menu.authz:tenants')->whereNumber('tenant');
         Route::post('/tenants/{tenant}/remove-user',[TenantsController::class, 'removeUser'])->name('tenants.removeUser')->middleware('menu.authz:tenants')->whereNumber('tenant');
-    });
+        Route::prefix('audit-type-forms')->name('audit-type-forms.')->group(function () {
+ 
+    // ── Vue principale ────────────────────────────────────────────
+    Route::get('/', [AuditTypeFormsController::class, 'index'])
+        ->name('index');
+ 
+    // ── API JSON (fetch depuis la Vue, pas de rechargement Inertia) ─
+    Route::get('api/audit-types',        [AuditTypeFormsController::class, 'apiAuditTypes'])
+        ->name('api.audit-types');
+ 
+    Route::get('api/forms/{auditTypeId}', [AuditTypeFormsController::class, 'apiFormsByType'])
+        ->name('api.forms-by-type');
+ 
+    // ── CRUD audit_types ─────────────────────────────────────────
+    Route::post  ('audit-types',                       [AuditTypeFormsController::class, 'storeAuditType'])
+        ->name('audit-types.store');
+ 
+    Route::put   ('audit-types/{id}',                  [AuditTypeFormsController::class, 'updateAuditType'])
+        ->name('audit-types.update');
+ 
+    Route::delete('audit-types/{id}',                  [AuditTypeFormsController::class, 'destroyAuditType'])
+        ->name('audit-types.destroy');
+ 
+    Route::patch ('audit-types/{id}/toggle-active',    [AuditTypeFormsController::class, 'toggleAuditTypeActive'])
+        ->name('audit-types.toggle');
+ 
+    // ── CRUD formulaires ─────────────────────────────────────────
+    // ⚠️  Route statique 'forms/reorder' AVANT la route paramétrique 'forms/{id}'
+    Route::post  ('forms/reorder',                     [AuditTypeFormsController::class, 'reorderForms'])
+        ->name('forms.reorder');
+ 
+    Route::post  ('forms',                             [AuditTypeFormsController::class, 'storeForm'])
+        ->name('forms.store');
+ 
+    Route::put   ('forms/{id}',                        [AuditTypeFormsController::class, 'updateForm'])
+        ->name('forms.update');
+ 
+    Route::delete('forms/{id}',                        [AuditTypeFormsController::class, 'destroyForm'])
+        ->name('forms.destroy');
+ 
+    Route::patch ('forms/{id}/toggle-active',          [AuditTypeFormsController::class, 'toggleFormActive'])
+        ->name('forms.toggle');
+ 
+    // ── Gestion des phases ────────────────────────────────────────
+    Route::patch ('phase-rename',                      [AuditTypeFormsController::class, 'phaseRename'])
+        ->name('phase.rename');
+ 
+    Route::delete('phase/{auditTypeId}/{phaseNum}',    [AuditTypeFormsController::class, 'phaseDelete'])
+        ->name('phase.delete');
+ 
+});
+    
+        });
+
+      
+
+     
+           
 });
 
 /* ====== Erreurs publiques ====== */
@@ -143,6 +210,16 @@ Route::prefix('admin')
 
         Route::get('/menus/api/db-info', [MenusController::class, 'getDatabaseInfoJson'])
             ->name('menus.api.dbinfo');
+
+
+
+            
+ 
+    // ── Audit Types (ddmparam) ────────────────────────────────────────────────
+  
+ 
+
+ 
     });
 
 /* ════════════════════════════════════════════════════════════════════════════
@@ -257,20 +334,7 @@ Route::get('missions/{mission}/phases', [AuditorMissionsController::class, 'phas
 use App\Http\Controllers\Audit\MissionTypeController;
 use App\Http\Controllers\Audit\MissionFormController;
 
-        Route::prefix('param')->group(function () {
-            Route::get('mission-types', [MissionTypeController::class, 'index'])
-                ->name('audit.param.mission-types.index');
-
-            Route::post('mission-types',            [MissionTypeController::class, 'store']);
-            Route::put('mission-types/{id}',        [MissionTypeController::class, 'update']);
-            Route::delete('mission-types/{id}',     [MissionTypeController::class, 'destroy']);
-            Route::post('mission-types/{id}/logo',  [MissionTypeController::class, 'uploadLogo']);
-
-            Route::post('mission-types/{typeId}/phases',                [MissionTypeController::class, 'storePhase']);
-            Route::post('mission-types/{typeId}/phases/{parentId}/sub', [MissionTypeController::class, 'storeSubPhase']);
-            Route::put('mission-types/{typeId}/phases/{formId}',        [MissionTypeController::class, 'updateForm']);
-            Route::delete('mission-types/{typeId}/phases/{formId}',     [MissionTypeController::class, 'destroyForm']);
-        });
+      
 
 
 // ── Dans votre groupe existant Route::prefix('m/audit.core')… ──
@@ -330,95 +394,107 @@ Route::prefix('api')->group(function () {
 use App\Http\Controllers\Audit\MissionPhaseAffectationController;  // controller EXISTANT - INCHANGÉ
 use App\Http\Controllers\Audit\MissionAuditAffectationController;   // NOUVEAU controller
 
-Route::prefix('m/audit.core')->middleware(['auth', 'verified'])->group(function () {
 
-    // ── EXISTANT : phases de mission (MissionPhaseAffectationController) ──
-    Route::get('/affectation-phases-aux-mission',
+// ══════════════════════════════════════════════════════════════════════════════
+//  GROUPE PRINCIPAL — préfixe m/audit.core
+//  À intégrer dans routes/web.php dans le groupe auth+verified existant
+// ══════════════════════════════════════════════════════════════════════════════
+
+Route::prefix('m/audit.core')
+    ->middleware(['auth', 'verified'])
+    ->group(function () {
+
+    // ── VUE PRINCIPALE — Affectation phases aux missions ──────────────────────
+    // GET /m/audit.core/affectation-phases-aux-mission?mission_id=X
+    Route::get('affectation-phases-aux-mission',
         [MissionPhaseAffectationController::class, 'index'])
         ->name('audit.core.home.programmation-missions.phases');
 
-  //  Route::get('/api/mission-phases/by-type/{typeId}',
-      //  [MissionPhaseAffectationController::class, 'getPhasesByTypeApi'])
-      //  ->name('audit.core.api.mission-phases.by-type');
-
-    Route::get('/api/programmation-missions/{missionId}/phase-assignments',
+    // ── API — Assignments existants d'une mission ─────────────────────────────
+    // GET /m/audit.core/api/programmation-missions/{missionId}/phase-assignments
+    Route::get('api/programmation-missions/{missionId}/phase-assignments',
         [MissionPhaseAffectationController::class, 'getAssignedPhases'])
+        ->where('missionId', '[0-9]+')
         ->name('audit.core.api.phase-assignments');
 
-    Route::get('/api/programmation-missions/{missionId}/auditeurs',
+    // ── API — Auditeurs d'une mission (par entité) ────────────────────────────
+    // GET /m/audit.core/api/programmation-missions/{missionId}/auditeurs
+    Route::get('api/programmation-missions/{missionId}/auditeurs',
         [MissionPhaseAffectationController::class, 'getAuditeursApi'])
+        ->where('missionId', '[0-9]+')
         ->name('audit.core.api.mission.auditeurs-phase');
 
-    Route::post('/api/mission-phases/affectation/{missionId}',
+    // ── API — Phases d'un type de mission ────────────────────────────────────
+    // GET /m/audit.core/api/mission-phases/by-type/{typeId}
+    Route::get('api/mission-phases/by-type/{typeId}',
+        [MissionPhaseAffectationController::class, 'getPhasesByTypeApi'])
+        ->where('typeId', '[0-9]+')
+        ->name('audit.core.api.mission-phases.by-type');
+
+    // ── API — Sauvegarder les affectations ───────────────────────────────────
+    // POST /m/audit.core/api/mission-phases/affectation/{missionId}
+    Route::post('api/mission-phases/affectation/{missionId}',
         [MissionPhaseAffectationController::class, 'saveAffectation'])
+        ->where('missionId', '[0-9]+')
         ->name('audit.core.api.phase-affectation.save');
 
-    Route::patch('/api/mission-phases/{id}/toggle-mandatory',
+    // ── API — Toggle obligatoire d'une phase ──────────────────────────────────
+    // PATCH /m/audit.core/api/mission-phases/{id}/toggle-mandatory
+    Route::patch('api/mission-phases/{id}/toggle-mandatory',
         [MissionPhaseAffectationController::class, 'toggleMandatory'])
+        ->where('id', '[0-9]+')
         ->name('audit.core.api.phase.toggle-mandatory');
 
+    // ── API — Broadcast (message aux auditeurs d'une phase) ──────────────────
+    // POST /m/audit.core/api/mission-phases/broadcast/{missionId}
+    Route::post('api/mission-phases/broadcast/{missionId}',
+        [MissionPhaseAffectationController::class, 'broadcast'])
+        ->where('missionId', '[0-9]+')
+        ->name('audit.core.api.phase.broadcast');
 
-    // ── NOUVEAU : formulaires d'audit (MissionAuditAffectationController) ──
-    Route::get('/affectation-audit-forms',
+    // ══════════════════════════════════════════════════════════════════════════
+    //  AUDIT FORMS AFFECTATION (MissionAuditAffectationController)
+    // ══════════════════════════════════════════════════════════════════════════
+
+    // VUE
+    Route::get('affectation-audit-forms',
         [MissionAuditAffectationController::class, 'index'])
         ->name('audit.core.affectation-audit-forms');
 
-    Route::get('/api/audit-type-forms/{code}',
+    // API — Formulaires par code audit
+    Route::get('api/audit-type-forms/{code}',
         [MissionAuditAffectationController::class, 'getFormsByCode'])
         ->name('audit.core.api.audit-type-forms');
 
-    Route::get('/api/mission-audit/{missionId}/affectations',
+    // API — Affectations d'audit (GET + POST)
+    Route::get('api/mission-audit/{missionId}/affectations',
         [MissionAuditAffectationController::class, 'getAffectations'])
+        ->where('missionId', '[0-9]+')
         ->name('audit.core.api.mission-audit.affectations.get');
 
-    Route::post('/api/mission-audit/{missionId}/affectations',
+    Route::post('api/mission-audit/{missionId}/affectations',
         [MissionAuditAffectationController::class, 'saveAffectations'])
+        ->where('missionId', '[0-9]+')
         ->name('audit.core.api.mission-audit.affectations.save');
 
-    Route::delete('/api/mission-audit/affectation/{id}',
-        [MissionAuditAffectationController::class, 'deleteAffectation'])
-        ->name('audit.core.api.mission-audit.affectation.delete');
-
-    Route::post('/api/mission-audit/affectation/{id}/auditeurs',
-        [MissionAuditAffectationController::class, 'syncAuditeurs'])
-        ->name('audit.core.api.mission-audit.affectation.auditeurs');
-
-    Route::get('/api/mission-audit/{missionId}/auditeurs',
+    // API — Auditeurs pour audit
+    Route::get('api/mission-audit/{missionId}/auditeurs',
         [MissionAuditAffectationController::class, 'getAuditeursMission'])
+        ->where('missionId', '[0-9]+')
         ->name('audit.core.api.mission-audit.auditeurs');
 
+    // API — Affectation individuelle (delete + sync auditeurs)
+    Route::delete('api/mission-audit/affectation/{id}',
+        [MissionAuditAffectationController::class, 'deleteAffectation'])
+        ->where('id', '[0-9]+')
+        ->name('audit.core.api.mission-audit.affectation.delete');
+
+    Route::post('api/mission-audit/affectation/{id}/auditeurs',
+        [MissionAuditAffectationController::class, 'syncAuditeurs'])
+        ->where('id', '[0-9]+')
+        ->name('audit.core.api.mission-audit.affectation.auditeurs');
+
 });
-
-
-
-Route::get(
-    'affectation-phases',
-    [MissionPhaseAffectationController::class, 'index']
-)->name('affectation-phases');
-
-// ── API GET : phases d'un type ──────────────────────────────────────
-// GET /m/audit.core/api/mission-phases/by-type/{typeId}
-Route::get(
-    'api/mission-phases/by-type/{typeId}',
-    [MissionPhaseAffectationController::class, 'getPhasesByTypeApi']
-)->where('typeId', '[0-9]+');
-
-// ── API GET : assignments + auditeurs d'une mission ─────────────────
-// GET /m/audit.core/api/mission-phase-assignments/{missionId}
-Route::get(
-    'api/mission-phase-assignments/{missionId}',
-    [MissionPhaseAffectationController::class, 'getAssignedPhases']
-)->where('missionId', '[0-9]+');
-
-// ── API POST : sauvegarder les affectations ─────────────────────────
-// POST /m/audit.core/api/mission-phase-assignments/{missionId}
-Route::post(
-    'api/mission-phase-assignments/{missionId}',
-    [MissionPhaseAffectationController::class, 'saveAffectation']
-)->where('missionId', '[0-9]+');
-
-
-
 
 
 
@@ -566,96 +642,220 @@ Route::prefix('ac')->group(function () {
         Route::post('analyse-processus/{form}/soumettre', [App\Http\Controllers\Auditor\AnalyseProcessusController::class, 'soumettre'])->name('auditor.ac.analyse-processus.soumettre');
         Route::post('analyse-processus/{form}/valider', [App\Http\Controllers\Auditor\AnalyseProcessusController::class, 'valider'])->name('auditor.ac.analyse-processus.valider');
 //         // analyse-risques
-        Route::get('analyse-risques', [App\Http\Controllers\Auditor\AnalyseRisquesController::class, 'index'])->name('audit.ac.preparation.analyse-risques');
-        Route::get('analyse-risques/{form}/edit', [App\Http\Controllers\Auditor\AnalyseRisquesController::class, 'edit'])->name('auditor.ac.analyse-risques.edit');
-        Route::post('analyse-risques', [App\Http\Controllers\Auditor\AnalyseRisquesController::class, 'store'])->name('auditor.ac.analyse-risques.store');
-        Route::put('analyse-risques/{form}', [App\Http\Controllers\Auditor\AnalyseRisquesController::class, 'update'])->name('auditor.ac.analyse-risques.update');
-        Route::delete('analyse-risques/{form}', [App\Http\Controllers\Auditor\AnalyseRisquesController::class, 'destroy'])->name('auditor.ac.analyse-risques.destroy');
-        Route::post('analyse-risques/{form}/soumettre', [App\Http\Controllers\Auditor\AnalyseRisquesController::class, 'soumettre'])->name('auditor.ac.analyse-risques.soumettre');
-        Route::post('analyse-risques/{form}/valider', [App\Http\Controllers\Auditor\AnalyseRisquesController::class, 'valider'])->name('auditor.ac.analyse-risques.valider');
-//         // analyse-procedures
 
 
-// IMPORTANT: routes fixes (sans {form}) AVANT les routes avec paramètre
-
-// Index
+// Routes fixes (avant les routes paramétrées)
+Route::get ('analyse-risques',
+    [AnalyseRisquesController::class, 'index'])
+    ->name('audit.ac.preparation.analyse-risques');
+ 
+Route::post('analyse-risques',
+    [AnalyseRisquesController::class, 'store'])
+    ->name('auditor.ac.analyse-risques.store');
+ 
+// Affectation processus → auditeur (DM/CM) — crée l'AR si besoin
+Route::post('analyse-risques/assign-process',
+    [AnalyseRisquesController::class, 'assignProcess'])
+    ->name('auditor.ac.analyse-risques.assign-process');
+ 
+// Routes paramétrées {form}
+Route::get   ('analyse-risques/{form}/edit',
+    [AnalyseRisquesController::class, 'edit'])
+    ->name('auditor.ac.analyse-risques.edit');
+ 
+Route::put   ('analyse-risques/{form}',
+    [AnalyseRisquesController::class, 'update'])
+    ->name('auditor.ac.analyse-risques.update');
+ 
+Route::delete('analyse-risques/{form}',
+    [AnalyseRisquesController::class, 'destroy'])
+    ->name('auditor.ac.analyse-risques.destroy');
+ 
+Route::post  ('analyse-risques/{form}/soumettre',
+    [AnalyseRisquesController::class, 'soumettre'])
+    ->name('auditor.ac.analyse-risques.soumettre');
+ 
+Route::post  ('analyse-risques/{form}/valider',
+    [AnalyseRisquesController::class, 'valider'])
+    ->name('auditor.ac.analyse-risques.valider');
+// ── Index & Store ───────────────────────────────────────────────────
 Route::get('analyse-procedures', [AnalyseProceduresController::class, 'index'])
     ->name('audit.ac.preparation.analyse-procedures');
 
-// Routes sans paramètre dynamique — DOIVENT être déclarées avant /{form}
-Route::post('analyse-procedures/ai-suggest',        [AnalyseProceduresController::class, 'aiSuggest'])
-    ->name('auditor.ac.analyse-procedures.ai-suggest');
-Route::post('analyse-procedures/import-excel',      [AnalyseProceduresController::class, 'importExcel'])
-    ->name('auditor.ac.analyse-procedures.import-excel');
-Route::post('analyse-procedures/analyze-document',  [AnalyseProceduresController::class, 'analyzeDocument'])
-    ->name('auditor.ac.analyse-procedures.analyze-document');
-Route::post('analyse-procedures/level-doc-upload',  [AnalyseProceduresController::class, 'levelDocUpload'])
-    ->name('auditor.ac.analyse-procedures.level-doc-upload');
-Route::post('analyse-procedures',                   [AnalyseProceduresController::class, 'store'])
+Route::post('analyse-procedures', [AnalyseProceduresController::class, 'store'])
     ->name('auditor.ac.analyse-procedures.store');
 
-// Routes avec {form}
-Route::get   ('analyse-procedures/{form}/edit',       [AnalyseProceduresController::class, 'edit'])
-    ->name('auditor.ac.analyse-procedures.edit');
-Route::put   ('analyse-procedures/{form}',            [AnalyseProceduresController::class, 'update'])
+// ── API sans {form} ─────────────────────────────────────────────────
+Route::post('analyse-procedures/ai-suggest',
+    [AnalyseProceduresController::class, 'aiSuggest'])
+    ->name('auditor.ac.analyse-procedures.ai-suggest');
+
+Route::post('analyse-procedures/import-excel',
+    [AnalyseProceduresController::class, 'importExcel'])
+    ->name('auditor.ac.analyse-procedures.import-excel');
+
+Route::post('analyse-procedures/analyze-document',
+    [AnalyseProceduresController::class, 'analyzeDocument'])
+    ->name('auditor.ac.analyse-procedures.analyze-document');
+
+Route::post('analyse-procedures/level-doc-upload',
+    [AnalyseProceduresController::class, 'levelDocUpload'])
+    ->name('auditor.ac.analyse-procedures.level-doc-upload');
+
+Route::post('analyse-procedures/assign-procedure',
+    [AnalyseProceduresController::class, 'assignProcedure'])
+    ->name('auditor.ac.analyse-procedures.assign-procedure');
+
+Route::delete('analyse-procedures/delete-doc',
+    [AnalyseProceduresController::class, 'deleteDoc'])
+    ->name('auditor.ac.analyse-procedures.delete-doc');
+
+// ── Routes paramétrées {form} ────────────────────────────────────────
+Route::get('analyse-procedures/{form}/edit',
+    [AnalyseProceduresController::class, 'edit'])
+    ->name('auditor.ac.preparation.analyse-procedures.edit');
+
+Route::put('analyse-procedures/{form}',
+    [AnalyseProceduresController::class, 'update'])
     ->name('auditor.ac.analyse-procedures.update');
-Route::delete('analyse-procedures/{form}',            [AnalyseProceduresController::class, 'destroy'])
+
+Route::delete('analyse-procedures/{form}',
+    [AnalyseProceduresController::class, 'destroy'])
     ->name('auditor.ac.analyse-procedures.destroy');
-Route::post  ('analyse-procedures/{form}/soumettre',  [AnalyseProceduresController::class, 'soumettre'])
+
+Route::post('analyse-procedures/{form}/soumettre',
+    [AnalyseProceduresController::class, 'soumettre'])
     ->name('auditor.ac.analyse-procedures.soumettre');
-Route::post  ('analyse-procedures/{form}/valider',    [AnalyseProceduresController::class, 'valider'])
+
+Route::post('analyse-procedures/{form}/valider',
+    [AnalyseProceduresController::class, 'valider'])
     ->name('auditor.ac.analyse-procedures.valider');
-Route::post  ('analyse-procedures/{form}/ai-reformat',[AnalyseProceduresController::class, 'aiReformat'])
-    ->name('auditor.ac.analyse-procedures.ai-reformat');
         //         // analyse-taches
-//         Route::get('analyse-taches', [App\Http\Controllers\Auditor\AnalyseTachesController::class, 'index'])->name('audit.ac.preparation.analyse-taches');
-//         Route::get('analyse-taches/{form}/edit', [App\Http\Controllers\Auditor\AnalyseTachesController::class, 'edit'])->name('auditor.ac.analyse-taches.edit');
-//         Route::post('analyse-taches', [App\Http\Controllers\Auditor\AnalyseTachesController::class, 'store'])->name('auditor.ac.analyse-taches.store');
-//         Route::put('analyse-taches/{form}', [App\Http\Controllers\Auditor\AnalyseTachesController::class, 'update'])->name('auditor.ac.analyse-taches.update');
-//         Route::delete('analyse-taches/{form}', [App\Http\Controllers\Auditor\AnalyseTachesController::class, 'destroy'])->name('auditor.ac.analyse-taches.destroy');
-//         Route::post('analyse-taches/{form}/soumettre', [App\Http\Controllers\Auditor\AnalyseTachesController::class, 'soumettre'])->name('auditor.ac.analyse-taches.soumettre');
-//         Route::post('analyse-taches/{form}/valider', [App\Http\Controllers\Auditor\AnalyseTachesController::class, 'valider'])->name('auditor.ac.analyse-taches.valider');
-//         // analyse-ci-qci
-//         Route::get('analyse-ci-qci', [App\Http\Controllers\Auditor\AnalyseCiQciController::class, 'index'])->name('audit.ac.preparation.analyse-ci-qci');
-//         Route::get('analyse-ci-qci/{form}/edit', [App\Http\Controllers\Auditor\AnalyseCiQciController::class, 'edit'])->name('auditor.ac.analyse-ci-qci.edit');
-//         Route::post('analyse-ci-qci', [App\Http\Controllers\Auditor\AnalyseCiQciController::class, 'store'])->name('auditor.ac.analyse-ci-qci.store');
-//         Route::put('analyse-ci-qci/{form}', [App\Http\Controllers\Auditor\AnalyseCiQciController::class, 'update'])->name('auditor.ac.analyse-ci-qci.update');
-//         Route::delete('analyse-ci-qci/{form}', [App\Http\Controllers\Auditor\AnalyseCiQciController::class, 'destroy'])->name('auditor.ac.analyse-ci-qci.destroy');
-//         Route::post('analyse-ci-qci/{form}/soumettre', [App\Http\Controllers\Auditor\AnalyseCiQciController::class, 'soumettre'])->name('auditor.ac.analyse-ci-qci.soumettre');
-//         Route::post('analyse-ci-qci/{form}/valider', [App\Http\Controllers\Auditor\AnalyseCiQciController::class, 'valider'])->name('auditor.ac.analyse-ci-qci.valider');
-//         // analyse-conformite
-//         Route::get('analyse-conformite', [App\Http\Controllers\Auditor\AnalyseConformiteController::class, 'index'])->name('audit.ac.preparation.analyse-conformite');
-//         Route::get('analyse-conformite/{form}/edit', [App\Http\Controllers\Auditor\AnalyseConformiteController::class, 'edit'])->name('auditor.ac.analyse-conformite.edit');
-//         Route::post('analyse-conformite', [App\Http\Controllers\Auditor\AnalyseConformiteController::class, 'store'])->name('auditor.ac.analyse-conformite.store');
-//         Route::put('analyse-conformite/{form}', [App\Http\Controllers\Auditor\AnalyseConformiteController::class, 'update'])->name('auditor.ac.analyse-conformite.update');
-//         Route::delete('analyse-conformite/{form}', [App\Http\Controllers\Auditor\AnalyseConformiteController::class, 'destroy'])->name('auditor.ac.analyse-conformite.destroy');
-//         Route::post('analyse-conformite/{form}/soumettre', [App\Http\Controllers\Auditor\AnalyseConformiteController::class, 'soumettre'])->name('auditor.ac.analyse-conformite.soumettre');
-//         Route::post('analyse-conformite/{form}/valider', [App\Http\Controllers\Auditor\AnalyseConformiteController::class, 'valider'])->name('auditor.ac.analyse-conformite.valider');
-//         // analyse-marches
-//         Route::get('analyse-marches', [App\Http\Controllers\Auditor\AnalyseMarchesController::class, 'index'])->name('audit.ac.preparation.analyse-marches');
-//         Route::get('analyse-marches/{form}/edit', [App\Http\Controllers\Auditor\AnalyseMarchesController::class, 'edit'])->name('auditor.ac.analyse-marches.edit');
-//         Route::post('analyse-marches', [App\Http\Controllers\Auditor\AnalyseMarchesController::class, 'store'])->name('auditor.ac.analyse-marches.store');
-//         Route::put('analyse-marches/{form}', [App\Http\Controllers\Auditor\AnalyseMarchesController::class, 'update'])->name('auditor.ac.analyse-marches.update');
-//         Route::delete('analyse-marches/{form}', [App\Http\Controllers\Auditor\AnalyseMarchesController::class, 'destroy'])->name('auditor.ac.analyse-marches.destroy');
-//         Route::post('analyse-marches/{form}/soumettre', [App\Http\Controllers\Auditor\AnalyseMarchesController::class, 'soumettre'])->name('auditor.ac.analyse-marches.soumettre');
-//         Route::post('analyse-marches/{form}/valider', [App\Http\Controllers\Auditor\AnalyseMarchesController::class, 'valider'])->name('auditor.ac.analyse-marches.valider');
-//         // analyse-forces-faiblesses
-//         Route::get('analyse-forces-faiblesses', [App\Http\Controllers\Auditor\AnalyseForcesFaiblessesController::class, 'index'])->name('audit.ac.preparation.analyse-forces-faiblesses');
-//         Route::get('analyse-forces-faiblesses/{form}/edit', [App\Http\Controllers\Auditor\AnalyseForcesFaiblessesController::class, 'edit'])->name('auditor.ac.analyse-forces-faiblesses.edit');
-//         Route::post('analyse-forces-faiblesses', [App\Http\Controllers\Auditor\AnalyseForcesFaiblessesController::class, 'store'])->name('auditor.ac.analyse-forces-faiblesses.store');
-//         Route::put('analyse-forces-faiblesses/{form}', [App\Http\Controllers\Auditor\AnalyseForcesFaiblessesController::class, 'update'])->name('auditor.ac.analyse-forces-faiblesses.update');
-//         Route::delete('analyse-forces-faiblesses/{form}', [App\Http\Controllers\Auditor\AnalyseForcesFaiblessesController::class, 'destroy'])->name('auditor.ac.analyse-forces-faiblesses.destroy');
-//         Route::post('analyse-forces-faiblesses/{form}/soumettre', [App\Http\Controllers\Auditor\AnalyseForcesFaiblessesController::class, 'soumettre'])->name('auditor.ac.analyse-forces-faiblesses.soumettre');
-//         Route::post('analyse-forces-faiblesses/{form}/valider', [App\Http\Controllers\Auditor\AnalyseForcesFaiblessesController::class, 'valider'])->name('auditor.ac.analyse-forces-faiblesses.valider');
-//         // rapport-orientation
-//         Route::get('rapport-orientation', [App\Http\Controllers\Auditor\RapportOrientationController::class, 'index'])->name('audit.ac.preparation.rapport-orientation');
-//         Route::get('rapport-orientation/{form}/edit', [App\Http\Controllers\Auditor\RapportOrientationController::class, 'edit'])->name('auditor.ac.rapport-orientation.edit');
-//         Route::post('rapport-orientation', [App\Http\Controllers\Auditor\RapportOrientationController::class, 'store'])->name('auditor.ac.rapport-orientation.store');
-//         Route::put('rapport-orientation/{form}', [App\Http\Controllers\Auditor\RapportOrientationController::class, 'update'])->name('auditor.ac.rapport-orientation.update');
-//         Route::delete('rapport-orientation/{form}', [App\Http\Controllers\Auditor\RapportOrientationController::class, 'destroy'])->name('auditor.ac.rapport-orientation.destroy');
-//         Route::post('rapport-orientation/{form}/soumettre', [App\Http\Controllers\Auditor\RapportOrientationController::class, 'soumettre'])->name('auditor.ac.rapport-orientation.soumettre');
-//         Route::post('rapport-orientation/{form}/valider', [App\Http\Controllers\Auditor\RapportOrientationController::class, 'valider'])->name('auditor.ac.rapport-orientation.valider');
-//         // referentiels-audit
+        Route::get('analyse-taches', [App\Http\Controllers\Auditor\AnalyseTachesController::class, 'index'])->name('audit.ac.preparation.analyse-taches');
+        Route::get('analyse-taches/{form}/edit', [App\Http\Controllers\Auditor\AnalyseTachesController::class, 'edit'])->name('auditor.ac.analyse-taches.edit');
+        Route::post('analyse-taches', [App\Http\Controllers\Auditor\AnalyseTachesController::class, 'store'])->name('auditor.ac.analyse-taches.store');
+        Route::put('analyse-taches/{form}', [App\Http\Controllers\Auditor\AnalyseTachesController::class, 'update'])->name('auditor.ac.analyse-taches.update');
+        Route::delete('analyse-taches/{form}', [App\Http\Controllers\Auditor\AnalyseTachesController::class, 'destroy'])->name('auditor.ac.analyse-taches.destroy');
+        Route::post('analyse-taches/{form}/soumettre', [App\Http\Controllers\Auditor\AnalyseTachesController::class, 'soumettre'])->name('auditor.ac.analyse-taches.soumettre');
+        Route::post('analyse-taches/{form}/valider', [App\Http\Controllers\Auditor\AnalyseTachesController::class, 'valider'])->name('auditor.ac.analyse-taches.valider');
+        //analyse-ci-qci
+        Route::get('analyse-ci-qci', [App\Http\Controllers\Auditor\AnalyseCiQciController::class, 'index'])->name('audit.ac.preparation.analyse-ci-qci');
+        Route::get('analyse-ci-qci/{form}/edit', [App\Http\Controllers\Auditor\AnalyseCiQciController::class, 'edit'])->name('auditor.ac.analyse-ci-qci.edit');
+        Route::post('analyse-ci-qci', [App\Http\Controllers\Auditor\AnalyseCiQciController::class, 'store'])->name('auditor.ac.analyse-ci-qci.store');
+        Route::put('analyse-ci-qci/{form}', [App\Http\Controllers\Auditor\AnalyseCiQciController::class, 'update'])->name('auditor.ac.analyse-ci-qci.update');
+        Route::delete('analyse-ci-qci/{form}', [App\Http\Controllers\Auditor\AnalyseCiQciController::class, 'destroy'])->name('auditor.ac.analyse-ci-qci.destroy');
+        Route::post('analyse-ci-qci/{form}/soumettre', [App\Http\Controllers\Auditor\AnalyseCiQciController::class, 'soumettre'])->name('auditor.ac.analyse-ci-qci.soumettre');
+        Route::post('analyse-ci-qci/{form}/valider', [App\Http\Controllers\Auditor\AnalyseCiQciController::class, 'valider'])->name('auditor.ac.analyse-ci-qci.valider');
+        Route::post('analyse-ci-qci/import-excel',
+    [App\Http\Controllers\Auditor\AnalyseCiQciController::class, 'importExcel'])
+    ->name('auditor.ac.analyse-ci-qci.import-excel');
+        
+        // analyse-conformite
+       
+// --- CRUD de base ---
+Route::get('analyse-conformite',
+    [App\Http\Controllers\Auditor\AnalyseConformiteController::class, 'index'])
+    ->name('audit.ac.preparation.analyse-conformite');
+ 
+Route::get('analyse-conformite/{form}/edit',
+    [App\Http\Controllers\Auditor\AnalyseConformiteController::class, 'edit'])
+    ->name('auditor.ac.analyse-conformite.edit');
+ 
+Route::post('analyse-conformite',
+    [App\Http\Controllers\Auditor\AnalyseConformiteController::class, 'store'])
+    ->name('auditor.ac.analyse-conformite.store');
+ 
+Route::put('analyse-conformite/{form}',
+    [App\Http\Controllers\Auditor\AnalyseConformiteController::class, 'update'])
+    ->name('auditor.ac.analyse-conformite.update');
+ 
+Route::delete('analyse-conformite/{form}',
+    [App\Http\Controllers\Auditor\AnalyseConformiteController::class, 'destroy'])
+    ->name('auditor.ac.analyse-conformite.destroy');
+ 
+// --- Workflow statuts ---
+Route::post('analyse-conformite/{form}/soumettre',
+    [App\Http\Controllers\Auditor\AnalyseConformiteController::class, 'soumettre'])
+    ->name('auditor.ac.analyse-conformite.soumettre');
+ 
+Route::post('analyse-conformite/{form}/valider',
+    [App\Http\Controllers\Auditor\AnalyseConformiteController::class, 'valider'])
+    ->name('auditor.ac.analyse-conformite.valider');
+ 
+// --- Import / Export Excel ---
+Route::post('analyse-conformite/importer',
+    [App\Http\Controllers\Auditor\AnalyseConformiteController::class, 'importer'])
+    ->name('auditor.ac.analyse-conformite.importer');
+ 
+Route::get('analyse-conformite/{form}/exporter',
+    [App\Http\Controllers\Auditor\AnalyseConformiteController::class, 'exporter'])
+    ->name('auditor.ac.analyse-conformite.exporter');
+ 
+// --- Propositions IA (par item) ---
+Route::post('analyse-conformite/{form}/ia/proposition',
+    [App\Http\Controllers\Auditor\AnalyseConformiteController::class, 'propositionIA'])
+    ->name('auditor.ac.analyse-conformite.ia.proposition');
+ 
+// --- Synthèse IA globale ---
+Route::get('analyse-conformite/{form}/ia/synthese',
+    [App\Http\Controllers\Auditor\AnalyseConformiteController::class, 'propositionIAGlobale'])
+    ->name('auditor.ac.analyse-conformite.ia.synthese');
+ 
+// --- Drag & Drop – réorganisation phases ---
+Route::post('analyse-conformite/{form}/phases/reordonner',
+    [App\Http\Controllers\Auditor\AnalyseConformiteController::class, 'reordonnerPhases'])
+    ->name('auditor.ac.analyse-conformite.phases.reordonner');
+ 
+// --- Drag & Drop – réorganisation sous-phases ---
+Route::post('analyse-conformite/phases/{phase}/sous-phases/reordonner',
+    [App\Http\Controllers\Auditor\AnalyseConformiteController::class, 'reordonnerSousPhases'])
+    ->name('auditor.ac.analyse-conformite.sous-phases.reordonner');
+    
+    
+    //         // analyse-marches
+     Route::get('analyse-marches', [App\Http\Controllers\Auditor\AnalyseMarchesController::class, 'index'])->name('audit.ac.preparation.analyse-marches');
+Route::get('analyse-marches/{form}/edit', [App\Http\Controllers\Auditor\AnalyseMarchesController::class, 'edit'])->name('auditor.ac.analyse-marches.edit');
+Route::post('analyse-marches', [App\Http\Controllers\Auditor\AnalyseMarchesController::class, 'store'])->name('auditor.ac.analyse-marches.store');
+Route::put('analyse-marches/{form}', [App\Http\Controllers\Auditor\AnalyseMarchesController::class, 'update'])->name('auditor.ac.analyse-marches.update');
+Route::delete('analyse-marches/{form}', [App\Http\Controllers\Auditor\AnalyseMarchesController::class, 'destroy'])->name('auditor.ac.analyse-marches.destroy');
+Route::post('analyse-marches/{form}/soumettre', [App\Http\Controllers\Auditor\AnalyseMarchesController::class, 'soumettre'])->name('auditor.ac.analyse-marches.soumettre');
+Route::post('analyse-marches/{form}/valider', [App\Http\Controllers\Auditor\AnalyseMarchesController::class, 'valider'])->name('auditor.ac.analyse-marches.valider');
+
+// ── IA & outils ──────────────────────────────────────────────────────
+Route::post('analyse-marches/ai-suggest', [App\Http\Controllers\Auditor\AnalyseMarchesController::class, 'aiSuggest'])->name('auditor.ac.analyse-marches.ai-suggest');
+Route::post('analyse-marches/import-excel', [App\Http\Controllers\Auditor\AnalyseMarchesController::class, 'importExcel'])->name('auditor.ac.analyse-marches.import-excel');
+Route::post('analyse-marches/doc-upload', [App\Http\Controllers\Auditor\AnalyseMarchesController::class, 'docUpload'])->name('auditor.ac.analyse-marches.doc-upload');
+Route::delete('analyse-marches/delete-doc', [App\Http\Controllers\Auditor\AnalyseMarchesController::class, 'deleteDoc'])->name('auditor.ac.analyse-marches.delete-doc'); 
+    
+    // analyse-forces-faiblesses
+   // ── Analyse Forces & Faiblesses — TFFA (routes utilitaires AVANT {form}/*)  ──────
+Route::post('analyse-forces-faiblesses/ai-suggest', [App\Http\Controllers\Auditor\AnalyseForcesFaiblessesController::class, 'aiSuggest'])->name('auditor.ac.analyse-forces-faiblesses.ai-suggest');
+
+// ── CRUD + workflow ────────────────────────────────────────────────────────────────
+Route::get('analyse-forces-faiblesses', [App\Http\Controllers\Auditor\AnalyseForcesFaiblessesController::class, 'index'])->name('audit.ac.preparation.analyse-forces-faiblesses');
+Route::get('analyse-forces-faiblesses/{form}/edit', [App\Http\Controllers\Auditor\AnalyseForcesFaiblessesController::class, 'edit'])->name('auditor.ac.analyse-forces-faiblesses.edit');
+Route::post('analyse-forces-faiblesses', [App\Http\Controllers\Auditor\AnalyseForcesFaiblessesController::class, 'store'])->name('auditor.ac.analyse-forces-faiblesses.store');
+Route::put('analyse-forces-faiblesses/{form}', [App\Http\Controllers\Auditor\AnalyseForcesFaiblessesController::class, 'update'])->name('auditor.ac.analyse-forces-faiblesses.update');
+Route::delete('analyse-forces-faiblesses/{form}', [App\Http\Controllers\Auditor\AnalyseForcesFaiblessesController::class, 'destroy'])->name('auditor.ac.analyse-forces-faiblesses.destroy');
+Route::post('analyse-forces-faiblesses/{form}/soumettre', [App\Http\Controllers\Auditor\AnalyseForcesFaiblessesController::class, 'soumettre'])->name('auditor.ac.analyse-forces-faiblesses.soumettre');
+Route::post('analyse-forces-faiblesses/{form}/valider', [App\Http\Controllers\Auditor\AnalyseForcesFaiblessesController::class, 'valider'])->name('auditor.ac.analyse-forces-faiblesses.valider');
+   
+    //rapport-orientation
+
+// ── Rapport d'Orientation (RADO) ──────────────────────────────────────────────
+// IMPORTANT : la route ai-suggest DOIT être déclarée AVANT {form}/* pour éviter les conflits
+Route::post('rapport-orientation/ai-suggest', [App\Http\Controllers\Auditor\RapportOrientationController::class, 'aiSuggest'])->name('auditor.ac.rapport-orientation.ai-suggest');
+
+Route::get('rapport-orientation', [App\Http\Controllers\Auditor\RapportOrientationController::class, 'index'])->name('audit.ac.preparation.rapport-orientation');
+Route::post('rapport-orientation', [App\Http\Controllers\Auditor\RapportOrientationController::class, 'store'])->name('auditor.ac.rapport-orientation.store');
+
+Route::get('rapport-orientation/{form}/edit', [App\Http\Controllers\Auditor\RapportOrientationController::class, 'edit'])->name('auditor.ac.rapport-orientation.edit');
+Route::put('rapport-orientation/{form}', [App\Http\Controllers\Auditor\RapportOrientationController::class, 'update'])->name('auditor.ac.rapport-orientation.update');
+Route::delete('rapport-orientation/{form}', [App\Http\Controllers\Auditor\RapportOrientationController::class, 'destroy'])->name('auditor.ac.rapport-orientation.destroy');
+Route::post('rapport-orientation/{form}/soumettre', [App\Http\Controllers\Auditor\RapportOrientationController::class, 'soumettre'])->name('auditor.ac.rapport-orientation.soumettre');
+Route::post('rapport-orientation/{form}/valider', [App\Http\Controllers\Auditor\RapportOrientationController::class, 'valider'])->name('auditor.ac.rapport-orientation.valider');
+
+    //         // referentiels-audit
 //         Route::get('referentiels-audit', [App\Http\Controllers\Auditor\ReferentielsAuditController::class, 'index'])->name('audit.ac.preparation.referentiels-audit');
 //         Route::get('referentiels-audit/{form}/edit', [App\Http\Controllers\Auditor\ReferentielsAuditController::class, 'edit'])->name('auditor.ac.referentiels-audit.edit');
 //         Route::post('referentiels-audit', [App\Http\Controllers\Auditor\ReferentielsAuditController::class, 'store'])->name('auditor.ac.referentiels-audit.store');
@@ -663,170 +863,283 @@ Route::post  ('analyse-procedures/{form}/ai-reformat',[AnalyseProceduresControll
 //         Route::delete('referentiels-audit/{form}', [App\Http\Controllers\Auditor\ReferentielsAuditController::class, 'destroy'])->name('auditor.ac.referentiels-audit.destroy');
 //         Route::post('referentiels-audit/{form}/soumettre', [App\Http\Controllers\Auditor\ReferentielsAuditController::class, 'soumettre'])->name('auditor.ac.referentiels-audit.soumettre');
 //         Route::post('referentiels-audit/{form}/valider', [App\Http\Controllers\Auditor\ReferentielsAuditController::class, 'valider'])->name('auditor.ac.referentiels-audit.valider');
-//         // referentiel-ci
-//         Route::get('referentiel-ci', [App\Http\Controllers\Auditor\ReferentielCiController::class, 'index'])->name('audit.ac.preparation.referentiel-ci');
-//         Route::get('referentiel-ci/{form}/edit', [App\Http\Controllers\Auditor\ReferentielCiController::class, 'edit'])->name('auditor.ac.referentiel-ci.edit');
-//         Route::post('referentiel-ci', [App\Http\Controllers\Auditor\ReferentielCiController::class, 'store'])->name('auditor.ac.referentiel-ci.store');
-//         Route::put('referentiel-ci/{form}', [App\Http\Controllers\Auditor\ReferentielCiController::class, 'update'])->name('auditor.ac.referentiel-ci.update');
-//         Route::delete('referentiel-ci/{form}', [App\Http\Controllers\Auditor\ReferentielCiController::class, 'destroy'])->name('auditor.ac.referentiel-ci.destroy');
-//         Route::post('referentiel-ci/{form}/soumettre', [App\Http\Controllers\Auditor\ReferentielCiController::class, 'soumettre'])->name('auditor.ac.referentiel-ci.soumettre');
-//         Route::post('referentiel-ci/{form}/valider', [App\Http\Controllers\Auditor\ReferentielCiController::class, 'valider'])->name('auditor.ac.referentiel-ci.valider');
-//         // referentiel-conformite
-//         Route::get('referentiel-conformite', [App\Http\Controllers\Auditor\ReferentielConformiteController::class, 'index'])->name('audit.ac.preparation.referentiel-conformite');
-//         Route::get('referentiel-conformite/{form}/edit', [App\Http\Controllers\Auditor\ReferentielConformiteController::class, 'edit'])->name('auditor.ac.referentiel-conformite.edit');
-//         Route::post('referentiel-conformite', [App\Http\Controllers\Auditor\ReferentielConformiteController::class, 'store'])->name('auditor.ac.referentiel-conformite.store');
-//         Route::put('referentiel-conformite/{form}', [App\Http\Controllers\Auditor\ReferentielConformiteController::class, 'update'])->name('auditor.ac.referentiel-conformite.update');
-//         Route::delete('referentiel-conformite/{form}', [App\Http\Controllers\Auditor\ReferentielConformiteController::class, 'destroy'])->name('auditor.ac.referentiel-conformite.destroy');
-//         Route::post('referentiel-conformite/{form}/soumettre', [App\Http\Controllers\Auditor\ReferentielConformiteController::class, 'soumettre'])->name('auditor.ac.referentiel-conformite.soumettre');
-//         Route::post('referentiel-conformite/{form}/valider', [App\Http\Controllers\Auditor\ReferentielConformiteController::class, 'valider'])->name('auditor.ac.referentiel-conformite.valider');
+        // referentiel-ci
+        Route::get('referentiel-ci', [App\Http\Controllers\Auditor\ReferentielCiController::class, 'index'])->name('audit.ac.preparation.referentiel-ci');
+        Route::get('referentiel-ci/{form}/edit', [App\Http\Controllers\Auditor\ReferentielCiController::class, 'edit'])->name('auditor.ac.referentiel-ci.edit');
+        Route::post('referentiel-ci', [App\Http\Controllers\Auditor\ReferentielCiController::class, 'store'])->name('auditor.ac.referentiel-ci.store');
+        Route::put('referentiel-ci/{form}', [App\Http\Controllers\Auditor\ReferentielCiController::class, 'update'])->name('auditor.ac.referentiel-ci.update');
+        Route::delete('referentiel-ci/{form}', [App\Http\Controllers\Auditor\ReferentielCiController::class, 'destroy'])->name('auditor.ac.referentiel-ci.destroy');
+        Route::post('referentiel-ci/{form}/soumettre', [App\Http\Controllers\Auditor\ReferentielCiController::class, 'soumettre'])->name('auditor.ac.referentiel-ci.soumettre');
+        Route::post('referentiel-ci/{form}/valider', [App\Http\Controllers\Auditor\ReferentielCiController::class, 'valider'])->name('auditor.ac.referentiel-ci.valider');
+        // referentiel-conformite
 //         // referentiel-marches
-//         Route::get('referentiel-marches', [App\Http\Controllers\Auditor\ReferentielMarchesController::class, 'index'])->name('audit.ac.preparation.referentiel-marches');
-//         Route::get('referentiel-marches/{form}/edit', [App\Http\Controllers\Auditor\ReferentielMarchesController::class, 'edit'])->name('auditor.ac.referentiel-marches.edit');
-//         Route::post('referentiel-marches', [App\Http\Controllers\Auditor\ReferentielMarchesController::class, 'store'])->name('auditor.ac.referentiel-marches.store');
-//         Route::put('referentiel-marches/{form}', [App\Http\Controllers\Auditor\ReferentielMarchesController::class, 'update'])->name('auditor.ac.referentiel-marches.update');
-//         Route::delete('referentiel-marches/{form}', [App\Http\Controllers\Auditor\ReferentielMarchesController::class, 'destroy'])->name('auditor.ac.referentiel-marches.destroy');
-//         Route::post('referentiel-marches/{form}/soumettre', [App\Http\Controllers\Auditor\ReferentielMarchesController::class, 'soumettre'])->name('auditor.ac.referentiel-marches.soumettre');
-//         Route::post('referentiel-marches/{form}/valider', [App\Http\Controllers\Auditor\ReferentielMarchesController::class, 'valider'])->name('auditor.ac.referentiel-marches.valider');
-//         // referentiel-transactions
-//         Route::get('referentiel-transactions', [App\Http\Controllers\Auditor\ReferentielTransactionsController::class, 'index'])->name('audit.ac.preparation.referentiel-transactions');
-//         Route::get('referentiel-transactions/{form}/edit', [App\Http\Controllers\Auditor\ReferentielTransactionsController::class, 'edit'])->name('auditor.ac.referentiel-transactions.edit');
-//         Route::post('referentiel-transactions', [App\Http\Controllers\Auditor\ReferentielTransactionsController::class, 'store'])->name('auditor.ac.referentiel-transactions.store');
-//         Route::put('referentiel-transactions/{form}', [App\Http\Controllers\Auditor\ReferentielTransactionsController::class, 'update'])->name('auditor.ac.referentiel-transactions.update');
-//         Route::delete('referentiel-transactions/{form}', [App\Http\Controllers\Auditor\ReferentielTransactionsController::class, 'destroy'])->name('auditor.ac.referentiel-transactions.destroy');
-//         Route::post('referentiel-transactions/{form}/soumettre', [App\Http\Controllers\Auditor\ReferentielTransactionsController::class, 'soumettre'])->name('auditor.ac.referentiel-transactions.soumettre');
-//         Route::post('referentiel-transactions/{form}/valider', [App\Http\Controllers\Auditor\ReferentielTransactionsController::class, 'valider'])->name('auditor.ac.referentiel-transactions.valider');
-//         // programmes-travail
-//         Route::get('programmes-travail', [App\Http\Controllers\Auditor\ProgrammesTravailController::class, 'index'])->name('audit.ac.preparation.programmes-travail');
-//         Route::get('programmes-travail/{form}/edit', [App\Http\Controllers\Auditor\ProgrammesTravailController::class, 'edit'])->name('auditor.ac.programmes-travail.edit');
-//         Route::post('programmes-travail', [App\Http\Controllers\Auditor\ProgrammesTravailController::class, 'store'])->name('auditor.ac.programmes-travail.store');
-//         Route::put('programmes-travail/{form}', [App\Http\Controllers\Auditor\ProgrammesTravailController::class, 'update'])->name('auditor.ac.programmes-travail.update');
-//         Route::delete('programmes-travail/{form}', [App\Http\Controllers\Auditor\ProgrammesTravailController::class, 'destroy'])->name('auditor.ac.programmes-travail.destroy');
-//         Route::post('programmes-travail/{form}/soumettre', [App\Http\Controllers\Auditor\ProgrammesTravailController::class, 'soumettre'])->name('auditor.ac.programmes-travail.soumettre');
-//         Route::post('programmes-travail/{form}/valider', [App\Http\Controllers\Auditor\ProgrammesTravailController::class, 'valider'])->name('auditor.ac.programmes-travail.valider');
+ 
+// Routes RCM — Référentiel de Contrôle des Marchés Publics
+// ════════════════════════════════════════════════════════════════════════
+
+Route::get('referentiel-marches', [ReferentielMarchesController::class, 'index'])
+    ->name('audit.ac.preparation.referentiel-marches');
+Route::get('referentiel-marches/{form}/edit', [ReferentielMarchesController::class, 'edit'])
+    ->name('auditor.ac.referentiel-marches.edit');
+Route::post('referentiel-marches', [ReferentielMarchesController::class, 'store'])
+    ->name('auditor.ac.referentiel-marches.store');
+Route::put('referentiel-marches/{form}', [ReferentielMarchesController::class, 'update'])
+    ->name('auditor.ac.referentiel-marches.update');
+Route::post('referentiel-marches/{form}/soumettre', [ReferentielMarchesController::class, 'soumettre'])
+    ->name('auditor.ac.referentiel-marches.soumettre');
+Route::post('referentiel-marches/{form}/valider', [ReferentielMarchesController::class, 'valider'])
+    ->name('auditor.ac.referentiel-marches.valider');
+Route::delete('referentiel-marches/{form}', [ReferentielMarchesController::class, 'destroy'])
+    ->name('auditor.ac.referentiel-marches.destroy');
+
+// Affectations phases (DM/CM)
+Route::put('referentiel-marches/{form}/phases', [ReferentielMarchesController::class, 'updatePhases'])
+    ->name('auditor.ac.referentiel-marches.phases');
+
+// CRUD critères
+Route::post('referentiel-marches/{rcm}/critere', [ReferentielMarchesController::class, 'storeCritere'])
+    ->name('auditor.ac.referentiel-marches.critere.store');
+Route::put('referentiel-marches/critere/{critere}', [ReferentielMarchesController::class, 'updateCritere'])
+    ->name('auditor.ac.referentiel-marches.critere.update');
+Route::delete('referentiel-marches/critere/{critere}', [ReferentielMarchesController::class, 'destroyCritere'])
+    ->name('auditor.ac.referentiel-marches.critere.destroy');
+
+// Preuves
+Route::post('referentiel-marches/{rcm}/upload-preuve', [ReferentielMarchesController::class, 'uploadPreuve'])
+    ->name('auditor.ac.referentiel-marches.upload-preuve');
+Route::delete('referentiel-marches/{rcm}/delete-preuve', [ReferentielMarchesController::class, 'deletePreuve'])
+    ->name('auditor.ac.referentiel-marches.delete-preuve');
+
+
+// ════════════════════════════════════════════════════════════════════════
+// Routes RCT — Référentiel de Contrôle des Transactions Financières
+// ════════════════════════════════════════════════════════════════════════
+
+Route::get('referentiel-transactions', [ReferentielTransactionsController::class, 'index'])
+    ->name('audit.ac.preparation.referentiel-transactions');
+Route::get('referentiel-transactions/{form}/edit', [ReferentielTransactionsController::class, 'edit'])
+    ->name('auditor.ac.referentiel-transactions.edit');
+Route::post('referentiel-transactions', [ReferentielTransactionsController::class, 'store'])
+    ->name('auditor.ac.referentiel-transactions.store');
+Route::put('referentiel-transactions/{form}', [ReferentielTransactionsController::class, 'update'])
+    ->name('auditor.ac.referentiel-transactions.update');
+Route::post('referentiel-transactions/{form}/soumettre', [ReferentielTransactionsController::class, 'soumettre'])
+    ->name('auditor.ac.referentiel-transactions.soumettre');
+Route::post('referentiel-transactions/{form}/valider', [ReferentielTransactionsController::class, 'valider'])
+    ->name('auditor.ac.referentiel-transactions.valider');
+Route::delete('referentiel-transactions/{form}', [ReferentielTransactionsController::class, 'destroy'])
+    ->name('auditor.ac.referentiel-transactions.destroy');
+
+// Affectations catégories (DM/CM)
+Route::put('referentiel-transactions/{form}/categories', [ReferentielTransactionsController::class, 'updateCategories'])
+    ->name('auditor.ac.referentiel-transactions.categories');
+
+// Save saisie (note + preuves) — save immédiat
+Route::post('referentiel-transactions/{rct}/saisie', [ReferentielTransactionsController::class, 'saveSaisie'])
+    ->name('auditor.ac.referentiel-transactions.saisie.save');
+
+// Preuves
+Route::post('referentiel-transactions/{rct}/upload-preuve', [ReferentielTransactionsController::class, 'uploadPreuve'])
+    ->name('auditor.ac.referentiel-transactions.upload-preuve');
+Route::delete('referentiel-transactions/{rct}/delete-preuve', [ReferentielTransactionsController::class, 'deletePreuve'])
+    ->name('auditor.ac.referentiel-transactions.delete-preuve');
+
+// IA
+Route::post('referentiel-transactions/ia-suggestion', [ReferentielTransactionsController::class, 'iaSuggestion'])
+    ->name('auditor.ac.referentiel-transactions.ia-suggestion');
+Route::post('referentiel-transactions/{form}/ia-analyse', [ReferentielTransactionsController::class, 'iaAnalyseGlobale'])
+    ->name('auditor.ac.referentiel-transactions.ia-analyse');
+// ── Formulaire principal ─────────────────────────────────────────────────
+
+
+ 
+// ── Formulaire principal ─────────────────────────────────────────────────
+Route::get('referentiel-conformite', [ReferentielConformiteController::class, 'index'])
+    ->name('audit.ac.preparation.referentiel-conformite');
+ 
+Route::get('referentiel-conformite/{form}/edit', [ReferentielConformiteController::class, 'edit'])
+    ->name('auditor.ac.referentiel-conformite.edit');
+ 
+Route::post('referentiel-conformite', [ReferentielConformiteController::class, 'store'])
+    ->name('auditor.ac.referentiel-conformite.store');
+ 
+Route::put('referentiel-conformite/{form}', [ReferentielConformiteController::class, 'update'])
+    ->name('auditor.ac.referentiel-conformite.update');
+ 
+Route::delete('referentiel-conformite/{form}', [ReferentielConformiteController::class, 'destroy'])
+    ->name('auditor.ac.referentiel-conformite.destroy');
+ 
+// ── Workflow ─────────────────────────────────────────────────────────────
+Route::post('referentiel-conformite/{form}/soumettre', [ReferentielConformiteController::class, 'soumettre'])
+    ->name('auditor.ac.referentiel-conformite.soumettre');
+ 
+Route::post('referentiel-conformite/{form}/valider', [ReferentielConformiteController::class, 'valider'])
+    ->name('auditor.ac.referentiel-conformite.valider');
+ 
+// ── Domaines (DM/CM uniquement) ───────────────────────────────────────────
+Route::post('referentiel-conformite/{rcc}/domaine', [ReferentielConformiteController::class, 'storeDomaine'])
+    ->name('auditor.ac.referentiel-conformite.domaine.store');
+ 
+Route::put('referentiel-conformite/domaine/{domaine}', [ReferentielConformiteController::class, 'updateDomaine'])
+    ->name('auditor.ac.referentiel-conformite.domaine.update');
+ 
+Route::delete('referentiel-conformite/domaine/{domaine}', [ReferentielConformiteController::class, 'destroyDomaine'])
+    ->name('auditor.ac.referentiel-conformite.domaine.destroy');
+ 
+// ── Guide par domaine (NOUVEAU) ───────────────────────────────────────────
+Route::post('referentiel-conformite/{rcc}/upload-guide', [ReferentielConformiteController::class, 'uploadGuide'])
+    ->name('auditor.ac.referentiel-conformite.upload-guide');
+ 
+Route::delete('referentiel-conformite/{rcc}/delete-guide', [ReferentielConformiteController::class, 'deleteGuide'])
+    ->name('auditor.ac.referentiel-conformite.delete-guide');
+ 
+// ── Génération IA (NOUVEAU) ───────────────────────────────────────────────
+Route::post('referentiel-conformite/{rcc}/generate-ai', [ReferentielConformiteController::class, 'generateAi'])
+    ->name('auditor.ac.referentiel-conformite.generate-ai');
+ 
+// ── Critères (auditeur affecté ou DM/CM) ─────────────────────────────────
+Route::post('referentiel-conformite/{rcc}/critere', [ReferentielConformiteController::class, 'storeCritere'])
+    ->name('auditor.ac.referentiel-conformite.critere.store');
+ 
+Route::put('referentiel-conformite/critere/{critere}', [ReferentielConformiteController::class, 'updateCritere'])
+    ->name('auditor.ac.referentiel-conformite.critere.update');
+ 
+Route::delete('referentiel-conformite/critere/{critere}', [ReferentielConformiteController::class, 'destroyCritere'])
+    ->name('auditor.ac.referentiel-conformite.critere.destroy');
+ 
+// ── Preuves par critère ───────────────────────────────────────────────────
+Route::post('referentiel-conformite/{rcc}/upload-preuve', [ReferentielConformiteController::class, 'uploadPreuve'])
+    ->name('auditor.ac.referentiel-conformite.upload-preuve');
+ 
+Route::delete('referentiel-conformite/{rcc}/delete-preuve', [ReferentielConformiteController::class, 'deletePreuve'])
+    ->name('auditor.ac.referentiel-conformite.delete-preuve');
+ 
+    //         // programmes-travail
+        // Route::get('programmes-travail', [App\Http\Controllers\Auditor\ProgrammesTravailController::class, 'index'])->name('audit.ac.preparation.programmes-travail');
+        // Route::get('programmes-travail/{form}/edit', [App\Http\Controllers\Auditor\ProgrammesTravailController::class, 'edit'])->name('auditor.ac.programmes-travail.edit');
+        // Route::post('programmes-travail', [App\Http\Controllers\Auditor\ProgrammesTravailController::class, 'store'])->name('auditor.ac.programmes-travail.store');
+        // Route::put('programmes-travail/{form}', [App\Http\Controllers\Auditor\ProgrammesTravailController::class, 'update'])->name('auditor.ac.programmes-travail.update');
+        // Route::delete('programmes-travail/{form}', [App\Http\Controllers\Auditor\ProgrammesTravailController::class, 'destroy'])->name('auditor.ac.programmes-travail.destroy');
+        // Route::post('programmes-travail/{form}/soumettre', [App\Http\Controllers\Auditor\ProgrammesTravailController::class, 'soumettre'])->name('auditor.ac.programmes-travail.soumettre');
+        // Route::post('programmes-travail/{form}/valider', [App\Http\Controllers\Auditor\ProgrammesTravailController::class, 'valider'])->name('auditor.ac.programmes-travail.valider');
 //         // prog-ci
-//         Route::get('prog-ci', [App\Http\Controllers\Auditor\ProgCiController::class, 'index'])->name('audit.ac.preparation.prog-ci');
-//         Route::get('prog-ci/{form}/edit', [App\Http\Controllers\Auditor\ProgCiController::class, 'edit'])->name('auditor.ac.prog-ci.edit');
-//         Route::post('prog-ci', [App\Http\Controllers\Auditor\ProgCiController::class, 'store'])->name('auditor.ac.prog-ci.store');
-//         Route::put('prog-ci/{form}', [App\Http\Controllers\Auditor\ProgCiController::class, 'update'])->name('auditor.ac.prog-ci.update');
-//         Route::delete('prog-ci/{form}', [App\Http\Controllers\Auditor\ProgCiController::class, 'destroy'])->name('auditor.ac.prog-ci.destroy');
-//         Route::post('prog-ci/{form}/soumettre', [App\Http\Controllers\Auditor\ProgCiController::class, 'soumettre'])->name('auditor.ac.prog-ci.soumettre');
-//         Route::post('prog-ci/{form}/valider', [App\Http\Controllers\Auditor\ProgCiController::class, 'valider'])->name('auditor.ac.prog-ci.valider');
-//         // prog-conformite
-//         Route::get('prog-conformite', [App\Http\Controllers\Auditor\ProgConformiteController::class, 'index'])->name('audit.ac.preparation.prog-conformite');
-//         Route::get('prog-conformite/{form}/edit', [App\Http\Controllers\Auditor\ProgConformiteController::class, 'edit'])->name('auditor.ac.prog-conformite.edit');
-//         Route::post('prog-conformite', [App\Http\Controllers\Auditor\ProgConformiteController::class, 'store'])->name('auditor.ac.prog-conformite.store');
-//         Route::put('prog-conformite/{form}', [App\Http\Controllers\Auditor\ProgConformiteController::class, 'update'])->name('auditor.ac.prog-conformite.update');
-//         Route::delete('prog-conformite/{form}', [App\Http\Controllers\Auditor\ProgConformiteController::class, 'destroy'])->name('auditor.ac.prog-conformite.destroy');
-//         Route::post('prog-conformite/{form}/soumettre', [App\Http\Controllers\Auditor\ProgConformiteController::class, 'soumettre'])->name('auditor.ac.prog-conformite.soumettre');
-//         Route::post('prog-conformite/{form}/valider', [App\Http\Controllers\Auditor\ProgConformiteController::class, 'valider'])->name('auditor.ac.prog-conformite.valider');
-//         // prog-marches
-//         Route::get('prog-marches', [App\Http\Controllers\Auditor\ProgMarchesController::class, 'index'])->name('audit.ac.preparation.prog-marches');
-//         Route::get('prog-marches/{form}/edit', [App\Http\Controllers\Auditor\ProgMarchesController::class, 'edit'])->name('auditor.ac.prog-marches.edit');
-//         Route::post('prog-marches', [App\Http\Controllers\Auditor\ProgMarchesController::class, 'store'])->name('auditor.ac.prog-marches.store');
-//         Route::put('prog-marches/{form}', [App\Http\Controllers\Auditor\ProgMarchesController::class, 'update'])->name('auditor.ac.prog-marches.update');
-//         Route::delete('prog-marches/{form}', [App\Http\Controllers\Auditor\ProgMarchesController::class, 'destroy'])->name('auditor.ac.prog-marches.destroy');
-//         Route::post('prog-marches/{form}/soumettre', [App\Http\Controllers\Auditor\ProgMarchesController::class, 'soumettre'])->name('auditor.ac.prog-marches.soumettre');
-//         Route::post('prog-marches/{form}/valider', [App\Http\Controllers\Auditor\ProgMarchesController::class, 'valider'])->name('auditor.ac.prog-marches.valider');
-//         // prog-transactions
-//         Route::get('prog-transactions', [App\Http\Controllers\Auditor\ProgTransactionsController::class, 'index'])->name('audit.ac.preparation.prog-transactions');
-//         Route::get('prog-transactions/{form}/edit', [App\Http\Controllers\Auditor\ProgTransactionsController::class, 'edit'])->name('auditor.ac.prog-transactions.edit');
-//         Route::post('prog-transactions', [App\Http\Controllers\Auditor\ProgTransactionsController::class, 'store'])->name('auditor.ac.prog-transactions.store');
-//         Route::put('prog-transactions/{form}', [App\Http\Controllers\Auditor\ProgTransactionsController::class, 'update'])->name('auditor.ac.prog-transactions.update');
-//         Route::delete('prog-transactions/{form}', [App\Http\Controllers\Auditor\ProgTransactionsController::class, 'destroy'])->name('auditor.ac.prog-transactions.destroy');
-//         Route::post('prog-transactions/{form}/soumettre', [App\Http\Controllers\Auditor\ProgTransactionsController::class, 'soumettre'])->name('auditor.ac.prog-transactions.soumettre');
-//         Route::post('prog-transactions/{form}/valider', [App\Http\Controllers\Auditor\ProgTransactionsController::class, 'valider'])->name('auditor.ac.prog-transactions.valider');
-   //}); 
+
+// CRUD
+// ── IMPORTANT : routes fixes AVANT les routes paramétrées {form} ──
+
+// Modèle Excel (DOIT être avant {form}/*)
+Route::get('prog-ci/modele-excel',
+    [App\Http\Controllers\Auditor\ProgCiController::class, 'telechargerModele'])
+    ->name('auditor.ac.prog-ci.modele-excel');
+
+// IA sans {form} — si tu en as besoin globalement
+// (sinon ces routes sont déjà sur {form}/ai-suggest ci-dessous)
+
+// Index
+Route::get('prog-ci',
+    [App\Http\Controllers\Auditor\ProgCiController::class, 'index'])
+    ->name('audit.ac.preparation.prog-ci');
+
+// Store
+Route::post('prog-ci',
+    [App\Http\Controllers\Auditor\ProgCiController::class, 'store'])
+    ->name('auditor.ac.prog-ci.store');
+
+// ── Routes paramétrées {form} ────────────────────────────────────────
+Route::get('prog-ci/{form}/edit',
+    [App\Http\Controllers\Auditor\ProgCiController::class, 'edit'])
+    ->name('auditor.ac.prog-ci.edit');
+
+Route::put('prog-ci/{form}',
+    [App\Http\Controllers\Auditor\ProgCiController::class, 'update'])
+    ->name('auditor.ac.prog-ci.update');
+
+Route::delete('prog-ci/{form}',
+    [App\Http\Controllers\Auditor\ProgCiController::class, 'destroy'])
+    ->name('auditor.ac.prog-ci.destroy');
+
+Route::post('prog-ci/{form}/soumettre',
+    [App\Http\Controllers\Auditor\ProgCiController::class, 'soumettre'])
+    ->name('auditor.ac.prog-ci.soumettre');
+
+Route::post('prog-ci/{form}/valider',
+    [App\Http\Controllers\Auditor\ProgCiController::class, 'valider'])
+    ->name('auditor.ac.prog-ci.valider');
+
+Route::post('prog-ci/{form}/ai-suggest',
+    [App\Http\Controllers\Auditor\ProgCiController::class, 'aiSuggest'])
+    ->name('auditor.ac.prog-ci.ai-suggest');
+
+Route::post('prog-ci/{form}/ai-synthese',
+    [App\Http\Controllers\Auditor\ProgCiController::class, 'aiSynthese'])
+    ->name('auditor.ac.prog-ci.ai-synthese');
+
+Route::post('prog-ci/{form}/upload',
+    [App\Http\Controllers\Auditor\ProgCiController::class, 'uploadExcel'])
+    ->name('auditor.ac.prog-ci.upload');
+// ── Routes IA ───────────────────────────────────────────────────────────────────
+//
+// POST prog-ci/{form}/ai-suggest
+//   Body : {
+//     ligne:   { ref_objectif, objectif_ci, ref_controle_rci,
+//                test_controle, procedures_ci,
+//                resultat_test, nb_anomalies, taux_conformite, … },
+//     champ:   'test_controle' | 'procedures_ci' |
+//              'conclusion_auditeur' | 'objectif_ci',
+//     context: { processus, risque_libelle, … }
+//   }
+//   Retour : { success, suggestions: string[], mode: 'ai'|'fallback' }
+//
+Route::post('prog-ci/{form}/ai-suggest',
+    [App\Http\Controllers\Auditor\ProgCiController::class, 'aiSuggest'])
+    ->name('auditor.ac.prog-ci.ai-suggest');
+
+//
+// POST prog-ci/{form}/ai-synthese
+//   Body  : { lignes: [...] }  (optionnel — utilise la BD si vide)
+//   Retour : { success, synthese: string, mode: 'ai'|'fallback' }
+//
+Route::post('prog-ci/{form}/ai-synthese',
+    [App\Http\Controllers\Auditor\ProgCiController::class, 'aiSynthese'])
+    ->name('auditor.ac.prog-ci.ai-synthese');
+
+//
+// POST prog-ci/{form}/ai-accept
+//   Body  : { ligne_num: int|null, champ: string, valeur_acceptee: string }
+//   Effet : enregistre dans prog_ci_ai_suggestions.accepted = true
+//
+Route::post('prog-ci/{form}/ai-accept',
+    [App\Http\Controllers\Auditor\ProgCiController::class, 'aiAccept'])
+    ->name('auditor.ac.prog-ci.ai-accept');      
+
+
+//prog-conformite
+        Route::get('prog-conformite', [App\Http\Controllers\Auditor\ProgConformiteController::class, 'index'])->name('audit.ac.preparation.prog-conformite');
+        Route::get('prog-conformite/{form}/edit', [App\Http\Controllers\Auditor\ProgConformiteController::class, 'edit'])->name('auditor.ac.prog-conformite.edit');
+        Route::post('prog-conformite', [App\Http\Controllers\Auditor\ProgConformiteController::class, 'store'])->name('auditor.ac.prog-conformite.store');
+        Route::put('prog-conformite/{form}', [App\Http\Controllers\Auditor\ProgConformiteController::class, 'update'])->name('auditor.ac.prog-conformite.update');
+        Route::delete('prog-conformite/{form}', [App\Http\Controllers\Auditor\ProgConformiteController::class, 'destroy'])->name('auditor.ac.prog-conformite.destroy');
+        Route::post('prog-conformite/{form}/soumettre', [App\Http\Controllers\Auditor\ProgConformiteController::class, 'soumettre'])->name('auditor.ac.prog-conformite.soumettre');
+        Route::post('prog-conformite/{form}/valider', [App\Http\Controllers\Auditor\ProgConformiteController::class, 'valider'])->name('auditor.ac.prog-conformite.valider');
+        // prog-marches
+        Route::get('prog-marches', [App\Http\Controllers\Auditor\ProgMarchesController::class, 'index'])->name('audit.ac.preparation.prog-marches');
+        Route::get('prog-marches/{form}/edit', [App\Http\Controllers\Auditor\ProgMarchesController::class, 'edit'])->name('auditor.ac.prog-marches.edit');
+        Route::post('prog-marches', [App\Http\Controllers\Auditor\ProgMarchesController::class, 'store'])->name('auditor.ac.prog-marches.store');
+        Route::put('prog-marches/{form}', [App\Http\Controllers\Auditor\ProgMarchesController::class, 'update'])->name('auditor.ac.prog-marches.update');
+        Route::delete('prog-marches/{form}', [App\Http\Controllers\Auditor\ProgMarchesController::class, 'destroy'])->name('auditor.ac.prog-marches.destroy');
+        Route::post('prog-marches/{form}/soumettre', [App\Http\Controllers\Auditor\ProgMarchesController::class, 'soumettre'])->name('auditor.ac.prog-marches.soumettre');
+        Route::post('prog-marches/{form}/valider', [App\Http\Controllers\Auditor\ProgMarchesController::class, 'valider'])->name('auditor.ac.prog-marches.valider');
+        // prog-transactions
+        Route::get('prog-transactions', [App\Http\Controllers\Auditor\ProgTransactionsController::class, 'index'])->name('audit.ac.preparation.prog-transactions');
+        Route::get('prog-transactions/{form}/edit', [App\Http\Controllers\Auditor\ProgTransactionsController::class, 'edit'])->name('auditor.ac.prog-transactions.edit');
+        Route::post('prog-transactions', [App\Http\Controllers\Auditor\ProgTransactionsController::class, 'store'])->name('auditor.ac.prog-transactions.store');
+        Route::put('prog-transactions/{form}', [App\Http\Controllers\Auditor\ProgTransactionsController::class, 'update'])->name('auditor.ac.prog-transactions.update');
+        Route::delete('prog-transactions/{form}', [App\Http\Controllers\Auditor\ProgTransactionsController::class, 'destroy'])->name('auditor.ac.prog-transactions.destroy');
+        Route::post('prog-transactions/{form}/soumettre', [App\Http\Controllers\Auditor\ProgTransactionsController::class, 'soumettre'])->name('auditor.ac.prog-transactions.soumettre');
+        Route::post('prog-transactions/{form}/valider', [App\Http\Controllers\Auditor\ProgTransactionsController::class, 'valider'])->name('auditor.ac.prog-transactions.valider');
+   
 //     // ── Phase 2 : Realisation ──
-//     Route::prefix('realisation')->group(function () {
-//         // reunion-lancement
-//         Route::get('reunion-lancement', [App\Http\Controllers\Auditor\ReunionLancementController::class, 'index'])->name('audit.ac.realisation.reunion-lancement');
-//         Route::get('reunion-lancement/{form}/edit', [App\Http\Controllers\Auditor\ReunionLancementController::class, 'edit'])->name('auditor.ac.reunion-lancement.edit');
-//         Route::post('reunion-lancement', [App\Http\Controllers\Auditor\ReunionLancementController::class, 'store'])->name('auditor.ac.reunion-lancement.store');
-//         Route::put('reunion-lancement/{form}', [App\Http\Controllers\Auditor\ReunionLancementController::class, 'update'])->name('auditor.ac.reunion-lancement.update');
-//         Route::delete('reunion-lancement/{form}', [App\Http\Controllers\Auditor\ReunionLancementController::class, 'destroy'])->name('auditor.ac.reunion-lancement.destroy');
-//         Route::post('reunion-lancement/{form}/soumettre', [App\Http\Controllers\Auditor\ReunionLancementController::class, 'soumettre'])->name('auditor.ac.reunion-lancement.soumettre');
-//         Route::post('reunion-lancement/{form}/valider', [App\Http\Controllers\Auditor\ReunionLancementController::class, 'valider'])->name('auditor.ac.reunion-lancement.valider');
-//         // evaluations
-//         Route::get('evaluations', [App\Http\Controllers\Auditor\EvaluationsController::class, 'index'])->name('audit.ac.realisation.evaluations');
-//         Route::get('evaluations/{form}/edit', [App\Http\Controllers\Auditor\EvaluationsController::class, 'edit'])->name('auditor.ac.evaluations.edit');
-//         Route::post('evaluations', [App\Http\Controllers\Auditor\EvaluationsController::class, 'store'])->name('auditor.ac.evaluations.store');
-//         Route::put('evaluations/{form}', [App\Http\Controllers\Auditor\EvaluationsController::class, 'update'])->name('auditor.ac.evaluations.update');
-//         Route::delete('evaluations/{form}', [App\Http\Controllers\Auditor\EvaluationsController::class, 'destroy'])->name('auditor.ac.evaluations.destroy');
-//         Route::post('evaluations/{form}/soumettre', [App\Http\Controllers\Auditor\EvaluationsController::class, 'soumettre'])->name('auditor.ac.evaluations.soumettre');
-//         Route::post('evaluations/{form}/valider', [App\Http\Controllers\Auditor\EvaluationsController::class, 'valider'])->name('auditor.ac.evaluations.valider');
-//         // eval-ci-qci
-//         Route::get('eval-ci-qci', [App\Http\Controllers\Auditor\EvalCiQciController::class, 'index'])->name('audit.ac.realisation.eval-ci-qci');
-//         Route::get('eval-ci-qci/{form}/edit', [App\Http\Controllers\Auditor\EvalCiQciController::class, 'edit'])->name('auditor.ac.eval-ci-qci.edit');
-//         Route::post('eval-ci-qci', [App\Http\Controllers\Auditor\EvalCiQciController::class, 'store'])->name('auditor.ac.eval-ci-qci.store');
-//         Route::put('eval-ci-qci/{form}', [App\Http\Controllers\Auditor\EvalCiQciController::class, 'update'])->name('auditor.ac.eval-ci-qci.update');
-//         Route::delete('eval-ci-qci/{form}', [App\Http\Controllers\Auditor\EvalCiQciController::class, 'destroy'])->name('auditor.ac.eval-ci-qci.destroy');
-//         Route::post('eval-ci-qci/{form}/soumettre', [App\Http\Controllers\Auditor\EvalCiQciController::class, 'soumettre'])->name('auditor.ac.eval-ci-qci.soumettre');
-//         Route::post('eval-ci-qci/{form}/valider', [App\Http\Controllers\Auditor\EvalCiQciController::class, 'valider'])->name('auditor.ac.eval-ci-qci.valider');
-//         // eval-conformite
-//         Route::get('eval-conformite', [App\Http\Controllers\Auditor\EvalConformiteController::class, 'index'])->name('audit.ac.realisation.eval-conformite');
-//         Route::get('eval-conformite/{form}/edit', [App\Http\Controllers\Auditor\EvalConformiteController::class, 'edit'])->name('auditor.ac.eval-conformite.edit');
-//         Route::post('eval-conformite', [App\Http\Controllers\Auditor\EvalConformiteController::class, 'store'])->name('auditor.ac.eval-conformite.store');
-//         Route::put('eval-conformite/{form}', [App\Http\Controllers\Auditor\EvalConformiteController::class, 'update'])->name('auditor.ac.eval-conformite.update');
-//         Route::delete('eval-conformite/{form}', [App\Http\Controllers\Auditor\EvalConformiteController::class, 'destroy'])->name('auditor.ac.eval-conformite.destroy');
-//         Route::post('eval-conformite/{form}/soumettre', [App\Http\Controllers\Auditor\EvalConformiteController::class, 'soumettre'])->name('auditor.ac.eval-conformite.soumettre');
-//         Route::post('eval-conformite/{form}/valider', [App\Http\Controllers\Auditor\EvalConformiteController::class, 'valider'])->name('auditor.ac.eval-conformite.valider');
-//         // controle-transactions
-//         Route::get('controle-transactions', [App\Http\Controllers\Auditor\ControleTransactionsController::class, 'index'])->name('audit.ac.realisation.controle-transactions');
-//         Route::get('controle-transactions/{form}/edit', [App\Http\Controllers\Auditor\ControleTransactionsController::class, 'edit'])->name('auditor.ac.controle-transactions.edit');
-//         Route::post('controle-transactions', [App\Http\Controllers\Auditor\ControleTransactionsController::class, 'store'])->name('auditor.ac.controle-transactions.store');
-//         Route::put('controle-transactions/{form}', [App\Http\Controllers\Auditor\ControleTransactionsController::class, 'update'])->name('auditor.ac.controle-transactions.update');
-//         Route::delete('controle-transactions/{form}', [App\Http\Controllers\Auditor\ControleTransactionsController::class, 'destroy'])->name('auditor.ac.controle-transactions.destroy');
-//         Route::post('controle-transactions/{form}/soumettre', [App\Http\Controllers\Auditor\ControleTransactionsController::class, 'soumettre'])->name('auditor.ac.controle-transactions.soumettre');
-//         Route::post('controle-transactions/{form}/valider', [App\Http\Controllers\Auditor\ControleTransactionsController::class, 'valider'])->name('auditor.ac.controle-transactions.valider');
-//         // test-procedures
-//         Route::get('test-procedures', [App\Http\Controllers\Auditor\TestProceduresController::class, 'index'])->name('audit.ac.realisation.test-procedures');
-//         Route::get('test-procedures/{form}/edit', [App\Http\Controllers\Auditor\TestProceduresController::class, 'edit'])->name('auditor.ac.test-procedures.edit');
-//         Route::post('test-procedures', [App\Http\Controllers\Auditor\TestProceduresController::class, 'store'])->name('auditor.ac.test-procedures.store');
-//         Route::put('test-procedures/{form}', [App\Http\Controllers\Auditor\TestProceduresController::class, 'update'])->name('auditor.ac.test-procedures.update');
-//         Route::delete('test-procedures/{form}', [App\Http\Controllers\Auditor\TestProceduresController::class, 'destroy'])->name('auditor.ac.test-procedures.destroy');
-//         Route::post('test-procedures/{form}/soumettre', [App\Http\Controllers\Auditor\TestProceduresController::class, 'soumettre'])->name('auditor.ac.test-procedures.soumettre');
-//         Route::post('test-procedures/{form}/valider', [App\Http\Controllers\Auditor\TestProceduresController::class, 'valider'])->name('auditor.ac.test-procedures.valider');
-//         // test-repartition-taches
-//         Route::get('test-repartition-taches', [App\Http\Controllers\Auditor\TestRepartitionTachesController::class, 'index'])->name('audit.ac.realisation.test-repartition-taches');
-//         Route::get('test-repartition-taches/{form}/edit', [App\Http\Controllers\Auditor\TestRepartitionTachesController::class, 'edit'])->name('auditor.ac.test-repartition-taches.edit');
-//         Route::post('test-repartition-taches', [App\Http\Controllers\Auditor\TestRepartitionTachesController::class, 'store'])->name('auditor.ac.test-repartition-taches.store');
-//         Route::put('test-repartition-taches/{form}', [App\Http\Controllers\Auditor\TestRepartitionTachesController::class, 'update'])->name('auditor.ac.test-repartition-taches.update');
-//         Route::delete('test-repartition-taches/{form}', [App\Http\Controllers\Auditor\TestRepartitionTachesController::class, 'destroy'])->name('auditor.ac.test-repartition-taches.destroy');
-//         Route::post('test-repartition-taches/{form}/soumettre', [App\Http\Controllers\Auditor\TestRepartitionTachesController::class, 'soumettre'])->name('auditor.ac.test-repartition-taches.soumettre');
-//         Route::post('test-repartition-taches/{form}/valider', [App\Http\Controllers\Auditor\TestRepartitionTachesController::class, 'valider'])->name('auditor.ac.test-repartition-taches.valider');
-//         // eval-marches
-//         Route::get('eval-marches', [App\Http\Controllers\Auditor\EvalMarchesController::class, 'index'])->name('audit.ac.realisation.eval-marches');
-//         Route::get('eval-marches/{form}/edit', [App\Http\Controllers\Auditor\EvalMarchesController::class, 'edit'])->name('auditor.ac.eval-marches.edit');
-//         Route::post('eval-marches', [App\Http\Controllers\Auditor\EvalMarchesController::class, 'store'])->name('auditor.ac.eval-marches.store');
-//         Route::put('eval-marches/{form}', [App\Http\Controllers\Auditor\EvalMarchesController::class, 'update'])->name('auditor.ac.eval-marches.update');
-//         Route::delete('eval-marches/{form}', [App\Http\Controllers\Auditor\EvalMarchesController::class, 'destroy'])->name('auditor.ac.eval-marches.destroy');
-//         Route::post('eval-marches/{form}/soumettre', [App\Http\Controllers\Auditor\EvalMarchesController::class, 'soumettre'])->name('auditor.ac.eval-marches.soumettre');
-//         Route::post('eval-marches/{form}/valider', [App\Http\Controllers\Auditor\EvalMarchesController::class, 'valider'])->name('auditor.ac.eval-marches.valider');
-//         // feuilles-travail
-//         Route::get('feuilles-travail', [App\Http\Controllers\Auditor\FeuillesTravailController::class, 'index'])->name('audit.ac.realisation.feuilles-travail');
-//         Route::get('feuilles-travail/{form}/edit', [App\Http\Controllers\Auditor\FeuillesTravailController::class, 'edit'])->name('auditor.ac.feuilles-travail.edit');
-//         Route::post('feuilles-travail', [App\Http\Controllers\Auditor\FeuillesTravailController::class, 'store'])->name('auditor.ac.feuilles-travail.store');
-//         Route::put('feuilles-travail/{form}', [App\Http\Controllers\Auditor\FeuillesTravailController::class, 'update'])->name('auditor.ac.feuilles-travail.update');
-//         Route::delete('feuilles-travail/{form}', [App\Http\Controllers\Auditor\FeuillesTravailController::class, 'destroy'])->name('auditor.ac.feuilles-travail.destroy');
-//         Route::post('feuilles-travail/{form}/soumettre', [App\Http\Controllers\Auditor\FeuillesTravailController::class, 'soumettre'])->name('auditor.ac.feuilles-travail.soumettre');
-//         Route::post('feuilles-travail/{form}/valider', [App\Http\Controllers\Auditor\FeuillesTravailController::class, 'valider'])->name('auditor.ac.feuilles-travail.valider');
-//         // constats-observations
-//         Route::get('constats-observations', [App\Http\Controllers\Auditor\ConstatsObservationsController::class, 'index'])->name('audit.ac.realisation.constats-observations');
-//         Route::get('constats-observations/{form}/edit', [App\Http\Controllers\Auditor\ConstatsObservationsController::class, 'edit'])->name('auditor.ac.constats-observations.edit');
-//         Route::post('constats-observations', [App\Http\Controllers\Auditor\ConstatsObservationsController::class, 'store'])->name('auditor.ac.constats-observations.store');
-//         Route::put('constats-observations/{form}', [App\Http\Controllers\Auditor\ConstatsObservationsController::class, 'update'])->name('auditor.ac.constats-observations.update');
-//         Route::delete('constats-observations/{form}', [App\Http\Controllers\Auditor\ConstatsObservationsController::class, 'destroy'])->name('auditor.ac.constats-observations.destroy');
-//         Route::post('constats-observations/{form}/soumettre', [App\Http\Controllers\Auditor\ConstatsObservationsController::class, 'soumettre'])->name('auditor.ac.constats-observations.soumettre');
-//         Route::post('constats-observations/{form}/valider', [App\Http\Controllers\Auditor\ConstatsObservationsController::class, 'valider'])->name('auditor.ac.constats-observations.valider');
-//         // fiche-constat
-//         Route::get('fiche-constat', [App\Http\Controllers\Auditor\FicheConstatController::class, 'index'])->name('audit.ac.realisation.fiche-constat');
-//         Route::get('fiche-constat/{form}/edit', [App\Http\Controllers\Auditor\FicheConstatController::class, 'edit'])->name('auditor.ac.fiche-constat.edit');
-//         Route::post('fiche-constat', [App\Http\Controllers\Auditor\FicheConstatController::class, 'store'])->name('auditor.ac.fiche-constat.store');
-//         Route::put('fiche-constat/{form}', [App\Http\Controllers\Auditor\FicheConstatController::class, 'update'])->name('auditor.ac.fiche-constat.update');
-//         Route::delete('fiche-constat/{form}', [App\Http\Controllers\Auditor\FicheConstatController::class, 'destroy'])->name('auditor.ac.fiche-constat.destroy');
-//         Route::post('fiche-constat/{form}/soumettre', [App\Http\Controllers\Auditor\FicheConstatController::class, 'soumettre'])->name('auditor.ac.fiche-constat.soumettre');
-//         Route::post('fiche-constat/{form}/valider', [App\Http\Controllers\Auditor\FicheConstatController::class, 'valider'])->name('auditor.ac.fiche-constat.valider');
-//     }); // end realisation
+
 //     // ── Phase 3 : Conclusion ──
 //     Route::prefix('conclusion')->group(function () {
 //         // projet-rapport
@@ -918,6 +1231,235 @@ Route::post  ('analyse-procedures/{form}/ai-reformat',[AnalyseProceduresControll
 //     }); // end recommandation
  }); // end ac
 
+  Route::prefix('auditor/fiche-test')->name('auditor.ac.fiche-test.')->group(function () {
+        
+        Route::get('/',                    [FicheTestController::class, 'index'])->name('index');
+        Route::get('/{form}/edit',         [FicheTestController::class, 'edit'])->name('edit');
+        Route::post('/',                   [FicheTestController::class, 'store'])->name('store');
+        Route::put('/{form}',              [FicheTestController::class, 'update'])->name('update');
+        Route::post('/{form}/soumettre',   [FicheTestController::class, 'soumettre'])->name('soumettre');
+        Route::post('/{form}/valider',     [FicheTestController::class, 'valider'])->name('valider');
+        Route::delete('/{form}',           [FicheTestController::class, 'destroy'])->name('destroy');
+        // Actions outils IFACI integrees dans la FicheTest
+        //Route::post('/{form}/save-outil',  [FicheTestController::class, 'saveOutil'])->name('save-outil');
+        Route::get('/{form}/load-outil',   [FicheTestController::class, 'loadOutil'])->name('load-outil');
+        Route::post('/{form}/ia-global',   [FicheTestController::class, 'iaGlobal'])->name('ia-global');
+        Route::post('/{form}/email',       [FicheTestController::class, 'envoyerEmail'])->name('email');
+        Route::post('/{form}/save-outil',  [FicheTestController::class, 'saveOutil'])->name('save-outil');
+    });
+   Route::prefix('realisation')->group(function () {
+         // reunion-lancement
+        Route::get('reunion-lancement', [App\Http\Controllers\Auditor\ReunionLancementController::class, 'index'])->name('audit.ac.realisation.reunion-lancement');
+        Route::get('reunion-lancement/{form}/edit', [App\Http\Controllers\Auditor\ReunionLancementController::class, 'edit'])->name('auditor.ac.reunion-lancement.edit');
+        Route::post('reunion-lancement', [App\Http\Controllers\Auditor\ReunionLancementController::class, 'store'])->name('auditor.ac.reunion-lancement.store');
+        Route::put('reunion-lancement/{form}', [App\Http\Controllers\Auditor\ReunionLancementController::class, 'update'])->name('auditor.ac.reunion-lancement.update');
+        Route::delete('reunion-lancement/{form}', [App\Http\Controllers\Auditor\ReunionLancementController::class, 'destroy'])->name('auditor.ac.reunion-lancement.destroy');
+        Route::post('reunion-lancement/{form}/soumettre', [App\Http\Controllers\Auditor\ReunionLancementController::class, 'soumettre'])->name('auditor.ac.reunion-lancement.soumettre');
+        Route::post('reunion-lancement/{form}/valider', [App\Http\Controllers\Auditor\ReunionLancementController::class, 'valider'])->name('auditor.ac.reunion-lancement.valider');
+
+
+Route::get('fiche-test',                                      [FicheTestController::class, 'index'])->name('audit.ac.realisation.fiche-test');
+Route::get('fiche-test/{form}/edit',                          [FicheTestController::class, 'edit'])->name('auditor.ac.fiche-test.edit');
+Route::post('fiche-test',                                     [FicheTestController::class, 'store'])->name('auditor.ac.fiche-test.store');
+Route::put('fiche-test/{form}',                               [FicheTestController::class, 'update'])->name('auditor.ac.fiche-test.update');
+Route::delete('fiche-test/{form}',                            [FicheTestController::class, 'destroy'])->name('auditor.ac.fiche-test.destroy');
+Route::post('fiche-test/{form}/soumettre',                    [FicheTestController::class, 'soumettre'])->name('auditor.ac.fiche-test.soumettre');
+Route::post('fiche-test/{form}/valider',                      [FicheTestController::class, 'valider'])->name('auditor.ac.fiche-test.valider');
+Route::post('fiche-test/{form}/save-outil',                   [FicheTestController::class, 'saveOutil'])->name('auditor.ac.fiche-test.save-outil');
+Route::get('fiche-test/{form}/load-outil',                    [FicheTestController::class, 'loadOutil'])->name('auditor.ac.fiche-test.load-outil');
+Route::post('fiche-test/{form}/auto-save',                    [FicheTestController::class, 'autoSaveEndpoint'])->name('auditor.ac.fiche-test.auto-save');
+Route::post('fiche-test/{form}/ia-global',                    [FicheTestController::class, 'iaGlobal'])->name('auditor.ac.fiche-test.ia-global');
+Route::post('fiche-test/{form}/email',                        [FicheTestController::class, 'envoyerEmail'])->name('auditor.ac.fiche-test.email');
+Route::get('fiche-test/{ficheTestId}/fraps',                  [FicheTestController::class, 'getFraps'])->name('auditor.ac.fiche-test.frap.index');
+Route::post('fiche-test/{ficheTestId}/fraps',                 [FicheTestController::class, 'storeFrap'])->name('auditor.ac.fiche-test.frap.store');
+Route::put('fiche-test/{ficheTestId}/fraps/{id}',             [FicheTestController::class, 'updateFrap'])->name('auditor.ac.fiche-test.frap.update');
+Route::delete('fiche-test/{ficheTestId}/fraps/{id}',          [FicheTestController::class, 'destroyFrap'])->name('auditor.ac.fiche-test.frap.destroy');
+Route::post('fiche-test/{ficheTestId}/synthese-generer',      [FicheTestController::class, 'genererSynthese'])->name('auditor.ac.fiche-test.synthese-generer');
+// ── Confirmation publique email (hors auth) ───────────────────────────────
+// Route::get('confirmation/{token}', [FicheTestController::class, 'confirmationPublique'])
+//     ->name('audit.confirmation.publique')
+//     ->withoutMiddleware(['auth']);
+
+
+ 
+});
+
+
+
+
+Route::prefix('reunion-cloture')->name('audit.ac.reunion-cloture.')->group(function () {
+
+    // ── Vues Inertia ─────────────────────────────────────────────────────
+    Route::get('/',         [ReunionClotureController::class, 'index'])->name('index');
+    Route::get('{id}/edit', [ReunionClotureController::class, 'edit'])->name('edit');
+
+    // ── CRUD principal ────────────────────────────────────────────────────
+    Route::post('/',      [ReunionClotureController::class, 'store'])->name('store');
+    Route::put('{id}',    [ReunionClotureController::class, 'update'])->name('update');
+    Route::delete('{id}', [ReunionClotureController::class, 'destroy'])->name('destroy');
+
+    // ── Workflow statuts ──────────────────────────────────────────────────
+    Route::post('{id}/soumettre', [ReunionClotureController::class, 'soumettre'])->name('soumettre');
+    Route::post('{id}/valider',   [ReunionClotureController::class, 'valider'])->name('valider');
+
+    // ── FAR ───────────────────────────────────────────────────────────────
+    Route::post('{id}/far',        [ReunionClotureController::class, 'storeFar'])->name('far.store');
+    Route::put('{id}/far/{farId}', [ReunionClotureController::class, 'updateFar'])->name('far.update');
+
+    // ── Refresh FRAPs → FAR (remplace sync-fraps) ─────────────────────────
+    Route::post('{id}/refresh-fraps', [ReunionClotureController::class, 'refreshFraps'])->name('refresh-fraps');
+
+    // ── Signatures ────────────────────────────────────────────────────────
+    Route::post('{id}/signature', [ReunionClotureController::class, 'signature'])->name('signature');
+});
+
+
+
+  
+ 
+ 
+  
+// Debug route (accessible sans auth pour test, mais à sécuriser en prod)
+Route::get('reunion-cloture/debug', [ReunionClotureController::class, 'debug'])
+    ->name('audit.ac.reunion-cloture.debug');
+
+
+
+
+        // ══════════════════════════════════════════════════════════════════
+    // PLAN D'ACTION – API (FRAP, priorité, suivi)
+    // ══════════════════════════════════════════════════════════════════
+
+    // ── Plan d'action (Recommandation) ──────────────────────────────
+
+    
+// Routes normales avec middleware auth
+
+//         // evaluations
+//         Route::get('evaluations', [App\Http\Controllers\Auditor\EvaluationsController::class, 'index'])->name('audit.ac.realisation.evaluations');
+//         Route::get('evaluations/{form}/edit', [App\Http\Controllers\Auditor\EvaluationsController::class, 'edit'])->name('auditor.ac.evaluations.edit');
+//         Route::post('evaluations', [App\Http\Controllers\Auditor\EvaluationsController::class, 'store'])->name('auditor.ac.evaluations.store');
+//         Route::put('evaluations/{form}', [App\Http\Controllers\Auditor\EvaluationsController::class, 'update'])->name('auditor.ac.evaluations.update');
+//         Route::delete('evaluations/{form}', [App\Http\Controllers\Auditor\EvaluationsController::class, 'destroy'])->name('auditor.ac.evaluations.destroy');
+//         Route::post('evaluations/{form}/soumettre', [App\Http\Controllers\Auditor\EvaluationsController::class, 'soumettre'])->name('auditor.ac.evaluations.soumettre');
+//         Route::post('evaluations/{form}/valider', [App\Http\Controllers\Auditor\EvaluationsController::class, 'valider'])->name('auditor.ac.evaluations.valider');
+//         // eval-ci-qci
+//         Route::get('eval-ci-qci', [App\Http\Controllers\Auditor\EvalCiQciController::class, 'index'])->name('audit.ac.realisation.eval-ci-qci');
+//         Route::get('eval-ci-qci/{form}/edit', [App\Http\Controllers\Auditor\EvalCiQciController::class, 'edit'])->name('auditor.ac.eval-ci-qci.edit');
+//         Route::post('eval-ci-qci', [App\Http\Controllers\Auditor\EvalCiQciController::class, 'store'])->name('auditor.ac.eval-ci-qci.store');
+//         Route::put('eval-ci-qci/{form}', [App\Http\Controllers\Auditor\EvalCiQciController::class, 'update'])->name('auditor.ac.eval-ci-qci.update');
+//         Route::delete('eval-ci-qci/{form}', [App\Http\Controllers\Auditor\EvalCiQciController::class, 'destroy'])->name('auditor.ac.eval-ci-qci.destroy');
+//         Route::post('eval-ci-qci/{form}/soumettre', [App\Http\Controllers\Auditor\EvalCiQciController::class, 'soumettre'])->name('auditor.ac.eval-ci-qci.soumettre');
+//         Route::post('eval-ci-qci/{form}/valider', [App\Http\Controllers\Auditor\EvalCiQciController::class, 'valider'])->name('auditor.ac.eval-ci-qci.valider');
+//         // eval-conformite
+//         Route::get('eval-conformite', [App\Http\Controllers\Auditor\EvalConformiteController::class, 'index'])->name('audit.ac.realisation.eval-conformite');
+//         Route::get('eval-conformite/{form}/edit', [App\Http\Controllers\Auditor\EvalConformiteController::class, 'edit'])->name('auditor.ac.eval-conformite.edit');
+//        / ── Plan d'action (suivi des FRAP) ──────────────────────────────
+Route::prefix('plan-action')->name('auditor.ac.plan-action.')->group(function () {
+    Route::get('/',                 [PlanActionController::class, 'index'])->name('index');
+    Route::get('/api/data',         [PlanActionController::class, 'getData'])->name('api.data');
+    Route::get('/dashboard',        [PlanActionController::class, 'dashboard'])->name('dashboard');
+    Route::put('/frap/{frapId}/priorite', [PlanActionController::class, 'updatePriorite'])->name('priorite.update');
+    Route::put('/frap/{frapId}/suivi',    [PlanActionController::class, 'updateSuivi'])->name('suivi.update');
+});
+
+// Rapport d'audit global (sans assignment_id)
+// Compatibilité anciens appels (query string)
+// Route de compatibilité (anciens appels)
+Route::get('/rapport', function () {
+    $missionId = request()->query('mission_id');
+    if (!$missionId) abort(400, 'Mission ID manquant');
+    return redirect()->route('auditor.ac.rapport.generer', ['missionId' => $missionId]);
+})->name('rapport.legacy');
+
+// Groupe des routes rapport (nouvelles URL)
+
+
+Route::get('/rapport', function () {
+    $missionId = request()->query('mission_id');
+    if (!$missionId) abort(400, 'Mission ID manquant');
+    return redirect()->route('auditor.ac.rapport.index', ['missionId' => $missionId]);
+})->name('rapport.legacy');
+ 
+Route::prefix('rapport')->name('auditor.ac.rapport.')->group(function () {
+ 
+    // Page Inertia → RapportWordModal s'ouvre automatiquement
+    Route::get('/mission/{missionId}', [RapportAuditWordController::class, 'index'])
+        ->name('index');
+ 
+    // API JSON — données pour l'aperçu (constats, stats, objectifs…)
+    Route::post('/mission/{missionId}/data', [RapportAuditWordController::class, 'data'])
+        ->name('word.data');
+ 
+    // Génération + téléchargement .docx binaire
+    Route::post('/mission/{missionId}/generate', [RapportAuditWordController::class, 'generate'])
+        ->name('word.generate');
+ 
+    // Sauvegarde des champs éditables en base
+    Route::put('/mission/{missionId}/edits', [RapportAuditWordController::class, 'saveEdits'])
+        ->name('word.edits');
+});
+//         Route::put('eval-conformite/{form}', [App\Http\Controllers\Auditor\EvalConformiteController::class, 'update'])->name('auditor.ac.eval-conformite.update');
+//         Route::delete('eval-conformite/{form}', [App\Http\Controllers\Auditor\EvalConformiteController::class, 'destroy'])->name('auditor.ac.eval-conformite.destroy');
+//         Route::post('eval-conformite/{form}/soumettre', [App\Http\Controllers\Auditor\EvalConformiteController::class, 'soumettre'])->name('auditor.ac.eval-conformite.soumettre');
+//         Route::post('eval-conformite/{form}/valider', [App\Http\Controllers\Auditor\EvalConformiteController::class, 'valider'])->name('auditor.ac.eval-conformite.valider');
+//         // controle-transactions
+//         Route::get('controle-transactions', [App\Http\Controllers\Auditor\ControleTransactionsController::class, 'index'])->name('audit.ac.realisation.controle-transactions');
+//         Route::get('controle-transactions/{form}/edit', [App\Http\Controllers\Auditor\ControleTransactionsController::class, 'edit'])->name('auditor.ac.controle-transactions.edit');
+//         Route::post('controle-transactions', [App\Http\Controllers\Auditor\ControleTransactionsController::class, 'store'])->name('auditor.ac.controle-transactions.store');
+//         Route::put('controle-transactions/{form}', [App\Http\Controllers\Auditor\ControleTransactionsController::class, 'update'])->name('auditor.ac.controle-transactions.update');
+//         Route::delete('controle-transactions/{form}', [App\Http\Controllers\Auditor\ControleTransactionsController::class, 'destroy'])->name('auditor.ac.controle-transactions.destroy');
+//         Route::post('controle-transactions/{form}/soumettre', [App\Http\Controllers\Auditor\ControleTransactionsController::class, 'soumettre'])->name('auditor.ac.controle-transactions.soumettre');
+//         Route::post('controle-transactions/{form}/valider', [App\Http\Controllers\Auditor\ControleTransactionsController::class, 'valider'])->name('auditor.ac.controle-transactions.valider');
+//         // test-procedures
+        // Route::get('test-procedures', [App\Http\Controllers\Auditor\TestProceduresController::class, 'index'])->name('audit.ac.realisation.test-procedures');
+        // Route::get('test-procedures/{form}/edit', [App\Http\Controllers\Auditor\TestProceduresController::class, 'edit'])->name('auditor.ac.test-procedures.edit');
+        // Route::post('test-procedures', [App\Http\Controllers\Auditor\TestProceduresController::class, 'store'])->name('auditor.ac.test-procedures.store');
+        // Route::put('test-procedures/{form}', [App\Http\Controllers\Auditor\TestProceduresController::class, 'update'])->name('auditor.ac.test-procedures.update');
+        // Route::delete('test-procedures/{form}', [App\Http\Controllers\Auditor\TestProceduresController::class, 'destroy'])->name('auditor.ac.test-procedures.destroy');
+        // Route::post('test-procedures/{form}/soumettre', [App\Http\Controllers\Auditor\TestProceduresController::class, 'soumettre'])->name('auditor.ac.test-procedures.soumettre');
+        // Route::post('test-procedures/{form}/valider', [App\Http\Controllers\Auditor\TestProceduresController::class, 'valider'])->name('auditor.ac.test-procedures.valider');
+//         // test-repartition-taches
+//         Route::get('test-repartition-taches', [App\Http\Controllers\Auditor\TestRepartitionTachesController::class, 'index'])->name('audit.ac.realisation.test-repartition-taches');
+//         Route::get('test-repartition-taches/{form}/edit', [App\Http\Controllers\Auditor\TestRepartitionTachesController::class, 'edit'])->name('auditor.ac.test-repartition-taches.edit');
+//         Route::post('test-repartition-taches', [App\Http\Controllers\Auditor\TestRepartitionTachesController::class, 'store'])->name('auditor.ac.test-repartition-taches.store');
+//         Route::put('test-repartition-taches/{form}', [App\Http\Controllers\Auditor\TestRepartitionTachesController::class, 'update'])->name('auditor.ac.test-repartition-taches.update');
+//         Route::delete('test-repartition-taches/{form}', [App\Http\Controllers\Auditor\TestRepartitionTachesController::class, 'destroy'])->name('auditor.ac.test-repartition-taches.destroy');
+//         Route::post('test-repartition-taches/{form}/soumettre', [App\Http\Controllers\Auditor\TestRepartitionTachesController::class, 'soumettre'])->name('auditor.ac.test-repartition-taches.soumettre');
+//         Route::post('test-repartition-taches/{form}/valider', [App\Http\Controllers\Auditor\TestRepartitionTachesController::class, 'valider'])->name('auditor.ac.test-repartition-taches.valider');
+//         // eval-marches
+//         Route::get('eval-marches', [App\Http\Controllers\Auditor\EvalMarchesController::class, 'index'])->name('audit.ac.realisation.eval-marches');
+//         Route::get('eval-marches/{form}/edit', [App\Http\Controllers\Auditor\EvalMarchesController::class, 'edit'])->name('auditor.ac.eval-marches.edit');
+//         Route::post('eval-marches', [App\Http\Controllers\Auditor\EvalMarchesController::class, 'store'])->name('auditor.ac.eval-marches.store');
+//         Route::put('eval-marches/{form}', [App\Http\Controllers\Auditor\EvalMarchesController::class, 'update'])->name('auditor.ac.eval-marches.update');
+//         Route::delete('eval-marches/{form}', [App\Http\Controllers\Auditor\EvalMarchesController::class, 'destroy'])->name('auditor.ac.eval-marches.destroy');
+//         Route::post('eval-marches/{form}/soumettre', [App\Http\Controllers\Auditor\EvalMarchesController::class, 'soumettre'])->name('auditor.ac.eval-marches.soumettre');
+//         Route::post('eval-marches/{form}/valider', [App\Http\Controllers\Auditor\EvalMarchesController::class, 'valider'])->name('auditor.ac.eval-marches.valider');
+//         // feuilles-travail
+//         Route::get('feuilles-travail', [App\Http\Controllers\Auditor\FeuillesTravailController::class, 'index'])->name('audit.ac.realisation.feuilles-travail');
+//         Route::get('feuilles-travail/{form}/edit', [App\Http\Controllers\Auditor\FeuillesTravailController::class, 'edit'])->name('auditor.ac.feuilles-travail.edit');
+//         Route::post('feuilles-travail', [App\Http\Controllers\Auditor\FeuillesTravailController::class, 'store'])->name('auditor.ac.feuilles-travail.store');
+//         Route::put('feuilles-travail/{form}', [App\Http\Controllers\Auditor\FeuillesTravailController::class, 'update'])->name('auditor.ac.feuilles-travail.update');
+//         Route::delete('feuilles-travail/{form}', [App\Http\Controllers\Auditor\FeuillesTravailController::class, 'destroy'])->name('auditor.ac.feuilles-travail.destroy');
+//         Route::post('feuilles-travail/{form}/soumettre', [App\Http\Controllers\Auditor\FeuillesTravailController::class, 'soumettre'])->name('auditor.ac.feuilles-travail.soumettre');
+//         Route::post('feuilles-travail/{form}/valider', [App\Http\Controllers\Auditor\FeuillesTravailController::class, 'valider'])->name('auditor.ac.feuilles-travail.valider');
+//         // constats-observations
+//         Route::get('constats-observations', [App\Http\Controllers\Auditor\ConstatsObservationsController::class, 'index'])->name('audit.ac.realisation.constats-observations');
+//         Route::get('constats-observations/{form}/edit', [App\Http\Controllers\Auditor\ConstatsObservationsController::class, 'edit'])->name('auditor.ac.constats-observations.edit');
+//         Route::post('constats-observations', [App\Http\Controllers\Auditor\ConstatsObservationsController::class, 'store'])->name('auditor.ac.constats-observations.store');
+//         Route::put('constats-observations/{form}', [App\Http\Controllers\Auditor\ConstatsObservationsController::class, 'update'])->name('auditor.ac.constats-observations.update');
+//         Route::delete('constats-observations/{form}', [App\Http\Controllers\Auditor\ConstatsObservationsController::class, 'destroy'])->name('auditor.ac.constats-observations.destroy');
+//         Route::post('constats-observations/{form}/soumettre', [App\Http\Controllers\Auditor\ConstatsObservationsController::class, 'soumettre'])->name('auditor.ac.constats-observations.soumettre');
+//         Route::post('constats-observations/{form}/valider', [App\Http\Controllers\Auditor\ConstatsObservationsController::class, 'valider'])->name('auditor.ac.constats-observations.valider');
+//         // fiche-constat
+//         Route::get('fiche-constat', [App\Http\Controllers\Auditor\FicheConstatController::class, 'index'])->name('audit.ac.realisation.fiche-constat');
+//         Route::get('fiche-constat/{form}/edit', [App\Http\Controllers\Auditor\FicheConstatController::class, 'edit'])->name('auditor.ac.fiche-constat.edit');
+//         Route::post('fiche-constat', [App\Http\Controllers\Auditor\FicheConstatController::class, 'store'])->name('auditor.ac.fiche-constat.store');
+//         Route::put('fiche-constat/{form}', [App\Http\Controllers\Auditor\FicheConstatController::class, 'update'])->name('auditor.ac.fiche-constat.update');
+//         Route::delete('fiche-constat/{form}', [App\Http\Controllers\Auditor\FicheConstatController::class, 'destroy'])->name('auditor.ac.fiche-constat.destroy');
+//         Route::post('fiche-constat/{form}/soumettre', [App\Http\Controllers\Auditor\FicheConstatController::class, 'soumettre'])->name('auditor.ac.fiche-constat.soumettre');
+//         Route::post('fiche-constat/{form}/valider', [App\Http\Controllers\Auditor\FicheConstatController::class, 'valider'])->name('auditor.ac.fiche-constat.valider');
+     }); // end realisation
 // // ══════════════════════════════════════════════════════════════════
 // // TYPE : AF
 // // ══════════════════════════════════════════════════════════════════
@@ -1191,4 +1733,4 @@ Route::post  ('analyse-procedures/{form}/ai-reformat',[AnalyseProceduresControll
 
 
 });
-});
+

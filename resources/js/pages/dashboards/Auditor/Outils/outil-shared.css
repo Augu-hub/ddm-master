@@ -1,0 +1,75 @@
+/* outil-shared.css — partagé par tous les composants outils */
+
+.ot-content { display: flex; flex-direction: column; gap: 0; }
+
+/* Section */
+.ot-section { margin-bottom: 1.5rem; padding-bottom: 1.5rem; border-bottom: 1px solid #e5e7eb; }
+.ot-section:last-child { border-bottom: none; margin-bottom: 0; }
+.ot-section__ttl { font-size: .76rem; font-weight: 700; color: #111827; margin: 0 0 .6rem; text-transform: uppercase; letter-spacing: .04em; }
+.ot-section__bar { display: flex; align-items: center; justify-content: space-between; margin-bottom: .6rem; }
+.ot-section__sub { font-size: .66rem; color: #6b7280; margin: 0; }
+
+/* Grid */
+.ot-grid { display: grid; grid-template-columns: 1fr 1fr; gap: .6rem; }
+.ot-field { display: flex; flex-direction: column; gap: .25rem; }
+.ot-field--wide { grid-column: 1 / -1; }
+.ot-field--full { grid-column: 1 / -1; }
+.ot-field--half { }
+.ot-lbl { font-size: .66rem; font-weight: 600; color: #6b7280; }
+.ot-req { color: #dc2626; }
+.mb-3 { margin-bottom: .75rem; }
+
+/* Controls */
+.ot-inp { width: 100%; border: 1px solid #e5e7eb; border-radius: 5px; padding: 5px 8px; font-size: .75rem; color: #111827; background: #fff; outline: none; font-family: inherit; transition: border-color .12s; }
+.ot-inp:focus { border-color: #93c5fd; }
+.ot-ta { width: 100%; border: 1px solid #e5e7eb; border-radius: 5px; padding: 5px 8px; font-size: .73rem; color: #111827; background: #fff; outline: none; resize: vertical; font-family: inherit; }
+.ot-ta:focus { border-color: #93c5fd; }
+.ot-inp-sm { width: 100%; border: 1px solid #e5e7eb; border-radius: 4px; padding: 3px 5px; font-size: .68rem; color: #111827; background: #fff; outline: none; font-family: inherit; }
+.ot-ta-sm { width: 100%; border: 1px solid #e5e7eb; border-radius: 4px; padding: 3px 5px; font-size: .68rem; color: #111827; background: #fff; outline: none; resize: vertical; font-family: inherit; }
+.ot-sel-sm { width: 100%; border: 1px solid #e5e7eb; border-radius: 4px; padding: 3px 5px; font-size: .68rem; color: #111827; background: #fff; outline: none; font-family: inherit; cursor: pointer; }
+.ot-sel-xs { width: 100%; border: 1px solid #e5e7eb; border-radius: 4px; padding: 2px 3px; font-size: .62rem; color: #111827; background: #fff; outline: none; cursor: pointer; font-family: inherit; }
+.ot-sel-xs.ok { color: #065f46; font-weight: 700; }
+.ot-sel-xs.ko { color: #dc2626; font-weight: 700; }
+.ot-sel-xs.warn { color: #d97706; font-weight: 700; }
+
+/* Table */
+.ot-table-wrap { overflow-x: auto; border: 1px solid #e5e7eb; border-radius: 6px; }
+.ot-tbl { width: 100%; border-collapse: collapse; font-size: .7rem; }
+.ot-tbl thead th { padding: .35rem .5rem; background: #1e293b; color: rgba(255,255,255,.88); font-weight: 700; border-bottom: 1px solid #334155; border-right: 1px solid #334155; white-space: nowrap; font-size: .62rem; text-transform: uppercase; letter-spacing: .04em; }
+.ot-tbl tbody td { padding: .3rem .4rem; border-bottom: 1px solid #f3f4f6; border-right: 1px solid #f3f4f6; vertical-align: middle; }
+.ot-tbl tbody tr:last-child td { border-bottom: none; }
+.td-empty { text-align: center; color: #94a3b8; padding: 1rem; font-style: italic; font-size: .7rem; }
+.tc { text-align: center; }
+.fw { font-weight: 700; color: #9ca3af; font-size: .65rem; }
+
+/* Acteurs */
+.acteurs-row { display: flex; flex-wrap: wrap; gap: .45rem; }
+.acteur-item { display: flex; align-items: center; gap: .3rem; }
+.acteur-badge { display: inline-flex; align-items: center; justify-content: center; min-width: 24px; height: 20px; border-radius: 4px; color: #fff; font-size: .62rem; font-weight: 700; flex-shrink: 0; }
+.legend-text { font-size: .62rem; color: #94a3b8; margin: .35rem 0 0; }
+
+/* ISO Symbols */
+.symboles-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: .4rem; }
+.symbole { display: flex; align-items: center; gap: .4rem; padding: .35rem .55rem; border: 1px solid #e5e7eb; border-radius: 6px; background: #faf5ff; }
+.symbole__icon { display: flex; align-items: center; justify-content: center; width: 26px; height: 20px; border: 2px solid currentColor; border-radius: 3px; font-size: .72rem; font-weight: 700; flex-shrink: 0; }
+.symbole__label { font-size: .6rem; color: #475569; font-weight: 500; }
+
+/* Tabs */
+.ot-tabs { display: flex; gap: 2px; border-bottom: 2px solid #e5e7eb; margin-bottom: 1rem; }
+.ot-tab { padding: .38rem .75rem; background: none; border: none; border-bottom: 2px solid transparent; font-size: .7rem; font-weight: 600; color: #6b7280; cursor: pointer; margin-bottom: -2px; transition: all .15s; font-family: inherit; }
+.ot-tab.active { border-bottom-color: var(--tab-color, #1e40af); color: var(--tab-color, #1e40af); }
+
+/* Questions IFACI */
+.questions-list { display: flex; flex-direction: column; gap: .7rem; }
+.question-item { display: flex; align-items: flex-start; gap: .55rem; padding: .55rem .75rem; border: 1px solid #e5e7eb; border-radius: 8px; background: #fff; }
+.question-num { display: flex; align-items: center; justify-content: center; min-width: 22px; height: 22px; background: #fce7f3; color: #be185d; border-radius: 50%; font-size: .65rem; font-weight: 700; flex-shrink: 0; }
+.question-content { flex: 1; }
+.question-text { font-size: .71rem; font-weight: 600; color: #111827; margin: 0 0 .45rem; }
+
+/* Buttons */
+.btn-add { display: inline-flex; align-items: center; gap: 4px; padding: 3px 9px; background: #eff6ff; border: 1px solid #bfdbfe; color: #1d4ed8; border-radius: 5px; font-size: .68rem; font-weight: 600; cursor: pointer; transition: all .15s; font-family: inherit; }
+.btn-add:hover { background: #dbeafe; }
+.btn-del { background: #fee2e2; border: 1px solid #fecaca; color: #dc2626; border-radius: 4px; cursor: pointer; font-size: .65rem; padding: 2px 5px; line-height: 1; }
+.btn-del:hover { background: #fecaca; }
+.btn-del-sm { background: none; border: 1px solid #e5e7eb; color: #94a3b8; border-radius: 4px; cursor: pointer; font-size: .62rem; padding: 2px 4px; line-height: 1; width: 20px; height: 20px; display: flex; align-items: center; justify-content: center; }
+.btn-del-sm:hover { color: #dc2626; border-color: #fecaca; background: #fef2f2; }

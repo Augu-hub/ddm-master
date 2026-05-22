@@ -59,6 +59,12 @@ return [
             'throw' => false,
             'report' => false,
         ],
+        'tenant_uploads' => [
+        'driver' => 'local',
+        'root'   => storage_path('app/tenant_uploads'),
+        'url'    => env('APP_URL').'/storage/tenant_uploads',
+        'visibility' => 'public',
+    ],
 
     ],
 

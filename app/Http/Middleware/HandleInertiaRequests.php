@@ -2,44 +2,59 @@
 
 namespace App\Http\Middleware;
 
-use Illuminate\Foundation\Inspiring;
+use App\Services\Audit\UserMenuSessionService;
 use Illuminate\Http\Request;
-use Illuminate\Support\Str;
+use Illuminate\Support\Facades\{Auth, Session};
 use Inertia\Middleware;
-use Tighten\Ziggy\Ziggy;
 
 class HandleInertiaRequests extends Middleware
 {
     protected $rootView = 'app';
 
+    public function version(Request $request): ?string
+    {
+        return parent::version($request);
+    }
+
+    /**
+     * Données partagées avec TOUTES les pages Inertia.
+     * user_menus est chargé ici une seule fois par requête.
+     */
     public function share(Request $request): array
     {
-        $raw   = Inspiring::quote();
-        $msg   = Str::of($raw)->beforeLast(' - ')->trim();
-        $authr = Str::of($raw)->afterLast(' - ')->trim();
-
         return array_merge(parent::share($request), [
-            'name'  => config('app.name'),
 
-            'quote' => [
-                'message' => (string) $msg,
-                'author'  => (string) $authr,
-            ],
-
-            'auth' => [
-                'user' => $request->user() ? [
-                    'id'    => $request->user()->id,
-                    'name'  => $request->user()->name,
-                    'email' => $request->user()->email,
+            // ── Auth ────────────────────────────────────────────────────
+            'auth' => fn () => [
+                'user' => Auth::check() ? [
+                    'id'    => Auth::id(),
+                    'name'  => Auth::user()->name,
+                    'email' => Auth::user()->email,
                 ] : null,
-                'menus' => $request->session()->get('user_menus', []),
             ],
 
-            'ziggy' => array_merge((new Ziggy)->toArray(), [
-                'location' => $request->url(),
-            ]),
+            // ── Flash messages ──────────────────────────────────────────
+            'flash' => fn () => [
+                'success' => Session::get('success'),
+                'error'   => Session::get('error'),
+                'warning' => Session::get('warning'),
+            ],
 
-            'csrf' => csrf_token(),
+            // ── Menus ddmparam ──────────────────────────────────────────
+            // Chargé depuis la session (cache TTL 60 min).
+            // UserMenuSessionService::getOrLoad() ne requête la DB
+            // que si le cache est expiré ou absent.
+            //
+            // Structure : [ { mission_type: {...}, phases: [...] }, ... ]
+            // Chaque form a 'available' = true|false selon url_path.
+            'user_menus' => fn () => Auth::check()
+                ? UserMenuSessionService::getOrLoad(
+                    tenantDb: Session::get('tenant_db')
+                        ?? Session::get('current_tenant_db')
+                        ?? 'fruitiva',    // ← DB tenant par défaut
+                )
+                : [],
+
         ]);
     }
 }

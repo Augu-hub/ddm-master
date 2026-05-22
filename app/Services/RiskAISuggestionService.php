@@ -1,110 +1,111 @@
 <?php
 
 namespace App\Services;
+
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
 /**
  * ════════════════════════════════════════════════════════════════════════════════
- * 🤖 RISK AI SUGGESTION SERVICE - MODULE VERSION
+ * 🤖 RISK AI SUGGESTION SERVICE — Mistral AI
  * ════════════════════════════════════════════════════════════════════════════════
- * 
- * Service complet pour:
- * ✅ Générer MULTIPLES suggestions de noms de risques (4 propositions)
- * ✅ Générer procédure de contrôle pour chaque risque
+ * ✅ Suggestions de noms de risques via Mistral AI
+ * ✅ Génération procédure de contrôle
  * ✅ Fallback automatique si API indisponible
- * ✅ Logging détaillé
  * ✅ Parsing JSON résilient
- * 
- * Fichier: app/Modules/Risk/Core/Services/RiskAISuggestionService.php
- * 
+ * ✅ Les suggestions NE contiennent PAS de code (calculé côté frontend)
  * ════════════════════════════════════════════════════════════════════════════════
  */
 class RiskAISuggestionService
 {
-    private const API_KEY_ENV = 'ANTHROPIC_API_KEY';
-    private const API_MODEL = 'claude-3-5-sonnet-20241022';
-    private const API_URL = 'https://api.anthropic.com/v1/messages';
-    private const API_TIMEOUT = 30;
+    private const API_URL     = 'https://api.mistral.ai/v1/chat/completions';
+    private const API_KEY_ENV = 'MISTRAL_API_KEY';
+    private const API_MODEL   = 'mistral-small-latest';
+    private const API_TIMEOUT = 45;
     private const MAX_SUGGESTIONS = 4;
 
+    // ══════════════════════════════════════════════════════════════════════════
+    // 🎯 GÉNÉRER MULTIPLES SUGGESTIONS DE RISQUES
+    // ══════════════════════════════════════════════════════════════════════════
     /**
-     * ════════════════════════════════════════════════════════════════════════════
-     * 🎯 GÉNÉRER MULTIPLES SUGGESTIONS DE RISQUES
-     * ════════════════════════════════════════════════════════════════════════════
-     * 
-     * Retourne 4 propositions différentes et spécifiques au contexte
-     * 
-     * @param string $processName - Nom du processus
-     * @param string $activityName - Nom de l'activité
-     * @param string $riskTypeName - Type de risque
-     * @return array ['success' => bool, 'suggestions' => [...], 'mode' => 'ai'|'fallback']
+     * Retourne 4 propositions de risques sans code (le code est généré côté frontend).
+     * Chaque suggestion contient : label, description, control_procedure.
      */
-    public function generateMultipleSuggestions($processName, $activityName, $riskTypeName)
+    public function generateMultipleSuggestions(string $processName, string $activityName, string $riskTypeName): array
     {
         try {
             if (empty($processName) || empty($activityName) || empty($riskTypeName)) {
-                Log::warning('⚠️ [Risk IA] Paramètres invalides');
+                Log::warning('⚠️ [Risk IA] Paramètres manquants');
                 return $this->getFallbackSuggestions();
             }
 
             $apiKey = env(self::API_KEY_ENV);
             if (empty($apiKey)) {
-                Log::info('ℹ️  [Risk IA] API non configurée, fallback utilisé');
+                Log::info('ℹ️ [Risk IA] Clé Mistral non configurée → fallback');
                 return $this->getFallbackSuggestions();
             }
 
             $prompt = $this->buildSuggestionsPrompt($processName, $activityName, $riskTypeName);
 
-            Log::info('🚀 [Risk IA] Génération suggestions', [
-                'process' => $processName,
-                'activity' => $activityName,
-                'risk_type' => $riskTypeName
+            Log::info('🚀 [Risk IA] Génération suggestions Mistral', [
+                'process'   => $processName,
+                'activity'  => $activityName,
+                'risk_type' => $riskTypeName,
             ]);
 
-            $startTime = microtime(true);
-            
+            $t0 = microtime(true);
+
             $response = Http::withHeaders([
-                'x-api-key' => $apiKey,
-                'anthropic-version' => '2023-06-01',
-                'content-type' => 'application/json'
+                'Authorization' => 'Bearer ' . $apiKey,
+                'Content-Type'  => 'application/json',
             ])
             ->timeout(self::API_TIMEOUT)
             ->post(self::API_URL, [
-                'model' => self::API_MODEL,
-                'max_tokens' => 1000,
-                'system' => 'Tu es expert en gestion des risques. Génère 4 propositions différentes. Réponds UNIQUEMENT en JSON valide.',
-                'messages' => [['role' => 'user', 'content' => $prompt]],
+                'model'       => self::API_MODEL,
+                'max_tokens'  => 1200,
+                'temperature' => 0.5,
+                'messages'    => [
+                    [
+                        'role'    => 'system',
+                        'content' => 'Tu es expert en gestion des risques et audit interne. Réponds UNIQUEMENT en JSON valide, sans Markdown ni balises de code.',
+                    ],
+                    [
+                        'role'    => 'user',
+                        'content' => $prompt,
+                    ],
+                ],
             ]);
 
-            $duration = round((microtime(true) - $startTime) * 1000, 2);
+            $ms = round((microtime(true) - $t0) * 1000, 1);
 
             if (!$response->successful()) {
-                Log::warning('⚠️  [Risk IA] Erreur API', ['status' => $response->status(), 'duration' => $duration . 'ms']);
+                Log::warning('⚠️ [Risk IA] Erreur Mistral', ['status' => $response->status(), 'ms' => $ms]);
                 return $this->getFallbackSuggestions();
             }
 
             $data = $response->json();
-            if (empty($data['content'][0]['text'])) {
-                Log::warning('⚠️  [Risk IA] Réponse vide');
+            $text = $data['choices'][0]['message']['content'] ?? null;
+
+            if (empty($text)) {
+                Log::warning('⚠️ [Risk IA] Réponse vide');
                 return $this->getFallbackSuggestions();
             }
 
-            $json = $this->parseAIResponse($data['content'][0]['text']);
+            $json = $this->parseAIResponse($text);
 
             if (empty($json['risks']) || !is_array($json['risks'])) {
-                Log::warning('⚠️  [Risk IA] Parsing échoué');
+                Log::warning('⚠️ [Risk IA] JSON invalide', ['preview' => substr($text, 0, 100)]);
                 return $this->getFallbackSuggestions();
             }
 
             $suggestions = $this->formatSuggestions($json['risks']);
 
-            Log::info('✅ [Risk IA] Suggestions générées', ['count' => count($suggestions), 'duration' => $duration . 'ms']);
+            Log::info('✅ [Risk IA] Suggestions OK', ['count' => count($suggestions), 'ms' => $ms]);
 
             return [
-                'success' => true,
+                'success'     => true,
                 'suggestions' => $suggestions,
-                'mode' => 'ai'
+                'mode'        => 'ai',
             ];
 
         } catch (\Exception $e) {
@@ -113,76 +114,74 @@ class RiskAISuggestionService
         }
     }
 
-    /**
-     * ════════════════════════════════════════════════════════════════════════════
-     * 🛡️ GÉNÉRER PROCÉDURE DE CONTRÔLE
-     * ════════════════════════════════════════════════════════════════════════════
-     */
-    public function generateControlProcedure($riskLabel, $activityName, $processName)
+    // ══════════════════════════════════════════════════════════════════════════
+    // 🛡️ GÉNÉRER PROCÉDURE DE CONTRÔLE
+    // ══════════════════════════════════════════════════════════════════════════
+    public function generateControlProcedure(string $riskLabel, string $activityName, string $processName): array
     {
         try {
             if (empty($riskLabel) || empty($activityName) || empty($processName)) {
-                Log::warning('⚠️  [Risk Control] Paramètres invalides');
                 return $this->getFallbackControl();
             }
 
             $apiKey = env(self::API_KEY_ENV);
             if (empty($apiKey)) {
-                Log::info('ℹ️  [Risk Control] API non configurée, fallback utilisé');
                 return $this->getFallbackControl();
             }
 
             $prompt = $this->buildControlPrompt($riskLabel, $activityName, $processName);
 
-            Log::info('🚀 [Risk Control] Génération procédure', [
-                'risk' => substr($riskLabel, 0, 50),
-                'activity' => $activityName
-            ]);
-
-            $startTime = microtime(true);
+            $t0 = microtime(true);
 
             $response = Http::withHeaders([
-                'x-api-key' => $apiKey,
-                'anthropic-version' => '2023-06-01',
-                'content-type' => 'application/json'
+                'Authorization' => 'Bearer ' . $apiKey,
+                'Content-Type'  => 'application/json',
             ])
             ->timeout(self::API_TIMEOUT)
             ->post(self::API_URL, [
-                'model' => self::API_MODEL,
-                'max_tokens' => 500,
-                'system' => 'Tu es expert en contrôle interne. Génère des procédures concrètes. Réponds UNIQUEMENT en JSON valide.',
-                'messages' => [['role' => 'user', 'content' => $prompt]],
+                'model'       => self::API_MODEL,
+                'max_tokens'  => 600,
+                'temperature' => 0.3,
+                'messages'    => [
+                    [
+                        'role'    => 'system',
+                        'content' => 'Tu es expert en contrôle interne et audit. Réponds UNIQUEMENT en JSON valide, sans Markdown.',
+                    ],
+                    [
+                        'role'    => 'user',
+                        'content' => $prompt,
+                    ],
+                ],
             ]);
 
-            $duration = round((microtime(true) - $startTime) * 1000, 2);
+            $ms = round((microtime(true) - $t0) * 1000, 1);
 
             if (!$response->successful()) {
-                Log::warning('⚠️  [Risk Control] Erreur API', ['status' => $response->status()]);
+                Log::warning('⚠️ [Risk Control] Erreur Mistral', ['status' => $response->status()]);
                 return $this->getFallbackControl();
             }
 
             $data = $response->json();
-            if (empty($data['content'][0]['text'])) {
-                Log::warning('⚠️  [Risk Control] Réponse vide');
+            $text = $data['choices'][0]['message']['content'] ?? null;
+
+            if (empty($text)) {
                 return $this->getFallbackControl();
             }
 
-            $json = $this->parseAIResponse($data['content'][0]['text']);
+            $json = $this->parseAIResponse($text);
 
             if (empty($json['control_procedure'])) {
-                Log::warning('⚠️  [Risk Control] Parsing échoué');
                 return $this->getFallbackControl();
             }
 
-            $procedure = trim((string)$json['control_procedure']);
-            $procedure = substr($procedure, 0, 500);
+            $procedure = substr(trim((string) $json['control_procedure']), 0, 800);
 
-            Log::info('✅ [Risk Control] Procédure générée', ['length' => strlen($procedure), 'duration' => $duration . 'ms']);
+            Log::info('✅ [Risk Control] Procédure OK', ['ms' => $ms, 'len' => strlen($procedure)]);
 
             return [
-                'success' => true,
-                'control_procedure' => $procedure,
-                'mode' => 'ai'
+                'success'            => true,
+                'control_procedure'  => $procedure,
+                'mode'               => 'ai',
             ];
 
         } catch (\Exception $e) {
@@ -191,173 +190,160 @@ class RiskAISuggestionService
         }
     }
 
-    /**
-     * ════════════════════════════════════════════════════════════════════════════
-     * 📝 CONSTRUIRE PROMPT - SUGGESTIONS MULTIPLES
-     * ════════════════════════════════════════════════════════════════════════════
-     */
-    private function buildSuggestionsPrompt($processName, $activityName, $riskTypeName)
+    // ══════════════════════════════════════════════════════════════════════════
+    // PROMPTS
+    // ══════════════════════════════════════════════════════════════════════════
+
+    private function buildSuggestionsPrompt(string $processName, string $activityName, string $riskTypeName): string
     {
         return <<<PROMPT
-Tu es expert en gestion des risques et AMDEC.
+Tu es expert en gestion des risques.
 
-CONTEXTE:
-- Processus: $processName
-- Activité: $activityName
-- Type: $riskTypeName
+CONTEXTE D'ANALYSE :
+- Processus    : $processName
+- Activité     : $activityName
+- Type de risque : $riskTypeName
 
-Génère 4 noms de risques DIFFÉRENTS et SPÉCIFIQUES (max 100 chars chacun).
+MISSION : Génère exactement 4 risques différents, précis et contextualisés.
 
-RÉPONDS UNIQUEMENT EN JSON (pas de Markdown):
+FORMAT DE RÉPONSE (JSON pur, sans Markdown) :
 {
   "risks": [
-    "Proposition 1",
-    "Proposition 2",
-    "Proposition 3",
-    "Proposition 4"
+    {
+      "label": "Nom court du risque (max 120 caractères)",
+      "description": "Explication du risque en 1-2 phrases (max 250 caractères)",
+      "control_procedure": "Procédure de contrôle concrète en 1-2 phrases (max 200 caractères)"
+    }
   ]
 }
+
+RÈGLES :
+- Chaque risque doit être distinct et spécifique au contexte
+- NE PAS inclure de codes ou numéros dans les propositions
+- Labels clairs, opérationnels, en français professionnel
 PROMPT;
     }
 
-    /**
-     * ════════════════════════════════════════════════════════════════════════════
-     * 🛡️ CONSTRUIRE PROMPT - PROCÉDURE DE CONTRÔLE
-     * ════════════════════════════════════════════════════════════════════════════
-     */
-    private function buildControlPrompt($riskLabel, $activityName, $processName)
+    private function buildControlPrompt(string $riskLabel, string $activityName, string $processName): string
     {
         return <<<PROMPT
-Tu es expert en contrôle interne et audit.
+Expert en contrôle interne et audit.
 
-Risque: $riskLabel
-Activité: $activityName
-Processus: $processName
+Risque identifié : $riskLabel
+Activité         : $activityName
+Processus        : $processName
 
-Génère UNE procédure de contrôle (max 150 chars).
+Génère UNE procédure de contrôle concrète et opérationnelle.
 
-RÉPONDS UNIQUEMENT EN JSON:
+FORMAT (JSON pur) :
 {
-  "control_procedure": "Procédure spécifique"
+  "control_procedure": "Description de la procédure (max 250 caractères)"
 }
 PROMPT;
     }
 
-    /**
-     * ════════════════════════════════════════════════════════════════════════════
-     * 🔍 PARSER RÉPONSE JSON - RÉSILIENT
-     * ════════════════════════════════════════════════════════════════════════════
-     */
-    private function parseAIResponse($content)
+    // ══════════════════════════════════════════════════════════════════════════
+    // PARSER JSON RÉSILIENT
+    // ══════════════════════════════════════════════════════════════════════════
+    private function parseAIResponse(string $content): array
     {
         $content = trim($content);
 
-        // 1️⃣ Direct JSON
+        // 1. Direct
         $json = json_decode($content, true);
         if (is_array($json)) return $json;
 
-        // 2️⃣ Nettoyer Markdown
-        $cleaned = preg_replace('/```(?:json)?\s*\n?/i', '', $content);
-        $cleaned = preg_replace('/```\s*$/i', '', $cleaned);
-        $json = json_decode(trim($cleaned), true);
+        // 2. Nettoyer balises Markdown
+        $clean = preg_replace('/```(?:json)?\s*/i', '', $content);
+        $clean = preg_replace('/```\s*/i', '', $clean);
+        $json  = json_decode(trim($clean), true);
         if (is_array($json)) return $json;
 
-        // 3️⃣ Extraire entre accolades
-        if (preg_match('/\{[\s\S]*\}/', $cleaned, $matches)) {
-            $json = json_decode($matches[0], true);
+        // 3. Extraire le bloc JSON
+        if (preg_match('/\{[\s\S]*\}/u', $clean, $m)) {
+            $json = json_decode($m[0], true);
             if (is_array($json)) return $json;
         }
 
-        Log::warning('⚠️  [JSON] Parse échoué', ['preview' => substr($content, 0, 100)]);
+        Log::warning('⚠️ [Risk IA] parseAIResponse échoué', ['preview' => substr($content, 0, 150)]);
         return [];
     }
 
-    /**
-     * ════════════════════════════════════════════════════════════════════════════
-     * 📋 FORMATER SUGGESTIONS AVEC CODES AUTO
-     * ════════════════════════════════════════════════════════════════════════════
-     */
-    private function formatSuggestions($risks)
+    // ══════════════════════════════════════════════════════════════════════════
+    // FORMAT SUGGESTIONS — sans code (calculé côté frontend)
+    // ══════════════════════════════════════════════════════════════════════════
+    private function formatSuggestions(array $risks): array
     {
         $suggestions = [];
-        $baseCode = $this->getLastRiskCode();
+        foreach ($risks as $idx => $risk) {
+            if ($idx >= self::MAX_SUGGESTIONS) break;
 
-        foreach ($risks as $index => $risk) {
-            if ($index >= self::MAX_SUGGESTIONS) break;
-
-            $nextNumber = $baseCode + $index + 1;
-            $code = 'RC-' . str_pad($nextNumber, 3, '0', STR_PAD_LEFT);
-            $label = trim((string)$risk);
-            $label = substr($label, 0, 200);
+            // Risque peut être string (ancienne réponse) ou array
+            if (is_string($risk)) {
+                $label       = trim($risk);
+                $description = '';
+                $control     = '';
+            } else {
+                $label       = trim((string)($risk['label']       ?? ''));
+                $description = trim((string)($risk['description'] ?? ''));
+                $control     = trim((string)($risk['control_procedure'] ?? ''));
+            }
 
             if (strlen($label) < 5) continue;
 
             $suggestions[] = [
-                'id' => $index + 1,
-                'code' => $code,
-                'label' => $label,
-                'control_procedure' => ''
+                'id'                => $idx + 1,
+                'label'             => substr($label,       0, 200),
+                'description'       => substr($description, 0, 400),
+                'control_procedure' => substr($control,     0, 400),
             ];
         }
-
         return $suggestions;
     }
 
-    /**
-     * ════════════════════════════════════════════════════════════════════════════
-     * 🔢 RÉCUPÉRER DERNIER NUMÉRO DE CODE
-     * ════════════════════════════════════════════════════════════════════════════
-     */
-    private function getLastRiskCode()
-    {
-        try {
-            $modelClass = 'App\Modules\Risk\Core\Models\Risk';
-            if (class_exists($modelClass)) {
-                $lastRisk = call_user_func([$modelClass, 'where'], 'code', 'like', 'RC-%')
-                    ->orderBy('id', 'desc')
-                    ->first();
-
-                if ($lastRisk && preg_match('/RC-(\d+)/', $lastRisk->code, $matches)) {
-                    return intval($matches[1]);
-                }
-            }
-        } catch (\Exception $e) {
-            Log::warning('⚠️  [Risk Code] Erreur', ['error' => $e->getMessage()]);
-        }
-
-        return 0;
-    }
-
-    /**
-     * ════════════════════════════════════════════════════════════════════════════
-     * 🛡️ FALLBACK SUGGESTIONS
-     * ════════════════════════════════════════════════════════════════════════════
-     */
-    private function getFallbackSuggestions()
+    // ══════════════════════════════════════════════════════════════════════════
+    // FALLBACKS
+    // ══════════════════════════════════════════════════════════════════════════
+    private function getFallbackSuggestions(): array
     {
         return [
-            'success' => true,
+            'success'     => true,
             'suggestions' => [
-                ['id' => 1, 'code' => 'RC-001', 'label' => 'Erreur de saisie ou d\'enregistrement des données', 'control_procedure' => ''],
-                ['id' => 2, 'code' => 'RC-002', 'label' => 'Non-respect du processus ou procédure établis', 'control_procedure' => ''],
-                ['id' => 3, 'code' => 'RC-003', 'label' => 'Absence de validation ou contrôle indépendant', 'control_procedure' => ''],
-                ['id' => 4, 'code' => 'RC-004', 'label' => 'Défaut de documentation ou traçabilité', 'control_procedure' => '']
+                [
+                    'id'                => 1,
+                    'label'             => 'Erreur de saisie ou d\'enregistrement des données',
+                    'description'       => 'Risque d\'inexactitude dans la capture ou le traitement des données liées à l\'activité.',
+                    'control_procedure' => 'Double vérification systématique des saisies par un second opérateur ou une règle de validation automatique.',
+                ],
+                [
+                    'id'                => 2,
+                    'label'             => 'Non-respect du processus ou des procédures établis',
+                    'description'       => 'Les étapes définies ne sont pas suivies, entraînant des écarts opérationnels.',
+                    'control_procedure' => 'Revue périodique de conformité et sensibilisation des équipes aux procédures en vigueur.',
+                ],
+                [
+                    'id'                => 3,
+                    'label'             => 'Absence de validation ou de contrôle indépendant',
+                    'description'       => 'Les traitements ne font l\'objet d\'aucune revue par une partie non impliquée dans leur exécution.',
+                    'control_procedure' => 'Mise en place d\'un circuit de validation à deux niveaux (opérateur + superviseur).',
+                ],
+                [
+                    'id'                => 4,
+                    'label'             => 'Défaut de documentation ou de traçabilité',
+                    'description'       => 'Les actions réalisées ne sont pas tracées, rendant l\'audit impossible.',
+                    'control_procedure' => 'Obligation d\'enregistrement horodaté de chaque opération dans le système d\'information.',
+                ],
             ],
-            'mode' => 'fallback'
+            'mode'        => 'fallback',
         ];
     }
 
-    /**
-     * ════════════════════════════════════════════════════════════════════════════
-     * 🛡️ FALLBACK CONTROL
-     * ════════════════════════════════════════════════════════════════════════════
-     */
-    private function getFallbackControl()
+    private function getFallbackControl(): array
     {
         return [
-            'success' => true,
-            'control_procedure' => 'Double vérification et validation selon les procédures établies',
-            'mode' => 'fallback'
+            'success'           => true,
+            'control_procedure' => 'Double vérification et validation par un responsable selon les procédures établies.',
+            'mode'              => 'fallback',
         ];
     }
 }

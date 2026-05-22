@@ -199,7 +199,7 @@ class AuthenticatedSessionController extends Controller
     }
 
     private function getTenantDbName(int $tenantId): ?string
-    {
+    { 
         try {
             $tenant = DB::connection('mysql')
                 ->table('tenants')
