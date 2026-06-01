@@ -273,44 +273,28 @@ Route::middleware(['auth', 'verified', EnsureIsAuditor::class])
     ->name('auditor.')
     ->group(function () {
 
-        // Dashboard principal
-        Route::get('/dashboard', [AuditorDashboardController::class, 'index'])
-            ->name('dashboard');
-
-        // Détail d'une mission
-        Route::get('/missions/{missionId}', [AuditorDashboardController::class, 'showMission'])
-            ->name('mission.show');
-    });
-
-    Route::middleware(['auth', 'verified', EnsureIsAuditor::class])
-    ->prefix('mon-espace')
-    ->name('auditor.')
-    ->group(function () {
-
         // ── Dashboard principal ────────────────────────────────────────────
         Route::get('/dashboard', [AuditorDashboardController::class, 'index'])
             ->name('dashboard');
-Route::patch('/programmation-missions/{id}/start', [AuditorMissionsController::class, 'startMission'])
-    ->name('missions.start')->where('id', '[0-9]+');
-        // ── Mes Missions ───────────────────────────────────────────────────
+
+        // ── Détail d'une mission ───────────────────────────────────────────
+        Route::get('/missions/{missionId}', [AuditorDashboardController::class, 'showMission'])
+            ->name('mission.show');
+
+        // ── Démarrer une mission ───────────────────────────────────────────
+        Route::patch('/programmation-missions/{id}/start', [AuditorMissionsController::class, 'startMission'])
+            ->name('missions.start')
+            ->where('id', '[0-9]+');
+
+        // ── Liste des missions ─────────────────────────────────────────────
         Route::prefix('missions')->name('missions.')->group(function () {
-
-            // Liste de toutes les missions
-            Route::get('/', [AuditorMissionsController::class, 'index'])
-                ->name('index');
-
-            // (Optionnel) Détail d'une mission spécifique
-            // Route::get('/{missionId}', [AuditorMissionsController::class, 'show'])
-            //     ->name('show');
+            Route::get('/', [AuditorMissionsController::class, 'index'])->name('index');
         });
 
-       Route::get('missions/{id}/gantt', [AuditorMissionsController::class, 'gantt'])
-->name('missions.gantt');
-
-Route::patch('missions/{id}/start', [AuditorMissionsController::class, 'start'])
-->name('missions.start');
-
-       
+        // ── Gantt d'une mission ────────────────────────────────────────────
+        Route::get('missions/{id}/gantt', [AuditorMissionsController::class, 'gantt'])
+            ->name('missions.gantt')
+            ->where('id', '[0-9]+');
     });
 
 
@@ -400,57 +384,68 @@ use App\Http\Controllers\Audit\MissionAuditAffectationController;   // NOUVEAU c
 //  À intégrer dans routes/web.php dans le groupe auth+verified existant
 // ══════════════════════════════════════════════════════════════════════════════
 
+
+
 Route::prefix('m/audit.core')
     ->middleware(['auth', 'verified'])
     ->group(function () {
 
-    // ── VUE PRINCIPALE — Affectation phases aux missions ──────────────────────
-    // GET /m/audit.core/affectation-phases-aux-mission?mission_id=X
+    // ══════════════════════════════════════════════════════════════════════════
+    //  VUE PRINCIPALE — Affectation phases aux missions
+    // ══════════════════════════════════════════════════════════════════════════
+
     Route::get('affectation-phases-aux-mission',
         [MissionPhaseAffectationController::class, 'index'])
         ->name('audit.core.home.programmation-missions.phases');
 
-    // ── API — Assignments existants d'une mission ─────────────────────────────
-    // GET /m/audit.core/api/programmation-missions/{missionId}/phase-assignments
+    // ══════════════════════════════════════════════════════════════════════════
+    //  API — Mission Phase Affectation
+    // ══════════════════════════════════════════════════════════════════════════
+
+    // Assignments existants d'une mission
     Route::get('api/programmation-missions/{missionId}/phase-assignments',
         [MissionPhaseAffectationController::class, 'getAssignedPhases'])
         ->where('missionId', '[0-9]+')
         ->name('audit.core.api.phase-assignments');
 
-    // ── API — Auditeurs d'une mission (par entité) ────────────────────────────
-    // GET /m/audit.core/api/programmation-missions/{missionId}/auditeurs
+    // Auditeurs d'une mission (par entité)
     Route::get('api/programmation-missions/{missionId}/auditeurs',
         [MissionPhaseAffectationController::class, 'getAuditeursApi'])
         ->where('missionId', '[0-9]+')
         ->name('audit.core.api.mission.auditeurs-phase');
 
-    // ── API — Phases d'un type de mission ────────────────────────────────────
-    // GET /m/audit.core/api/mission-phases/by-type/{typeId}
+    // Phases d'un type de mission
     Route::get('api/mission-phases/by-type/{typeId}',
         [MissionPhaseAffectationController::class, 'getPhasesByTypeApi'])
         ->where('typeId', '[0-9]+')
         ->name('audit.core.api.mission-phases.by-type');
 
-    // ── API — Sauvegarder les affectations ───────────────────────────────────
-    // POST /m/audit.core/api/mission-phases/affectation/{missionId}
+    // Sauvegarder les affectations
     Route::post('api/mission-phases/affectation/{missionId}',
         [MissionPhaseAffectationController::class, 'saveAffectation'])
         ->where('missionId', '[0-9]+')
         ->name('audit.core.api.phase-affectation.save');
 
-    // ── API — Toggle obligatoire d'une phase ──────────────────────────────────
-    // PATCH /m/audit.core/api/mission-phases/{id}/toggle-mandatory
+    // Toggle obligatoire d'une phase
     Route::patch('api/mission-phases/{id}/toggle-mandatory',
         [MissionPhaseAffectationController::class, 'toggleMandatory'])
         ->where('id', '[0-9]+')
         ->name('audit.core.api.phase.toggle-mandatory');
 
-    // ── API — Broadcast (message aux auditeurs d'une phase) ──────────────────
-    // POST /m/audit.core/api/mission-phases/broadcast/{missionId}
+    // Broadcast (message aux auditeurs d'une phase)
     Route::post('api/mission-phases/broadcast/{missionId}',
         [MissionPhaseAffectationController::class, 'broadcast'])
         ->where('missionId', '[0-9]+')
         ->name('audit.core.api.phase.broadcast');
+
+    // Synchronisation forcée des phases depuis ddmparam
+    Route::post('api/mission-phases/sync/{missionId}',
+        [MissionPhaseAffectationController::class, 'syncPhases'])
+        ->where('missionId', '[0-9]+')
+        ->name('audit.core.api.phase.sync');
+
+    Route::post('/api/mission-phases/sync-labels/{missionTypeId}',
+    [MissionPhaseAffectationController::class, 'syncPhasesLabels']);
 
     // ══════════════════════════════════════════════════════════════════════════
     //  AUDIT FORMS AFFECTATION (MissionAuditAffectationController)
@@ -1398,6 +1393,20 @@ Route::prefix('rapport')->name('auditor.ac.rapport.')->group(function () {
     // Sauvegarde des champs éditables en base
     Route::put('/mission/{missionId}/edits', [RapportAuditWordController::class, 'saveEdits'])
         ->name('word.edits');
+});
+Route::post('missions/{missionId}/rapport/html', [RapportAuditWordController::class, 'exportHtml'])
+     ->name('auditor.ac.rapport.word.html');
+
+Route::prefix('audit.core/ac/rapport')->name('auditor.rapport.')->middleware(['auth', /* vos middlewares */])->group(function () {
+
+ 
+Route::post('missions/{missionId}/rapport/html', [RapportAuditWordController::class, 'exportHtml'])
+     ->name('auditor.ac.rapport.word.html');
+    // Génère et télécharge le .html
+    Route::post('/mission/{missionId}/export-html',  [RapportAuditWordController::class, 'exportHtml'])->name('export-html');
+
+    // Sauvegarde les champs éditables en base
+    Route::put('/mission/{missionId}/save',          [RapportAuditWordController::class, 'save'])      ->name('save');
 });
 //         Route::put('eval-conformite/{form}', [App\Http\Controllers\Auditor\EvalConformiteController::class, 'update'])->name('auditor.ac.eval-conformite.update');
 //         Route::delete('eval-conformite/{form}', [App\Http\Controllers\Auditor\EvalConformiteController::class, 'destroy'])->name('auditor.ac.eval-conformite.destroy');

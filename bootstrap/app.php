@@ -23,8 +23,10 @@ return Application::configure(basePath: dirname(__DIR__))
             'bind.module' => \App\Http\Middleware\BindModuleMiddleware::class,
             'share.module' => \App\Http\Middleware\ShareModuleContextMiddleware::class,
             'audit.session' => \App\Http\Middleware\EnsureTenantSession::class,
+            'sync.phases' => \App\Http\Middleware\SyncMissionPhases::class,
         
         ]);
+        
 
         // ===== Groupe WEB (pile multi-tenant + Inertia) =====
         $middleware->web(append: [

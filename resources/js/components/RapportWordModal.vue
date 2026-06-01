@@ -1,21 +1,4 @@
 <template>
-  <!--
-    RapportWordModal.vue
-    ════════════════════
-    Usage :
-      <RapportWordModal
-        v-model:show="showRapport"
-        :mission-id="missionId"
-        :url-generate="route('auditor.rapport.generate', missionId)"
-        :url-download="route('auditor.rapport.download', missionId)"
-        :url-edit-base="route('auditor.rapport.edit',   '__DOC__')"
-        :url-save-base="route('auditor.rapport.save',   '__DOC__')"
-      />
-
-    Dépendances npm (identiques à WordEditorModal) :
-      @tiptap/vue-3  @tiptap/pm  @tiptap/starter-kit
-      @tiptap/extension-underline  @tiptap/extension-text-align
-  -->
   <Teleport to="body">
     <Transition name="rwm-fade">
       <div v-if="show" class="rwm-backdrop" @click.self="close">
@@ -27,7 +10,7 @@
               <div class="rwm-file-ico"><i class="ti ti-file-word"></i></div>
               <div>
                 <div class="rwm-title">Rapport d'Audit Interne</div>
-                <div class="rwm-sub">{{ currentStep === 'loading' ? 'Génération en cours…' : 'Édition &amp; téléchargement' }}</div>
+                <div class="rwm-sub">{{ currentStep === 'loading' ? 'Génération en cours…' : 'Édition &amp; export' }}</div>
               </div>
             </div>
             <div class="rwm-header__right">
@@ -42,7 +25,7 @@
               <i class="ti ti-eye"></i> Aperçu
             </button>
             <button class="rwm-tab" :class="{on: activeTab==='edit'}" @click="activeTab='edit'">
-              <i class="ti ti-edit"></i> Éditer zones modifiables
+              <i class="ti ti-edit"></i> Zones modifiables
               <span v-if="editableCount" class="rwm-tab-badge">{{ editableCount }}</span>
             </button>
             <button class="rwm-tab" :class="{on: activeTab==='export'}" @click="activeTab='export'">
@@ -56,8 +39,8 @@
             <!-- LOADING -->
             <div v-if="currentStep === 'loading'" class="rwm-center">
               <div class="rwm-spinner"></div>
-              <p class="rwm-load-title">Génération du rapport Word…</p>
-              <p class="rwm-load-sub">Extraction des données de la base · Mise en forme</p>
+              <p class="rwm-load-title">Génération du rapport…</p>
+              <p class="rwm-load-sub">Extraction des données · Mise en forme</p>
             </div>
 
             <!-- ERREUR -->
@@ -70,13 +53,11 @@
             <!-- APERÇU -->
             <template v-else-if="activeTab === 'apercu'">
               <div class="rwm-preview-wrap">
-                <!-- Page Word simulée -->
                 <div class="rwm-page">
 
                   <!-- Couverture (verrouillée) -->
                   <div class="rwm-section-hd rwm-locked">
-                    <i class="ti ti-lock" style="font-size:.7rem"></i>
-                    Section verrouillée — Données source
+                    <i class="ti ti-lock" style="font-size:.7rem"></i> Section verrouillée — Données source
                   </div>
                   <div class="rwm-cover">
                     <div class="rwm-cover-title">RAPPORT D'AUDIT INTERNE</div>
@@ -90,15 +71,12 @@
                       <span class="rwm-mission-lbl">Intitulé de la mission</span>
                       <div class="rwm-mission-val">{{ reportData?.mission?.libelle }}</div>
                     </div>
-                    <div class="rwm-conf">
-                      🔒 CONFIDENTIEL — Ce rapport s'adresse uniquement aux personnes désignées.
-                    </div>
+                    <div class="rwm-conf">🔒 CONFIDENTIEL — Ce rapport s'adresse uniquement aux personnes désignées.</div>
                   </div>
 
-                  <!-- Section 1.1 Opinion (modifiable) -->
+                  <!-- Opinion (modifiable) -->
                   <div class="rwm-section-hd rwm-editable-hd">
-                    <i class="ti ti-pencil" style="font-size:.7rem"></i>
-                    Section modifiable — 1.1 Opinion Générale
+                    <i class="ti ti-pencil" style="font-size:.7rem"></i> Section modifiable — 1.1 Opinion Générale
                   </div>
                   <div class="rwm-editable-zone" @click="goToEdit('opinion')">
                     <div class="rwm-ezone-hint">Cliquer pour modifier ↗</div>
@@ -137,8 +115,8 @@
                     <div class="rwm-obj-title">{{ i+1 }}. {{ obj.objectif }}</div>
                     <div v-for="c in getConstatsForObj(obj.num)" :key="c.num_frap" class="rwm-constat-line">
                       <span class="rwm-frap-ref">{{ c.num_frap }}</span>
-                      <span class="rwm-frap-txt">{{ c.probleme || c.fait_constats?.substring(0, 100) }}</span>
-                      <span :class="['rwm-badge', 'rwm-badge--' + (c.importance ?? 'basse')]">{{ badgeLabel(c.importance) }}</span>
+                      <span class="rwm-frap-txt">{{ c.probleme || c.fait_constats?.substring(0,100) }}</span>
+                      <span :class="['rwm-badge','rwm-badge--'+(c.importance??'basse')]">{{ badgeLabel(c.importance) }}</span>
                     </div>
                   </div>
 
@@ -163,21 +141,14 @@
                 <div class="rwm-edit-legend">
                   <i class="ti ti-info-circle"></i>
                   Seules les zones <strong>surlignées en bleu</strong> sont modifiables.
-                  Les données sources (constats, statistiques, équipe) sont verrouillées.
+                  Les données sources sont verrouillées.
                 </div>
-
-                <!-- Chaque zone modifiable -->
                 <div v-for="field in editableFieldDefs" :key="field.key"
-                     class="rwm-field-group"
-                     :id="'rwm-field-' + field.key">
+                     class="rwm-field-group" :id="'rwm-field-'+field.key">
                   <div class="rwm-field-header">
                     <i class="ti ti-pencil"></i>
                     <span class="rwm-field-label">{{ field.label }}</span>
                     <span class="rwm-field-section">{{ field.section }}</span>
-                  </div>
-                  <div class="rwm-field-locked-info" v-if="field.lockedRef">
-                    <i class="ti ti-lock"></i>
-                    <span>Données source (verrouillées) : {{ field.lockedRef }}</span>
                   </div>
                   <textarea
                     class="rwm-field-input"
@@ -187,26 +158,46 @@
                     @input="onFieldInput"
                   ></textarea>
                 </div>
-
               </div>
             </template>
 
             <!-- EXPORT -->
             <template v-else-if="activeTab === 'export'">
               <div class="rwm-export-wrap">
+
+                <!-- Carte Word -->
                 <div class="rwm-export-card">
-                  <div class="rwm-export-ico"><i class="ti ti-file-word"></i></div>
-                  <div>
-                    <div class="rwm-export-title">Rapport Word (.docx)</div>
-                    <div class="rwm-export-sub">Document complet avec toutes vos modifications, prêt à ouvrir dans Word.</div>
+                  <div class="rwm-export-ico" style="background:#dbeafe;color:#1d4ed8">
+                    <i class="ti ti-file-word"></i>
                   </div>
-                  <button class="rwm-btn rwm-btn--dl" :disabled="generating" @click="downloadWord">
-                    <span v-if="generating" class="rwm-spin"></span>
-                    <i v-else class="ti ti-download"></i>
-                    {{ generating ? 'Génération…' : 'Télécharger .docx' }}
+                  <div style="flex:1">
+                    <div class="rwm-export-title">Rapport Word (.docx)</div>
+                    <div class="rwm-export-sub">Document complet avec toutes vos modifications, prêt pour Word.</div>
+                  </div>
+                  <button class="rwm-btn rwm-btn--dl" :disabled="generatingWord" @click="downloadWord">
+                    <span v-if="generatingWord" class="rwm-spin"></span>
+                    <i v-else class="ti ti-file-word"></i>
+                    {{ generatingWord ? 'Génération…' : 'Télécharger .docx' }}
                   </button>
                 </div>
 
+                <!-- Carte HTML -->
+                <div class="rwm-export-card">
+                  <div class="rwm-export-ico" style="background:#d1fae5;color:#065f46">
+                    <i class="ti ti-file-code"></i>
+                  </div>
+                  <div style="flex:1">
+                    <div class="rwm-export-title">Rapport HTML (.html)</div>
+                    <div class="rwm-export-sub">Page web autonome, ouvrable dans tout navigateur, imprimable en PDF via Ctrl+P.</div>
+                  </div>
+                  <button class="rwm-btn rwm-btn--html" :disabled="generatingHtml" @click="downloadHtml">
+                    <span v-if="generatingHtml" class="rwm-spin"></span>
+                    <i v-else class="ti ti-file-code"></i>
+                    {{ generatingHtml ? 'Génération…' : 'Télécharger .html' }}
+                  </button>
+                </div>
+
+                <!-- Résumé contenu -->
                 <div class="rwm-export-summary">
                   <div class="rwm-export-sum-title">Contenu du rapport</div>
                   <div class="rwm-export-sum-grid">
@@ -235,6 +226,7 @@
                     </div>
                   </div>
                 </div>
+
               </div>
             </template>
 
@@ -247,16 +239,16 @@
             </div>
             <div class="rwm-footer__right">
               <button class="rwm-btn rwm-btn--ghost" @click="close">Fermer</button>
-              <button class="rwm-btn rwm-btn--save"
-                      :disabled="!dirty || saving"
-                      @click="saveEdits">
+              <button class="rwm-btn rwm-btn--save" :disabled="!dirty || saving" @click="saveEdits">
                 <span v-if="saving" class="rwm-spin"></span>
                 <i v-else class="ti ti-device-floppy"></i>
-                {{ saving ? 'Sauvegarde…' : 'Sauvegarder les modifications' }}
+                {{ saving ? 'Sauvegarde…' : 'Sauvegarder' }}
               </button>
-              <button class="rwm-btn rwm-btn--dl" :disabled="generating" @click="downloadWord">
-                <i class="ti ti-download"></i>
-                Télécharger .docx
+              <button class="rwm-btn rwm-btn--html" :disabled="generatingHtml" @click="downloadHtml">
+                <i class="ti ti-file-code"></i> HTML
+              </button>
+              <button class="rwm-btn rwm-btn--dl" :disabled="generatingWord" @click="downloadWord">
+                <i class="ti ti-file-word"></i> Word
               </button>
             </div>
           </div>
@@ -270,68 +262,64 @@
 <script setup lang="ts">
 import { ref, reactive, computed, watch } from 'vue'
 
-// ── Props & Emits ──────────────────────────────────────────────────
 const props = defineProps<{
-  show: boolean
-  missionId: number | string
-  urlData: string      // POST → charge les données JSON pour l'aperçu
-  urlDownload: string  // POST → reçoit editableFields, retourne le .docx binaire
-  urlSave?: string     // PUT  → sauvegarde les champs éditables en base
+  show:        boolean
+  missionId:   number | string
+  urlData:     string      // POST → charge les données JSON
+  urlDownload: string      // POST → retourne le .docx binaire
+  urlHtml:     string      // POST → retourne le .html
+  urlSave?:    string      // PUT  → sauvegarde les champs en base
 }>()
 
 const emit = defineEmits<{
   (e: 'update:show', val: boolean): void
 }>()
 
-// ── State ──────────────────────────────────────────────────────────
 type Step = 'loading' | 'ready' | 'error'
-const currentStep = ref<Step>('loading')
-const activeTab   = ref<'apercu' | 'edit' | 'export'>('apercu')
-const errorMsg    = ref('')
-const reportData  = ref<any>(null)
-const dirty       = ref(false)
-const saving      = ref(false)
-const generating  = ref(false)
-const lastSaved   = ref<string | null>(null)
+const currentStep    = ref<Step>('loading')
+const activeTab      = ref<'apercu' | 'edit' | 'export'>('apercu')
+const errorMsg       = ref('')
+const reportData     = ref<any>(null)
+const dirty          = ref(false)
+const saving         = ref(false)
+const generatingWord = ref(false)
+const generatingHtml = ref(false)
+const lastSaved      = ref<string | null>(null)
 
-// Champs éditables (1.1 opinion + 1.4 → 1.8)
 const editableFields = reactive<Record<string, string>>({
   opinion:       '',
   points_forts:  '',
-  normes:        "L'audit a été conduit conformément aux Normes Internationales pour la Pratique Professionnelle de l'Audit Interne (IIA). Ces normes requièrent que l'audit soit planifié et exécuté de façon à fournir une assurance raisonnable.",
+  normes:        "L'audit a été conduit conformément aux Normes Internationales pour la Pratique Professionnelle de l'Audit Interne (IIA).",
   limites:       '',
   observations:  '',
   difficultes:   '',
 })
 
-// ── Définitions des champs éditables ──────────────────────────────
 const editableFieldDefs = [
-  { key: 'opinion',      label: '1.1 — Opinion Générale',                      section: 'Section 1', rows: 4,  placeholder: "Synthèse de l'opinion globale sur le dispositif de contrôle interne audité…",         lockedRef: null },
-  { key: 'points_forts', label: '1.4 — Résumé des Points Forts',               section: 'Section 1', rows: 4,  placeholder: "Existence d'une charte éthique formalisée… Architecture redondante… Traçabilité…",   lockedRef: null },
-  { key: 'normes',       label: "1.5 — Énoncé des Normes d'Audit",             section: 'Section 1', rows: 3,  placeholder: "L'audit a été conduit conformément aux Normes IIA…",                                   lockedRef: null },
-  { key: 'limites',      label: '1.6 — Limites de l\'Audit',                   section: 'Section 1', rows: 3,  placeholder: "Impossibilité de s'assurer que toutes les interactions… Accès limité à certains modules…", lockedRef: null },
-  { key: 'observations', label: '1.7 — Observations de la Structure Auditée',  section: 'Section 1', rows: 3,  placeholder: "L'encadrement est globalement en accord avec les livrables…",                          lockedRef: null },
-  { key: 'difficultes',  label: '1.8 — Difficultés Rencontrées',               section: 'Section 1', rows: 3,  placeholder: "Indisponibilité de certains responsables… Délais de transmission…",                    lockedRef: null },
+  { key: 'opinion',      label: '1.1 — Opinion Générale',                     section: 'Section 1', rows: 4, placeholder: "Synthèse de l'opinion globale sur le dispositif de contrôle interne audité…" },
+  { key: 'points_forts', label: '1.4 — Résumé des Points Forts',              section: 'Section 1', rows: 4, placeholder: "Existence d'une charte éthique formalisée… Architecture redondante…" },
+  { key: 'normes',       label: "1.5 — Énoncé des Normes d'Audit",            section: 'Section 1', rows: 3, placeholder: "L'audit a été conduit conformément aux Normes IIA…" },
+  { key: 'limites',      label: "1.6 — Limites de l'Audit",                   section: 'Section 1', rows: 3, placeholder: "Impossibilité de s'assurer que toutes les interactions…" },
+  { key: 'observations', label: '1.7 — Observations de la Structure Auditée', section: 'Section 1', rows: 3, placeholder: "L'encadrement est globalement en accord avec les livrables…" },
+  { key: 'difficultes',  label: '1.8 — Difficultés Rencontrées',              section: 'Section 1', rows: 3, placeholder: "Indisponibilité de certains responsables…" },
 ]
 
 const freeTextFields = editableFieldDefs.filter(f => f.key !== 'opinion')
 const editableCount  = computed(() => editableFieldDefs.filter(f => editableFields[f.key]?.trim()).length)
 
-// ── Métadonnées couverture ─────────────────────────────────────────
 const coverMeta = computed(() => {
   const m = reportData.value?.mission
   if (!m) return {}
-  const fmtDate = (d: string) => d ? new Date(d).toLocaleDateString('fr-FR') : '—'
+  const fmt = (d: string) => d ? new Date(d).toLocaleDateString('fr-FR') : '—'
   return {
     'N° Rapport':     `RAP-${m.id}-${new Date().getFullYear()}`,
     'N° FPM':         m.numero_fpm ?? '—',
-    'Dates d\'audit': `${fmtDate(m.date_debut)} → ${fmtDate(m.date_fin)}`,
+    "Dates d'audit":  `${fmt(m.date_debut)} → ${fmt(m.date_fin)}`,
     'Lieu(x)':        m.lieux ?? '—',
     'Version':        'Définitive',
   }
 })
 
-// ── Helpers ────────────────────────────────────────────────────────
 function csrf(): string {
   return (document.querySelector('meta[name=csrf-token]') as HTMLMetaElement)?.content ?? ''
 }
@@ -352,7 +340,6 @@ function goToEdit(key: string): void {
 }
 function onFieldInput(): void { dirty.value = true }
 
-// ── API ────────────────────────────────────────────────────────────
 async function apiFetch(url: string, options: RequestInit = {}): Promise<any> {
   const res = await fetch(url, {
     ...options,
@@ -374,13 +361,10 @@ async function generate(): Promise<void> {
   try {
     const data = await apiFetch(props.urlData, { method: 'POST', body: '{}' })
     reportData.value = data.data ?? data
-    // Pré-remplir opinion depuis la BD
-    if (reportData.value?.opinion?.description && !editableFields.opinion) {
+    if (reportData.value?.opinion?.description && !editableFields.opinion)
       editableFields.opinion = reportData.value.opinion.description
-    }
-    if (reportData.value?.pointsForts?.length && !editableFields.points_forts) {
+    if (reportData.value?.pointsForts?.length && !editableFields.points_forts)
       editableFields.points_forts = reportData.value.pointsForts.map((f: string) => `• ${f}`).join('\n')
-    }
     currentStep.value = 'ready'
   } catch (err: any) {
     errorMsg.value = err.message ?? 'Erreur inconnue'
@@ -393,7 +377,7 @@ async function saveEdits(): Promise<void> {
   saving.value = true
   try {
     await apiFetch(props.urlSave, { method: 'PUT', body: JSON.stringify({ editable_fields: editableFields }) })
-    dirty.value  = false
+    dirty.value = false
     lastSaved.value = timeNow()
   } catch (err: any) {
     alert('Erreur sauvegarde : ' + err.message)
@@ -402,27 +386,55 @@ async function saveEdits(): Promise<void> {
   }
 }
 
+// ── Télécharger Word ──────────────────────────────────────────────
 async function downloadWord(): Promise<void> {
-  generating.value = true
+  generatingWord.value = true
   try {
     const res = await fetch(props.urlDownload, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrf() },
       body: JSON.stringify({ editable_fields: editableFields }),
     })
-    if (!res.ok) throw new Error(`HTTP ${res.status}`)
-    const blob  = await res.blob()
-    const url   = URL.createObjectURL(blob)
-    const a     = document.createElement('a')
-    a.href      = url
-    a.download  = `rapport_audit_mission_${props.missionId}.docx`
-    a.click()
-    URL.revokeObjectURL(url)
+    if (!res.ok) {
+      const json = await res.json().catch(() => ({}))
+      throw new Error(json?.error ?? `HTTP ${res.status}`)
+    }
+    const blob = await res.blob()
+    triggerDownload(blob, `rapport_audit_mission_${props.missionId}.docx`)
   } catch (err: any) {
-    alert('Erreur téléchargement : ' + err.message)
+    alert('Erreur téléchargement Word : ' + err.message)
   } finally {
-    generating.value = false
+    generatingWord.value = false
   }
+}
+
+// ── Télécharger HTML ──────────────────────────────────────────────
+async function downloadHtml(): Promise<void> {
+  generatingHtml.value = true
+  try {
+    const res = await fetch(props.urlHtml, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrf() },
+      body: JSON.stringify({ editable_fields: editableFields }),
+    })
+    if (!res.ok) {
+      const json = await res.json().catch(() => ({}))
+      throw new Error(json?.error ?? `HTTP ${res.status}`)
+    }
+    const blob = await res.blob()
+    triggerDownload(blob, `rapport_audit_mission_${props.missionId}.html`)
+  } catch (err: any) {
+    alert('Erreur téléchargement HTML : ' + err.message)
+  } finally {
+    generatingHtml.value = false
+  }
+}
+
+function triggerDownload(blob: Blob, filename: string): void {
+  const url = URL.createObjectURL(blob)
+  const a   = document.createElement('a')
+  a.href = url; a.download = filename; a.click()
+  URL.revokeObjectURL(url)
 }
 
 function close(): void {
@@ -430,263 +442,143 @@ function close(): void {
   emit('update:show', false)
 }
 
-// ── Watch ──────────────────────────────────────────────────────────
 watch(() => props.show, (val) => {
   if (val) {
-    activeTab.value  = 'apercu'
+    activeTab.value   = 'apercu'
     currentStep.value = 'loading'
-    dirty.value      = false
-    lastSaved.value  = null
+    dirty.value       = false
+    lastSaved.value   = null
     generate()
   }
 })
 </script>
 
 <style scoped>
-/* ═══════════════════════════════════════════════════════
-   BACKDROP & MODAL
-═══════════════════════════════════════════════════════ */
 .rwm-backdrop {
-  position: fixed; inset: 0;
-  background: rgba(15,23,42,.6);
-  backdrop-filter: blur(4px);
-  display: flex; align-items: center; justify-content: center;
-  z-index: 1060; padding: 1rem;
+  position:fixed;inset:0;background:rgba(15,23,42,.6);backdrop-filter:blur(4px);
+  display:flex;align-items:center;justify-content:center;z-index:1060;padding:1rem;
 }
 .rwm-modal {
-  background: #fff; border-radius: 14px;
-  width: 100%; max-width: 1000px; height: 92vh;
-  display: flex; flex-direction: column;
-  box-shadow: 0 25px 60px rgba(15,23,42,.25);
-  overflow: hidden;
+  background:#fff;border-radius:14px;width:100%;max-width:1000px;height:92vh;
+  display:flex;flex-direction:column;box-shadow:0 25px 60px rgba(15,23,42,.25);overflow:hidden;
 }
+.rwm-header{display:flex;align-items:center;justify-content:space-between;padding:.7rem 1rem;border-bottom:1px solid #e2e8f0;background:#f8fafc;flex-shrink:0}
+.rwm-header__left{display:flex;align-items:center;gap:.6rem}
+.rwm-header__right{display:flex;align-items:center;gap:.5rem}
+.rwm-file-ico{width:36px;height:36px;background:#dbeafe;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:1.1rem;color:#1d4ed8}
+.rwm-title{font-size:.78rem;font-weight:700;color:#0f172a}
+.rwm-sub{font-size:.65rem;color:#64748b}
+.rwm-dirty{display:inline-flex;align-items:center;gap:.2rem;background:#fef3c7;color:#92400e;border:1px solid #fde68a;border-radius:20px;padding:2px 8px;font-size:.62rem;font-weight:600}
+.rwm-ico-btn{background:none;border:1px solid #e2e8f0;border-radius:6px;width:28px;height:28px;display:flex;align-items:center;justify-content:center;cursor:pointer;color:#64748b;font-size:.85rem}
+.rwm-ico-btn:hover{background:#f1f5f9}
 
-/* ═══════════════════════════════════════════════════════
-   HEADER
-═══════════════════════════════════════════════════════ */
-.rwm-header {
-  display: flex; align-items: center; justify-content: space-between;
-  padding: .7rem 1rem; border-bottom: 1px solid #e2e8f0;
-  background: #f8fafc; flex-shrink: 0;
-}
-.rwm-header__left { display: flex; align-items: center; gap: .6rem; }
-.rwm-header__right { display: flex; align-items: center; gap: .5rem; }
-.rwm-file-ico {
-  width: 36px; height: 36px; background: #dbeafe; border-radius: 8px;
-  display: flex; align-items: center; justify-content: center;
-  font-size: 1.1rem; color: #1d4ed8;
-}
-.rwm-title { font-size: .78rem; font-weight: 700; color: #0f172a; }
-.rwm-sub   { font-size: .65rem; color: #64748b; }
-.rwm-dirty {
-  display: inline-flex; align-items: center; gap: .2rem;
-  background: #fef3c7; color: #92400e; border: 1px solid #fde68a;
-  border-radius: 20px; padding: 2px 8px; font-size: .62rem; font-weight: 600;
-}
-.rwm-ico-btn {
-  background: none; border: 1px solid #e2e8f0; border-radius: 6px;
-  width: 28px; height: 28px; display: flex; align-items: center; justify-content: center;
-  cursor: pointer; color: #64748b; font-size: .85rem;
-}
-.rwm-ico-btn:hover { background: #f1f5f9; }
+.rwm-tabs{display:flex;border-bottom:1px solid #e2e8f0;background:#f8fafc;flex-shrink:0}
+.rwm-tab{display:inline-flex;align-items:center;gap:.2rem;padding:.35rem .85rem;font-size:.7rem;font-weight:600;color:#64748b;border:none;background:none;border-bottom:2px solid transparent;cursor:pointer}
+.rwm-tab:hover{color:#1e40af;background:#eff6ff}
+.rwm-tab.on{color:#1e40af;border-bottom-color:#1e40af;background:#fff}
+.rwm-tab-badge{background:#1e40af;color:#fff;padding:0 5px;border-radius:10px;font-size:.56rem;line-height:1.4}
 
-/* ═══════════════════════════════════════════════════════
-   ONGLETS
-═══════════════════════════════════════════════════════ */
-.rwm-tabs {
-  display: flex; border-bottom: 1px solid #e2e8f0; background: #f8fafc; flex-shrink: 0;
-}
-.rwm-tab {
-  display: inline-flex; align-items: center; gap: .2rem;
-  padding: .35rem .85rem; font-size: .7rem; font-weight: 600;
-  color: #64748b; border: none; background: none;
-  border-bottom: 2px solid transparent; cursor: pointer;
-}
-.rwm-tab:hover { color: #1e40af; background: #eff6ff; }
-.rwm-tab.on { color: #1e40af; border-bottom-color: #1e40af; background: #fff; }
-.rwm-tab-badge {
-  background: #1e40af; color: #fff; padding: 0 5px; border-radius: 10px; font-size: .56rem; line-height: 1.4;
-}
+.rwm-body{flex:1;overflow:auto;background:#f1f5f9;display:flex;flex-direction:column}
 
-/* ═══════════════════════════════════════════════════════
-   BODY
-═══════════════════════════════════════════════════════ */
-.rwm-body { flex: 1; overflow: auto; background: #f1f5f9; display: flex; flex-direction: column; }
+.rwm-center{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:.6rem;color:#64748b}
+.rwm-center--err{color:#dc2626}
+.rwm-center--err i{font-size:2rem}
+.rwm-spinner{width:38px;height:38px;border:3px solid #e2e8f0;border-top-color:#1e40af;border-radius:50%;animation:rwm-spin .7s linear infinite}
+@keyframes rwm-spin{to{transform:rotate(360deg)}}
+.rwm-load-title{font-size:.8rem;font-weight:600;color:#0f172a}
+.rwm-load-sub{font-size:.65rem;color:#94a3b8}
 
-/* Loading / Error */
-.rwm-center {
-  flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: .6rem; color: #64748b;
-}
-.rwm-center--err { color: #dc2626; }
-.rwm-center--err i { font-size: 2rem; }
-.rwm-spinner {
-  width: 38px; height: 38px;
-  border: 3px solid #e2e8f0; border-top-color: #1e40af;
-  border-radius: 50%; animation: rwm-spin .7s linear infinite;
-}
-@keyframes rwm-spin { to { transform: rotate(360deg); } }
-.rwm-load-title { font-size: .8rem; font-weight: 600; color: #0f172a; }
-.rwm-load-sub   { font-size: .65rem; color: #94a3b8; }
+/* Aperçu */
+.rwm-preview-wrap{flex:1;display:flex;justify-content:center;padding:1.2rem .8rem;overflow-y:auto}
+.rwm-page{background:#fff;width:100%;max-width:720px;min-height:100%;border-radius:6px;box-shadow:0 1px 8px rgba(15,23,42,.08);padding:1.8rem 2rem;border:1px solid #e2e8f0;display:flex;flex-direction:column;gap:.8rem}
+.rwm-section-hd{display:inline-flex;align-items:center;gap:.3rem;padding:2px 8px;border-radius:4px;font-size:.6rem;font-weight:700;letter-spacing:.04em}
+.rwm-locked{background:#f1f5f9;color:#64748b}
+.rwm-editable-hd{background:#dbeafe;color:#1d4ed8;cursor:pointer}
+.rwm-cover{background:#f0f4f8;border-radius:6px;padding:1rem 1.2rem}
+.rwm-cover-title{font-size:1.2rem;font-weight:800;color:#1a3a5c;text-align:center;margin-bottom:.8rem}
+.rwm-cover-meta{display:grid;grid-template-columns:1fr 1fr;gap:.3rem;margin-bottom:.6rem}
+.rwm-cover-row{display:flex;flex-direction:column}
+.rwm-cover-k{font-size:.56rem;font-weight:700;color:#888;text-transform:uppercase}
+.rwm-cover-v{font-size:.72rem;color:#0f172a}
+.rwm-mission-box{background:#fff;border-radius:4px;padding:.4rem .6rem;margin-bottom:.5rem}
+.rwm-mission-lbl{font-size:.56rem;color:#888;text-transform:uppercase;display:block;margin-bottom:.15rem}
+.rwm-mission-val{font-size:.82rem;font-weight:700;color:#1a3a5c}
+.rwm-conf{background:#fff3ee;border-radius:4px;padding:.3rem .5rem;font-size:.6rem;color:#7a2800;font-style:italic}
+.rwm-editable-zone{border:1.5px dashed #93c5fd;border-radius:6px;padding:.6rem .8rem;background:#f0f7ff;cursor:pointer;transition:background .15s}
+.rwm-editable-zone:hover{background:#e0f2fe}
+.rwm-editable-zone--sm{padding:.4rem .6rem}
+.rwm-ezone-hint{font-size:.58rem;color:#1d4ed8;font-weight:600;margin-bottom:.2rem}
+.rwm-ezone-txt{font-size:.7rem;color:#475569;line-height:1.5;white-space:pre-line}
+.rwm-opinion-badge{display:inline-block;background:#dbeafe;color:#1d4ed8;border:1px solid #bfdbfe;border-radius:4px;padding:1px 8px;font-size:.65rem;font-weight:700;margin-bottom:.3rem}
+.rwm-opinion-txt{font-size:.7rem;color:#374151;line-height:1.5}
+.rwm-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:.4rem}
+.rwm-stat{border:1px solid #e2e8f0;border-radius:5px;padding:.4rem;text-align:center}
+.rwm-stat-n{font-size:1.4rem;font-weight:800;line-height:1}
+.rwm-stat-l{font-size:.58rem;color:#777}
+.rwm-stat--red .rwm-stat-n{color:#8b1a1a}
+.rwm-stat--orange .rwm-stat-n{color:#7a4a0a}
+.rwm-stat--green .rwm-stat-n{color:#0f5a3a}
+.rwm-stat--blue .rwm-stat-n{color:#1a4a8a}
+.rwm-obj-preview{background:#fafafa;border-radius:5px;padding:.4rem .6rem}
+.rwm-obj-title{font-size:.68rem;font-weight:700;color:#1a3a5c;margin-bottom:.25rem}
+.rwm-constat-line{display:flex;align-items:flex-start;gap:.4rem;padding:.2rem 0;border-bottom:1px solid #f0f0f0}
+.rwm-frap-ref{font-family:monospace;font-size:.6rem;color:#888;white-space:nowrap;flex-shrink:0}
+.rwm-frap-txt{flex:1;font-size:.67rem;color:#333}
+.rwm-badge{font-size:.58rem;font-weight:600;padding:1px 5px;border-radius:3px;white-space:nowrap;flex-shrink:0}
+.rwm-badge--critique{background:#fce8e8;color:#8b1a1a}
+.rwm-badge--haute{background:#fef3e2;color:#7a4a0a}
+.rwm-badge--moyenne{background:#e6f4ee;color:#0f5a3a}
+.rwm-badge--basse{background:#e8f0fb;color:#1a4a8a}
 
-/* ═══════════════════════════════════════════════════════
-   APERÇU — page Word simulée
-═══════════════════════════════════════════════════════ */
-.rwm-preview-wrap {
-  flex: 1; display: flex; justify-content: center; padding: 1.2rem .8rem; overflow-y: auto;
-}
-.rwm-page {
-  background: #fff; width: 100%; max-width: 720px; min-height: 100%;
-  border-radius: 6px; box-shadow: 0 1px 8px rgba(15,23,42,.08);
-  padding: 1.8rem 2rem; border: 1px solid #e2e8f0;
-  display: flex; flex-direction: column; gap: .8rem;
-}
+/* Éditeur */
+.rwm-edit-wrap{flex:1;padding:1rem;display:flex;flex-direction:column;gap:.6rem;overflow-y:auto}
+.rwm-edit-legend{display:flex;align-items:center;gap:.4rem;background:#eff6ff;border:1px solid #bfdbfe;border-radius:6px;padding:.4rem .7rem;font-size:.67rem;color:#1d4ed8}
+.rwm-field-group{background:#fff;border:1px solid #e2e8f0;border-radius:8px;overflow:hidden}
+.rwm-field-header{display:flex;align-items:center;gap:.3rem;padding:.4rem .7rem;background:#eff6ff;border-bottom:1px solid #bfdbfe}
+.rwm-field-header i{color:#1d4ed8;font-size:.8rem}
+.rwm-field-label{font-size:.7rem;font-weight:700;color:#0f172a;flex:1}
+.rwm-field-section{font-size:.58rem;color:#64748b;background:#f1f5f9;padding:1px 6px;border-radius:10px}
+.rwm-field-input{width:100%;border:none;outline:none;resize:vertical;padding:.5rem .7rem;font-size:.73rem;font-family:inherit;color:#1e293b;line-height:1.55;background:#fff}
+.rwm-field-input:focus{background:#f0f7ff}
 
-/* En-têtes de zone */
-.rwm-section-hd {
-  display: inline-flex; align-items: center; gap: .3rem;
-  padding: 2px 8px; border-radius: 4px; font-size: .6rem; font-weight: 700; letter-spacing: .04em;
-}
-.rwm-locked     { background: #f1f5f9; color: #64748b; }
-.rwm-editable-hd { background: #dbeafe; color: #1d4ed8; cursor: pointer; }
+/* Export */
+.rwm-export-wrap{flex:1;padding:1.2rem;display:flex;flex-direction:column;gap:.8rem;overflow-y:auto}
+.rwm-export-card{display:flex;align-items:center;gap:.8rem;background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:.8rem 1rem}
+.rwm-export-ico{width:42px;height:42px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:1.2rem;flex-shrink:0}
+.rwm-export-title{font-size:.75rem;font-weight:700;color:#0f172a}
+.rwm-export-sub{font-size:.62rem;color:#64748b}
+.rwm-export-summary{background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:.8rem 1rem}
+.rwm-export-sum-title{font-size:.68rem;font-weight:700;color:#0f172a;margin-bottom:.5rem}
+.rwm-export-sum-grid{display:grid;grid-template-columns:1fr 1fr;gap:.6rem}
+.rwm-sum-item{display:flex;gap:.4rem;font-size:.65rem}
+.rwm-sum-item--lock i{color:#64748b}
+.rwm-sum-item--edit i{color:#1d4ed8}
+.rwm-sum-k{font-weight:700;color:#374151;margin-bottom:.2rem}
+.rwm-sum-list{margin:0;padding-left:1rem;color:#64748b}
+.rwm-sum-list li{margin-bottom:.1rem}
 
-/* Couverture */
-.rwm-cover { background: #f0f4f8; border-radius: 6px; padding: 1rem 1.2rem; }
-.rwm-cover-title { font-size: 1.2rem; font-weight: 800; color: #1a3a5c; text-align: center; margin-bottom: .8rem; }
-.rwm-cover-meta  { display: grid; grid-template-columns: 1fr 1fr; gap: .3rem; margin-bottom: .6rem; }
-.rwm-cover-row   { display: flex; flex-direction: column; }
-.rwm-cover-k     { font-size: .56rem; font-weight: 700; color: #888; text-transform: uppercase; }
-.rwm-cover-v     { font-size: .72rem; color: #0f172a; }
-.rwm-mission-box { background: #fff; border-radius: 4px; padding: .4rem .6rem; margin-bottom: .5rem; }
-.rwm-mission-lbl { font-size: .56rem; color: #888; text-transform: uppercase; display: block; margin-bottom: .15rem; }
-.rwm-mission-val { font-size: .82rem; font-weight: 700; color: #1a3a5c; }
-.rwm-conf        { background: #fff3ee; border-radius: 4px; padding: .3rem .5rem; font-size: .6rem; color: #7a2800; font-style: italic; }
+/* Footer */
+.rwm-footer{display:flex;align-items:center;justify-content:space-between;padding:.7rem 1rem;border-top:1px solid #e2e8f0;background:#f8fafc;flex-shrink:0}
+.rwm-footer__right{display:flex;gap:.4rem}
+.rwm-saved{font-size:.65rem;color:#15803d;display:inline-flex;align-items:center;gap:.2rem}
+.rwm-btn{display:inline-flex;align-items:center;gap:.25rem;padding:6px 14px;border:none;border-radius:6px;font-size:.73rem;font-weight:600;cursor:pointer}
+.rwm-btn:disabled{opacity:.5;cursor:default}
+.rwm-btn--ghost{background:#f1f5f9;color:#475569;border:1px solid #e2e8f0}
+.rwm-btn--ghost:hover{background:#e2e8f0}
+.rwm-btn--save{background:#1e40af;color:#fff}
+.rwm-btn--save:hover:not(:disabled){background:#1d3a8a}
+.rwm-btn--dl{background:#1d4ed8;color:#fff}
+.rwm-btn--dl:hover:not(:disabled){background:#1e3a8a}
+.rwm-btn--html{background:#065f46;color:#fff}
+.rwm-btn--html:hover:not(:disabled){background:#064e3b}
+.rwm-spin{width:12px;height:12px;border:2px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:rwm-spin .7s linear infinite;display:inline-block}
 
-/* Zone modifiable */
-.rwm-editable-zone {
-  border: 1.5px dashed #93c5fd; border-radius: 6px; padding: .6rem .8rem;
-  background: #f0f7ff; cursor: pointer; transition: background .15s;
-}
-.rwm-editable-zone:hover { background: #e0f2fe; }
-.rwm-editable-zone--sm { padding: .4rem .6rem; }
-.rwm-ezone-hint  { font-size: .58rem; color: #1d4ed8; font-weight: 600; margin-bottom: .2rem; }
-.rwm-ezone-txt   { font-size: .7rem; color: #475569; line-height: 1.5; white-space: pre-line; }
-.rwm-opinion-badge {
-  display: inline-block; background: #dbeafe; color: #1d4ed8;
-  border: 1px solid #bfdbfe; border-radius: 4px;
-  padding: 1px 8px; font-size: .65rem; font-weight: 700; margin-bottom: .3rem;
-}
-.rwm-opinion-txt { font-size: .7rem; color: #374151; line-height: 1.5; }
+.rwm-fade-enter-active,.rwm-fade-leave-active{transition:all .2s ease}
+.rwm-fade-enter-from,.rwm-fade-leave-to{opacity:0;transform:scale(.97)}
 
-/* Stats */
-.rwm-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: .4rem; }
-.rwm-stat  { border: 1px solid #e2e8f0; border-radius: 5px; padding: .4rem; text-align: center; }
-.rwm-stat-n { font-size: 1.4rem; font-weight: 800; line-height: 1; }
-.rwm-stat-l { font-size: .58rem; color: #777; }
-.rwm-stat--red    .rwm-stat-n { color: #8b1a1a; }
-.rwm-stat--orange .rwm-stat-n { color: #7a4a0a; }
-.rwm-stat--green  .rwm-stat-n { color: #0f5a3a; }
-.rwm-stat--blue   .rwm-stat-n { color: #1a4a8a; }
-
-/* Constats résumé */
-.rwm-obj-preview  { background: #fafafa; border-radius: 5px; padding: .4rem .6rem; }
-.rwm-obj-title    { font-size: .68rem; font-weight: 700; color: #1a3a5c; margin-bottom: .25rem; }
-.rwm-constat-line { display: flex; align-items: flex-start; gap: .4rem; padding: .2rem 0; border-bottom: 1px solid #f0f0f0; }
-.rwm-frap-ref     { font-family: monospace; font-size: .6rem; color: #888; white-space: nowrap; flex-shrink: 0; }
-.rwm-frap-txt     { flex: 1; font-size: .67rem; color: #333; }
-.rwm-badge        { font-size: .58rem; font-weight: 600; padding: 1px 5px; border-radius: 3px; white-space: nowrap; flex-shrink: 0; }
-.rwm-badge--critique { background: #fce8e8; color: #8b1a1a; }
-.rwm-badge--haute    { background: #fef3e2; color: #7a4a0a; }
-.rwm-badge--moyenne  { background: #e6f4ee; color: #0f5a3a; }
-.rwm-badge--basse    { background: #e8f0fb; color: #1a4a8a; }
-
-/* ═══════════════════════════════════════════════════════
-   ÉDITEUR ZONES MODIFIABLES
-═══════════════════════════════════════════════════════ */
-.rwm-edit-wrap { flex: 1; padding: 1rem; display: flex; flex-direction: column; gap: .6rem; overflow-y: auto; }
-.rwm-edit-legend {
-  display: flex; align-items: center; gap: .4rem;
-  background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 6px;
-  padding: .4rem .7rem; font-size: .67rem; color: #1d4ed8;
-}
-.rwm-field-group { background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden; }
-.rwm-field-header {
-  display: flex; align-items: center; gap: .3rem;
-  padding: .4rem .7rem; background: #eff6ff; border-bottom: 1px solid #bfdbfe;
-}
-.rwm-field-header i { color: #1d4ed8; font-size: .8rem; }
-.rwm-field-label   { font-size: .7rem; font-weight: 700; color: #0f172a; flex: 1; }
-.rwm-field-section { font-size: .58rem; color: #64748b; background: #f1f5f9; padding: 1px 6px; border-radius: 10px; }
-.rwm-field-locked-info {
-  display: flex; align-items: center; gap: .3rem;
-  padding: .25rem .7rem; background: #f8fafc; border-bottom: 1px dashed #e2e8f0;
-  font-size: .6rem; color: #94a3b8;
-}
-.rwm-field-input {
-  width: 100%; border: none; outline: none; resize: vertical;
-  padding: .5rem .7rem; font-size: .73rem; font-family: inherit; color: #1e293b; line-height: 1.55;
-  background: #fff;
-}
-.rwm-field-input:focus { background: #f0f7ff; }
-
-/* ═══════════════════════════════════════════════════════
-   EXPORT
-═══════════════════════════════════════════════════════ */
-.rwm-export-wrap { flex: 1; padding: 1.2rem; display: flex; flex-direction: column; gap: .8rem; overflow-y: auto; }
-.rwm-export-card {
-  display: flex; align-items: center; gap: .8rem;
-  background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; padding: .8rem 1rem;
-}
-.rwm-export-ico  { width: 42px; height: 42px; background: #dbeafe; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 1.2rem; color: #1d4ed8; flex-shrink: 0; }
-.rwm-export-title{ font-size: .75rem; font-weight: 700; color: #0f172a; }
-.rwm-export-sub  { font-size: .62rem; color: #64748b; }
-
-.rwm-export-summary { background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; padding: .8rem 1rem; }
-.rwm-export-sum-title { font-size: .68rem; font-weight: 700; color: #0f172a; margin-bottom: .5rem; }
-.rwm-export-sum-grid  { display: grid; grid-template-columns: 1fr 1fr; gap: .6rem; }
-.rwm-sum-item { display: flex; gap: .4rem; font-size: .65rem; }
-.rwm-sum-item--lock i { color: #64748b; }
-.rwm-sum-item--edit i { color: #1d4ed8; }
-.rwm-sum-k    { font-weight: 700; color: #374151; margin-bottom: .2rem; }
-.rwm-sum-list { margin: 0; padding-left: 1rem; color: #64748b; }
-.rwm-sum-list li { margin-bottom: .1rem; }
-
-/* ═══════════════════════════════════════════════════════
-   FOOTER
-═══════════════════════════════════════════════════════ */
-.rwm-footer {
-  display: flex; align-items: center; justify-content: space-between;
-  padding: .7rem 1rem; border-top: 1px solid #e2e8f0;
-  background: #f8fafc; flex-shrink: 0;
-}
-.rwm-footer__right { display: flex; gap: .4rem; }
-.rwm-saved { font-size: .65rem; color: #15803d; display: inline-flex; align-items: center; gap: .2rem; }
-.rwm-btn {
-  display: inline-flex; align-items: center; gap: .25rem;
-  padding: 6px 14px; border: none; border-radius: 6px;
-  font-size: .73rem; font-weight: 600; cursor: pointer;
-}
-.rwm-btn:disabled { opacity: .5; cursor: default; }
-.rwm-btn--ghost { background: #f1f5f9; color: #475569; border: 1px solid #e2e8f0; }
-.rwm-btn--ghost:hover { background: #e2e8f0; }
-.rwm-btn--save  { background: #1e40af; color: #fff; }
-.rwm-btn--save:hover:not(:disabled)  { background: #1d3a8a; }
-.rwm-btn--dl    { background: #15803d; color: #fff; }
-.rwm-btn--dl:hover:not(:disabled)    { background: #166534; }
-.rwm-spin {
-  width: 12px; height: 12px; border: 2px solid rgba(255,255,255,.3);
-  border-top-color: #fff; border-radius: 50%;
-  animation: rwm-spin .7s linear infinite; display: inline-block;
-}
-
-/* ═══════════════════════════════════════════════════════
-   TRANSITIONS
-═══════════════════════════════════════════════════════ */
-.rwm-fade-enter-active, .rwm-fade-leave-active { transition: all .2s ease; }
-.rwm-fade-enter-from, .rwm-fade-leave-to { opacity: 0; transform: scale(.97); }
-
-@media (max-width: 640px) {
-  .rwm-modal { height: 95vh; border-radius: 10px 10px 0 0; margin-top: auto; }
-  .rwm-export-sum-grid { grid-template-columns: 1fr; }
-  .rwm-stats { grid-template-columns: 1fr 1fr; }
+@media(max-width:640px){
+  .rwm-modal{height:95vh;border-radius:10px 10px 0 0;margin-top:auto}
+  .rwm-export-sum-grid{grid-template-columns:1fr}
+  .rwm-stats{grid-template-columns:1fr 1fr}
 }
 </style>
