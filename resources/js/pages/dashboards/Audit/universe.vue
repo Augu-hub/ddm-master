@@ -581,7 +581,8 @@ const createRisk = async () => {
 }
 
 // ── HTTP ───────────────────────────────────────────────────────────────────
-const csrf    = () => (usePage().props as any).csrf ?? ''
+
+const csrf = () => (document.querySelector('meta[name="csrf-token"]') as HTMLMetaElement)?.content ?? ''
 const apiCall = (url: string, method = 'GET', body: object|null = null) =>
   fetch(url, {
     method,

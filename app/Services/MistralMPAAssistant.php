@@ -39,7 +39,7 @@ class MistralMPAAssistant
 
             $prompt = "Tu es expert en modélisation de processus métier (BPMN/ISO9001). " .
                       "Macro-processus: \"$macroKind\" ($macroName).\n\n" .
-                      "Génère 8 noms de processus typiques et réalistes pour ce macro.\n\n" .
+                      "Génère 8 noms de processus typiques et réalistes pour ce macro conforme en passation des marches.\n\n" .
                       "Réponds UNIQUEMENT en JSON valide au format:\n" .
                       "{\n" .
                       "  \"processus\": [\n" .
