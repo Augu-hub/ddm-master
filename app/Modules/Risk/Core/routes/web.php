@@ -36,17 +36,26 @@ Route::prefix('nomenclature')->name('nomenclature.')->group(function () {
     Route::put('/{id}/appetite', [NomenclatureController::class, 'assignAppetite'])
         ->name('assign-appetite')->whereNumber('id');
 
-    // Mistral AI ── risk.core.nomenclature.mistral.suggest
+    Route::post('/mistral/suggest-appetite',
+    [MistralNomenclatureController::class, 'suggestAppetite'])
+    ->name('mistral.suggest-appetite');
+ 
+Route::post('/mistral/suggest-appetite-level',
+    [MistralNomenclatureController::class, 'suggestAppetiteLevel'])
+    ->name('mistral.suggest-appetite-level');
+ 
+
+
     Route::post('/mistral/suggest', [MistralNomenclatureController::class, 'suggest'])
         ->name('mistral.suggest');
 
-    // Appétances CRUD
     Route::prefix('appetites')->name('appetites.')->group(function () {
         Route::post('/',       [NomenclatureController::class, 'storeAppetite'])  ->name('store');
         Route::put('/{id}',    [NomenclatureController::class, 'updateAppetite']) ->name('update') ->whereNumber('id');
         Route::delete('/{id}', [NomenclatureController::class, 'destroyAppetite'])->name('destroy')->whereNumber('id');
     });
 });
+
 
 // ── INCIDENTS ACTIFS ──────────────────────────────────────────────────────
 Route::prefix('incidents')->name('incidents.')->group(function () {
@@ -63,6 +72,8 @@ Route::prefix('incident-library')->name('incident-library.')->group(function () 
     Route::post('/{id}/reactivate',   [RiskIncidentLibraryController::class, 'reactivate'])   ->name('reactivate')    ->whereNumber('id');
     Route::post('/{id}/convert-risk', [RiskIncidentLibraryController::class, 'convertToRisk'])->name('convert-to-risk')->whereNumber('id');
 });
+
+
 
 // ── REGISTRE DES RISQUES ──────────────────────────────────────────────────
 Route::prefix('risks')->name('risks.')->group(function () {
@@ -119,15 +130,13 @@ Route::prefix('impact')->name('impact.')->group(function () {
     Route::put('/{impact_level}',   [ImpactLevelController::class,   'update']) ->name('update') ->whereNumber('impact_level');
     Route::delete('/{impact_level}',[ImpactLevelController::class,   'destroy'])->name('destroy')->whereNumber('impact_level');
 
-    // ── Critères d'impact ─────────────────────────────────────────────────
     Route::prefix('{impact_level}/criteria')->name('criteria.')->whereNumber('impact_level')->group(function () {
-        Route::post('/reorder', [ImpactCriterionController::class, 'reorder'])->name('reorder');
-        Route::post('/',        [ImpactCriterionController::class, 'store'])  ->name('store');
+        Route::post('/reorder',      [ImpactCriterionController::class, 'reorder'])->name('reorder');
+        Route::post('/',             [ImpactCriterionController::class, 'store'])  ->name('store');
         Route::put('/{criterion}',   [ImpactCriterionController::class, 'update']) ->name('update') ->whereNumber('criterion');
         Route::delete('/{criterion}',[ImpactCriterionController::class, 'destroy'])->name('destroy')->whereNumber('criterion');
     });
 
-    // ── Mistral critères d'impact (global) ────────────────────────────────
     Route::post('/criteria/mistral/suggest', [MistralImpactCriteriaController::class, 'suggest'])
         ->name('criteria.mistral.suggest');
 });
@@ -141,7 +150,7 @@ Route::prefix('frequency')->name('frequency.')->group(function () {
     Route::put('/{frequency_level}',    [FrequencyLevelController::class,   'update']) ->name('update') ->whereNumber('frequency_level');
     Route::delete('/{frequency_level}', [FrequencyLevelController::class,   'destroy'])->name('destroy')->whereNumber('frequency_level');
 
-    // ── Critères de fréquence ─────────────────────────────────────────────
+    // ── Critères de fréquence (existant — FrequencyCriterionController) ───
     Route::prefix('{frequency_level}/criteria')->name('criteria.')->whereNumber('frequency_level')->group(function () {
         Route::post('/reorder',      [FrequencyCriterionController::class, 'reorder'])->name('reorder');
         Route::post('/',             [FrequencyCriterionController::class, 'store'])  ->name('store');
@@ -149,7 +158,22 @@ Route::prefix('frequency')->name('frequency.')->group(function () {
         Route::delete('/{criterion}',[FrequencyCriterionController::class, 'destroy'])->name('destroy')->whereNumber('criterion');
     });
 
-    // ── Mistral critères de fréquence (global) ────────────────────────────
+    // ── Mistral critères de fréquence — existant ──────────────────────────
     Route::post('/criteria/mistral/suggest', [MistralFrequencyCriteriaController::class, 'suggest'])
         ->name('criteria.mistral.suggest');
+
+    // ── Templates de critères — NOUVEAU ──────────────────────────────────
+    Route::prefix('templates')->name('templates.')->group(function () {
+        Route::post('/',             [FrequencyLevelController::class, 'storeTemplate'])   ->name('store');
+        Route::put('/{template}',    [FrequencyLevelController::class, 'updateTemplate'])  ->name('update') ->whereNumber('template');
+        Route::delete('/{template}', [FrequencyLevelController::class, 'destroyTemplate']) ->name('destroy')->whereNumber('template');
+        Route::post('/reorder',      [FrequencyLevelController::class, 'reorderTemplates'])->name('reorder');
+    });
+
+    // ── IA contenu critères — NOUVEAU ────────────────────────────────────
+    Route::post('/criteria/suggest-content', [FrequencyLevelController::class, 'suggestCriteriaContent'])
+        ->name('criteria.suggest-content');
+
+    Route::post('/criteria/apply-content',   [FrequencyLevelController::class, 'applyCriteriaContent'])
+        ->name('criteria.apply-content');
 });
