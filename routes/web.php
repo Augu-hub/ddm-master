@@ -4,6 +4,7 @@ use App\Http\Controllers\Admin\AuditTypeFormsController;
 use App\Http\Controllers\Auditor\AnalyseProceduresController;
 use App\Http\Controllers\Auditor\AnalyseRisquesController;
 use App\Http\Controllers\Auditor\FicheTestController;
+use App\Http\Controllers\Auditor\ParametrageMarchesController;
 use App\Http\Controllers\Auditor\PlanActionController;
 use App\Http\Controllers\Auditor\PriseDeConnaissanceController;
 use App\Http\Controllers\Auditor\RapportAuditController;
@@ -1469,277 +1470,98 @@ Route::post('missions/{missionId}/rapport/html', [RapportAuditWordController::cl
 //         Route::post('fiche-constat/{form}/soumettre', [App\Http\Controllers\Auditor\FicheConstatController::class, 'soumettre'])->name('auditor.ac.fiche-constat.soumettre');
 //         Route::post('fiche-constat/{form}/valider', [App\Http\Controllers\Auditor\FicheConstatController::class, 'valider'])->name('auditor.ac.fiche-constat.valider');
      }); // end realisation
-// // ══════════════════════════════════════════════════════════════════
-// // TYPE : AF
-// // ══════════════════════════════════════════════════════════════════
-// Route::prefix('af')->group(function () {
-//     // ── Phase 1 : Preparation ──
-//     Route::prefix('preparation')->group(function () {
-//         // reunion-ouverture
-//         Route::get('reunion-ouverture', [App\Http\Controllers\Auditor\Af\ReunionOuvertureController::class, 'index'])->name('audit.af.preparation.reunion-ouverture');
-//         Route::get('reunion-ouverture/{form}/edit', [App\Http\Controllers\Auditor\Af\ReunionOuvertureController::class, 'edit'])->name('auditor.af.reunion-ouverture.edit');
-//         Route::post('reunion-ouverture', [App\Http\Controllers\Auditor\Af\ReunionOuvertureController::class, 'store'])->name('auditor.af.reunion-ouverture.store');
-//         Route::put('reunion-ouverture/{form}', [App\Http\Controllers\Auditor\Af\ReunionOuvertureController::class, 'update'])->name('auditor.af.reunion-ouverture.update');
-//         Route::delete('reunion-ouverture/{form}', [App\Http\Controllers\Auditor\Af\ReunionOuvertureController::class, 'destroy'])->name('auditor.af.reunion-ouverture.destroy');
-//         Route::post('reunion-ouverture/{form}/soumettre', [App\Http\Controllers\Auditor\Af\ReunionOuvertureController::class, 'soumettre'])->name('auditor.af.reunion-ouverture.soumettre');
-//         Route::post('reunion-ouverture/{form}/valider', [App\Http\Controllers\Auditor\Af\ReunionOuvertureController::class, 'valider'])->name('auditor.af.reunion-ouverture.valider');
-//         // prise-connaissance-faits
-//         Route::get('prise-connaissance-faits', [App\Http\Controllers\Auditor\Af\PriseConnaissanceFaitsController::class, 'index'])->name('audit.af.preparation.prise-connaissance-faits');
-//         Route::get('prise-connaissance-faits/{form}/edit', [App\Http\Controllers\Auditor\Af\PriseConnaissanceFaitsController::class, 'edit'])->name('auditor.af.prise-connaissance-faits.edit');
-//         Route::post('prise-connaissance-faits', [App\Http\Controllers\Auditor\Af\PriseConnaissanceFaitsController::class, 'store'])->name('auditor.af.prise-connaissance-faits.store');
-//         Route::put('prise-connaissance-faits/{form}', [App\Http\Controllers\Auditor\Af\PriseConnaissanceFaitsController::class, 'update'])->name('auditor.af.prise-connaissance-faits.update');
-//         Route::delete('prise-connaissance-faits/{form}', [App\Http\Controllers\Auditor\Af\PriseConnaissanceFaitsController::class, 'destroy'])->name('auditor.af.prise-connaissance-faits.destroy');
-//         Route::post('prise-connaissance-faits/{form}/soumettre', [App\Http\Controllers\Auditor\Af\PriseConnaissanceFaitsController::class, 'soumettre'])->name('auditor.af.prise-connaissance-faits.soumettre');
-//         Route::post('prise-connaissance-faits/{form}/valider', [App\Http\Controllers\Auditor\Af\PriseConnaissanceFaitsController::class, 'valider'])->name('auditor.af.prise-connaissance-faits.valider');
-//         // analyse-transactions-suspectes
-//         Route::get('analyse-transactions-suspectes', [App\Http\Controllers\Auditor\Af\AnalyseTransactionsSuspectesController::class, 'index'])->name('audit.af.preparation.analyse-transactions-suspectes');
-//         Route::get('analyse-transactions-suspectes/{form}/edit', [App\Http\Controllers\Auditor\Af\AnalyseTransactionsSuspectesController::class, 'edit'])->name('auditor.af.analyse-transactions-suspectes.edit');
-//         Route::post('analyse-transactions-suspectes', [App\Http\Controllers\Auditor\Af\AnalyseTransactionsSuspectesController::class, 'store'])->name('auditor.af.analyse-transactions-suspectes.store');
-//         Route::put('analyse-transactions-suspectes/{form}', [App\Http\Controllers\Auditor\Af\AnalyseTransactionsSuspectesController::class, 'update'])->name('auditor.af.analyse-transactions-suspectes.update');
-//         Route::delete('analyse-transactions-suspectes/{form}', [App\Http\Controllers\Auditor\Af\AnalyseTransactionsSuspectesController::class, 'destroy'])->name('auditor.af.analyse-transactions-suspectes.destroy');
-//         Route::post('analyse-transactions-suspectes/{form}/soumettre', [App\Http\Controllers\Auditor\Af\AnalyseTransactionsSuspectesController::class, 'soumettre'])->name('auditor.af.analyse-transactions-suspectes.soumettre');
-//         Route::post('analyse-transactions-suspectes/{form}/valider', [App\Http\Controllers\Auditor\Af\AnalyseTransactionsSuspectesController::class, 'valider'])->name('auditor.af.analyse-transactions-suspectes.valider');
-//         // analyse-repartition-taches
-//         Route::get('analyse-repartition-taches', [App\Http\Controllers\Auditor\Af\AnalyseRepartitionTachesController::class, 'index'])->name('audit.af.preparation.analyse-repartition-taches');
-//         Route::get('analyse-repartition-taches/{form}/edit', [App\Http\Controllers\Auditor\Af\AnalyseRepartitionTachesController::class, 'edit'])->name('auditor.af.analyse-repartition-taches.edit');
-//         Route::post('analyse-repartition-taches', [App\Http\Controllers\Auditor\Af\AnalyseRepartitionTachesController::class, 'store'])->name('auditor.af.analyse-repartition-taches.store');
-//         Route::put('analyse-repartition-taches/{form}', [App\Http\Controllers\Auditor\Af\AnalyseRepartitionTachesController::class, 'update'])->name('auditor.af.analyse-repartition-taches.update');
-//         Route::delete('analyse-repartition-taches/{form}', [App\Http\Controllers\Auditor\Af\AnalyseRepartitionTachesController::class, 'destroy'])->name('auditor.af.analyse-repartition-taches.destroy');
-//         Route::post('analyse-repartition-taches/{form}/soumettre', [App\Http\Controllers\Auditor\Af\AnalyseRepartitionTachesController::class, 'soumettre'])->name('auditor.af.analyse-repartition-taches.soumettre');
-//         Route::post('analyse-repartition-taches/{form}/valider', [App\Http\Controllers\Auditor\Af\AnalyseRepartitionTachesController::class, 'valider'])->name('auditor.af.analyse-repartition-taches.valider');
-//         // programme-investigation
-//         Route::get('programme-investigation', [App\Http\Controllers\Auditor\Af\ProgrammeInvestigationController::class, 'index'])->name('audit.af.preparation.programme-investigation');
-//         Route::get('programme-investigation/{form}/edit', [App\Http\Controllers\Auditor\Af\ProgrammeInvestigationController::class, 'edit'])->name('auditor.af.programme-investigation.edit');
-//         Route::post('programme-investigation', [App\Http\Controllers\Auditor\Af\ProgrammeInvestigationController::class, 'store'])->name('auditor.af.programme-investigation.store');
-//         Route::put('programme-investigation/{form}', [App\Http\Controllers\Auditor\Af\ProgrammeInvestigationController::class, 'update'])->name('auditor.af.programme-investigation.update');
-//         Route::delete('programme-investigation/{form}', [App\Http\Controllers\Auditor\Af\ProgrammeInvestigationController::class, 'destroy'])->name('auditor.af.programme-investigation.destroy');
-//         Route::post('programme-investigation/{form}/soumettre', [App\Http\Controllers\Auditor\Af\ProgrammeInvestigationController::class, 'soumettre'])->name('auditor.af.programme-investigation.soumettre');
-//         Route::post('programme-investigation/{form}/valider', [App\Http\Controllers\Auditor\Af\ProgrammeInvestigationController::class, 'valider'])->name('auditor.af.programme-investigation.valider');
-//     }); // end preparation
-//     // ── Phase 2 : Realisation ──
-//     Route::prefix('realisation')->group(function () {
-//         // test-procedures
-//         Route::get('test-procedures', [App\Http\Controllers\Auditor\Af\TestProceduresController::class, 'index'])->name('audit.af.realisation.test-procedures');
-//         Route::get('test-procedures/{form}/edit', [App\Http\Controllers\Auditor\Af\TestProceduresController::class, 'edit'])->name('auditor.af.test-procedures.edit');
-//         Route::post('test-procedures', [App\Http\Controllers\Auditor\Af\TestProceduresController::class, 'store'])->name('auditor.af.test-procedures.store');
-//         Route::put('test-procedures/{form}', [App\Http\Controllers\Auditor\Af\TestProceduresController::class, 'update'])->name('auditor.af.test-procedures.update');
-//         Route::delete('test-procedures/{form}', [App\Http\Controllers\Auditor\Af\TestProceduresController::class, 'destroy'])->name('auditor.af.test-procedures.destroy');
-//         Route::post('test-procedures/{form}/soumettre', [App\Http\Controllers\Auditor\Af\TestProceduresController::class, 'soumettre'])->name('auditor.af.test-procedures.soumettre');
-//         Route::post('test-procedures/{form}/valider', [App\Http\Controllers\Auditor\Af\TestProceduresController::class, 'valider'])->name('auditor.af.test-procedures.valider');
-//         // controle-transactions
-//         Route::get('controle-transactions', [App\Http\Controllers\Auditor\Af\ControleTransactionsController::class, 'index'])->name('audit.af.realisation.controle-transactions');
-//         Route::get('controle-transactions/{form}/edit', [App\Http\Controllers\Auditor\Af\ControleTransactionsController::class, 'edit'])->name('auditor.af.controle-transactions.edit');
-//         Route::post('controle-transactions', [App\Http\Controllers\Auditor\Af\ControleTransactionsController::class, 'store'])->name('auditor.af.controle-transactions.store');
-//         Route::put('controle-transactions/{form}', [App\Http\Controllers\Auditor\Af\ControleTransactionsController::class, 'update'])->name('auditor.af.controle-transactions.update');
-//         Route::delete('controle-transactions/{form}', [App\Http\Controllers\Auditor\Af\ControleTransactionsController::class, 'destroy'])->name('auditor.af.controle-transactions.destroy');
-//         Route::post('controle-transactions/{form}/soumettre', [App\Http\Controllers\Auditor\Af\ControleTransactionsController::class, 'soumettre'])->name('auditor.af.controle-transactions.soumettre');
-//         Route::post('controle-transactions/{form}/valider', [App\Http\Controllers\Auditor\Af\ControleTransactionsController::class, 'valider'])->name('auditor.af.controle-transactions.valider');
-//         // feuilles-travail-investigation
-//         Route::get('feuilles-travail-investigation', [App\Http\Controllers\Auditor\Af\FeuillesTravailInvestigationController::class, 'index'])->name('audit.af.realisation.feuilles-travail-investigation');
-//         Route::get('feuilles-travail-investigation/{form}/edit', [App\Http\Controllers\Auditor\Af\FeuillesTravailInvestigationController::class, 'edit'])->name('auditor.af.feuilles-travail-investigation.edit');
-//         Route::post('feuilles-travail-investigation', [App\Http\Controllers\Auditor\Af\FeuillesTravailInvestigationController::class, 'store'])->name('auditor.af.feuilles-travail-investigation.store');
-//         Route::put('feuilles-travail-investigation/{form}', [App\Http\Controllers\Auditor\Af\FeuillesTravailInvestigationController::class, 'update'])->name('auditor.af.feuilles-travail-investigation.update');
-//         Route::delete('feuilles-travail-investigation/{form}', [App\Http\Controllers\Auditor\Af\FeuillesTravailInvestigationController::class, 'destroy'])->name('auditor.af.feuilles-travail-investigation.destroy');
-//         Route::post('feuilles-travail-investigation/{form}/soumettre', [App\Http\Controllers\Auditor\Af\FeuillesTravailInvestigationController::class, 'soumettre'])->name('auditor.af.feuilles-travail-investigation.soumettre');
-//         Route::post('feuilles-travail-investigation/{form}/valider', [App\Http\Controllers\Auditor\Af\FeuillesTravailInvestigationController::class, 'valider'])->name('auditor.af.feuilles-travail-investigation.valider');
-//         // releve-anomalies
-//         Route::get('releve-anomalies', [App\Http\Controllers\Auditor\Af\ReleveAnomaliesController::class, 'index'])->name('audit.af.realisation.releve-anomalies');
-//         Route::get('releve-anomalies/{form}/edit', [App\Http\Controllers\Auditor\Af\ReleveAnomaliesController::class, 'edit'])->name('auditor.af.releve-anomalies.edit');
-//         Route::post('releve-anomalies', [App\Http\Controllers\Auditor\Af\ReleveAnomaliesController::class, 'store'])->name('auditor.af.releve-anomalies.store');
-//         Route::put('releve-anomalies/{form}', [App\Http\Controllers\Auditor\Af\ReleveAnomaliesController::class, 'update'])->name('auditor.af.releve-anomalies.update');
-//         Route::delete('releve-anomalies/{form}', [App\Http\Controllers\Auditor\Af\ReleveAnomaliesController::class, 'destroy'])->name('auditor.af.releve-anomalies.destroy');
-//         Route::post('releve-anomalies/{form}/soumettre', [App\Http\Controllers\Auditor\Af\ReleveAnomaliesController::class, 'soumettre'])->name('auditor.af.releve-anomalies.soumettre');
-//         Route::post('releve-anomalies/{form}/valider', [App\Http\Controllers\Auditor\Af\ReleveAnomaliesController::class, 'valider'])->name('auditor.af.releve-anomalies.valider');
-//         // fiche-constat-investigation
-//         Route::get('fiche-constat-investigation', [App\Http\Controllers\Auditor\Af\FicheConstatInvestigationController::class, 'index'])->name('audit.af.realisation.fiche-constat-investigation');
-//         Route::get('fiche-constat-investigation/{form}/edit', [App\Http\Controllers\Auditor\Af\FicheConstatInvestigationController::class, 'edit'])->name('auditor.af.fiche-constat-investigation.edit');
-//         Route::post('fiche-constat-investigation', [App\Http\Controllers\Auditor\Af\FicheConstatInvestigationController::class, 'store'])->name('auditor.af.fiche-constat-investigation.store');
-//         Route::put('fiche-constat-investigation/{form}', [App\Http\Controllers\Auditor\Af\FicheConstatInvestigationController::class, 'update'])->name('auditor.af.fiche-constat-investigation.update');
-//         Route::delete('fiche-constat-investigation/{form}', [App\Http\Controllers\Auditor\Af\FicheConstatInvestigationController::class, 'destroy'])->name('auditor.af.fiche-constat-investigation.destroy');
-//         Route::post('fiche-constat-investigation/{form}/soumettre', [App\Http\Controllers\Auditor\Af\FicheConstatInvestigationController::class, 'soumettre'])->name('auditor.af.fiche-constat-investigation.soumettre');
-//         Route::post('fiche-constat-investigation/{form}/valider', [App\Http\Controllers\Auditor\Af\FicheConstatInvestigationController::class, 'valider'])->name('auditor.af.fiche-constat-investigation.valider');
-//     }); // end realisation
-//     // ── Phase 3 : Conclusion ──
-//     Route::prefix('conclusion')->group(function () {
-//         // synthese-constats
-//         Route::get('synthese-constats', [App\Http\Controllers\Auditor\Af\SyntheseConstatsController::class, 'index'])->name('audit.af.conclusion.synthese-constats');
-//         Route::get('synthese-constats/{form}/edit', [App\Http\Controllers\Auditor\Af\SyntheseConstatsController::class, 'edit'])->name('auditor.af.synthese-constats.edit');
-//         Route::post('synthese-constats', [App\Http\Controllers\Auditor\Af\SyntheseConstatsController::class, 'store'])->name('auditor.af.synthese-constats.store');
-//         Route::put('synthese-constats/{form}', [App\Http\Controllers\Auditor\Af\SyntheseConstatsController::class, 'update'])->name('auditor.af.synthese-constats.update');
-//         Route::delete('synthese-constats/{form}', [App\Http\Controllers\Auditor\Af\SyntheseConstatsController::class, 'destroy'])->name('auditor.af.synthese-constats.destroy');
-//         Route::post('synthese-constats/{form}/soumettre', [App\Http\Controllers\Auditor\Af\SyntheseConstatsController::class, 'soumettre'])->name('auditor.af.synthese-constats.soumettre');
-//         Route::post('synthese-constats/{form}/valider', [App\Http\Controllers\Auditor\Af\SyntheseConstatsController::class, 'valider'])->name('auditor.af.synthese-constats.valider');
-//         // rapport-investigation
-//         Route::get('rapport-investigation', [App\Http\Controllers\Auditor\Af\RapportInvestigationController::class, 'index'])->name('audit.af.conclusion.rapport-investigation');
-//         Route::get('rapport-investigation/{form}/edit', [App\Http\Controllers\Auditor\Af\RapportInvestigationController::class, 'edit'])->name('auditor.af.rapport-investigation.edit');
-//         Route::post('rapport-investigation', [App\Http\Controllers\Auditor\Af\RapportInvestigationController::class, 'store'])->name('auditor.af.rapport-investigation.store');
-//         Route::put('rapport-investigation/{form}', [App\Http\Controllers\Auditor\Af\RapportInvestigationController::class, 'update'])->name('auditor.af.rapport-investigation.update');
-//         Route::delete('rapport-investigation/{form}', [App\Http\Controllers\Auditor\Af\RapportInvestigationController::class, 'destroy'])->name('auditor.af.rapport-investigation.destroy');
-//         Route::post('rapport-investigation/{form}/soumettre', [App\Http\Controllers\Auditor\Af\RapportInvestigationController::class, 'soumettre'])->name('auditor.af.rapport-investigation.soumettre');
-//         Route::post('rapport-investigation/{form}/valider', [App\Http\Controllers\Auditor\Af\RapportInvestigationController::class, 'valider'])->name('auditor.af.rapport-investigation.valider');
-//         // plan-mise-en-oeuvre
-//         Route::get('plan-mise-en-oeuvre', [App\Http\Controllers\Auditor\Af\PlanMiseEnOeuvreController::class, 'index'])->name('audit.af.conclusion.plan-mise-en-oeuvre');
-//         Route::get('plan-mise-en-oeuvre/{form}/edit', [App\Http\Controllers\Auditor\Af\PlanMiseEnOeuvreController::class, 'edit'])->name('auditor.af.plan-mise-en-oeuvre.edit');
-//         Route::post('plan-mise-en-oeuvre', [App\Http\Controllers\Auditor\Af\PlanMiseEnOeuvreController::class, 'store'])->name('auditor.af.plan-mise-en-oeuvre.store');
-//         Route::put('plan-mise-en-oeuvre/{form}', [App\Http\Controllers\Auditor\Af\PlanMiseEnOeuvreController::class, 'update'])->name('auditor.af.plan-mise-en-oeuvre.update');
-//         Route::delete('plan-mise-en-oeuvre/{form}', [App\Http\Controllers\Auditor\Af\PlanMiseEnOeuvreController::class, 'destroy'])->name('auditor.af.plan-mise-en-oeuvre.destroy');
-//         Route::post('plan-mise-en-oeuvre/{form}/soumettre', [App\Http\Controllers\Auditor\Af\PlanMiseEnOeuvreController::class, 'soumettre'])->name('auditor.af.plan-mise-en-oeuvre.soumettre');
-//         Route::post('plan-mise-en-oeuvre/{form}/valider', [App\Http\Controllers\Auditor\Af\PlanMiseEnOeuvreController::class, 'valider'])->name('auditor.af.plan-mise-en-oeuvre.valider');
-//     }); // end conclusion
-//     // ── Phase 5 : Recommandation ──
-//     Route::prefix('recommandation')->group(function () {
-//         // recommandation-anti-fraude
-//         Route::get('recommandation-anti-fraude', [App\Http\Controllers\Auditor\Af\RecommandationAntiFraudeController::class, 'index'])->name('audit.af.recommandation.recommandation-anti-fraude');
-//         Route::get('recommandation-anti-fraude/{form}/edit', [App\Http\Controllers\Auditor\Af\RecommandationAntiFraudeController::class, 'edit'])->name('auditor.af.recommandation-anti-fraude.edit');
-//         Route::post('recommandation-anti-fraude', [App\Http\Controllers\Auditor\Af\RecommandationAntiFraudeController::class, 'store'])->name('auditor.af.recommandation-anti-fraude.store');
-//         Route::put('recommandation-anti-fraude/{form}', [App\Http\Controllers\Auditor\Af\RecommandationAntiFraudeController::class, 'update'])->name('auditor.af.recommandation-anti-fraude.update');
-//         Route::delete('recommandation-anti-fraude/{form}', [App\Http\Controllers\Auditor\Af\RecommandationAntiFraudeController::class, 'destroy'])->name('auditor.af.recommandation-anti-fraude.destroy');
-//         Route::post('recommandation-anti-fraude/{form}/soumettre', [App\Http\Controllers\Auditor\Af\RecommandationAntiFraudeController::class, 'soumettre'])->name('auditor.af.recommandation-anti-fraude.soumettre');
-//         Route::post('recommandation-anti-fraude/{form}/valider', [App\Http\Controllers\Auditor\Af\RecommandationAntiFraudeController::class, 'valider'])->name('auditor.af.recommandation-anti-fraude.valider');
-//         // plan-action
-//         Route::get('plan-action', [App\Http\Controllers\Auditor\Af\PlanActionController::class, 'index'])->name('audit.af.recommandation.plan-action');
-//         Route::get('plan-action/{form}/edit', [App\Http\Controllers\Auditor\Af\PlanActionController::class, 'edit'])->name('auditor.af.plan-action.edit');
-//         Route::post('plan-action', [App\Http\Controllers\Auditor\Af\PlanActionController::class, 'store'])->name('auditor.af.plan-action.store');
-//         Route::put('plan-action/{form}', [App\Http\Controllers\Auditor\Af\PlanActionController::class, 'update'])->name('auditor.af.plan-action.update');
-//         Route::delete('plan-action/{form}', [App\Http\Controllers\Auditor\Af\PlanActionController::class, 'destroy'])->name('auditor.af.plan-action.destroy');
-//         Route::post('plan-action/{form}/soumettre', [App\Http\Controllers\Auditor\Af\PlanActionController::class, 'soumettre'])->name('auditor.af.plan-action.soumettre');
-//         Route::post('plan-action/{form}/valider', [App\Http\Controllers\Auditor\Af\PlanActionController::class, 'valider'])->name('auditor.af.plan-action.valider');
-//     }); // end recommandation
-// }); // end af
 
-// // ══════════════════════════════════════════════════════════════════
-// // TYPE : AP
-// // ══════════════════════════════════════════════════════════════════
-// Route::prefix('ap')->group(function () {
-//     // ── Phase 1 : Preparation ──
-//     Route::prefix('preparation')->group(function () {
-//         // reunion-ouverture
-//         Route::get('reunion-ouverture', [App\Http\Controllers\Auditor\Ap\ReunionOuvertureController::class, 'index'])->name('audit.ap.preparation.reunion-ouverture');
-//         Route::get('reunion-ouverture/{form}/edit', [App\Http\Controllers\Auditor\Ap\ReunionOuvertureController::class, 'edit'])->name('auditor.ap.reunion-ouverture.edit');
-//         Route::post('reunion-ouverture', [App\Http\Controllers\Auditor\Ap\ReunionOuvertureController::class, 'store'])->name('auditor.ap.reunion-ouverture.store');
-//         Route::put('reunion-ouverture/{form}', [App\Http\Controllers\Auditor\Ap\ReunionOuvertureController::class, 'update'])->name('auditor.ap.reunion-ouverture.update');
-//         Route::delete('reunion-ouverture/{form}', [App\Http\Controllers\Auditor\Ap\ReunionOuvertureController::class, 'destroy'])->name('auditor.ap.reunion-ouverture.destroy');
-//         Route::post('reunion-ouverture/{form}/soumettre', [App\Http\Controllers\Auditor\Ap\ReunionOuvertureController::class, 'soumettre'])->name('auditor.ap.reunion-ouverture.soumettre');
-//         Route::post('reunion-ouverture/{form}/valider', [App\Http\Controllers\Auditor\Ap\ReunionOuvertureController::class, 'valider'])->name('auditor.ap.reunion-ouverture.valider');
-//         // analyse-processus
-//         Route::get('analyse-processus', [App\Http\Controllers\Auditor\Ap\AnalyseProcessusController::class, 'index'])->name('audit.ap.preparation.analyse-processus');
-//         Route::get('analyse-processus/{form}/edit', [App\Http\Controllers\Auditor\Ap\AnalyseProcessusController::class, 'edit'])->name('auditor.ap.analyse-processus.edit');
-//         Route::post('analyse-processus', [App\Http\Controllers\Auditor\Ap\AnalyseProcessusController::class, 'store'])->name('auditor.ap.analyse-processus.store');
-//         Route::put('analyse-processus/{form}', [App\Http\Controllers\Auditor\Ap\AnalyseProcessusController::class, 'update'])->name('auditor.ap.analyse-processus.update');
-//         Route::delete('analyse-processus/{form}', [App\Http\Controllers\Auditor\Ap\AnalyseProcessusController::class, 'destroy'])->name('auditor.ap.analyse-processus.destroy');
-//         Route::post('analyse-processus/{form}/soumettre', [App\Http\Controllers\Auditor\Ap\AnalyseProcessusController::class, 'soumettre'])->name('auditor.ap.analyse-processus.soumettre');
-//         Route::post('analyse-processus/{form}/valider', [App\Http\Controllers\Auditor\Ap\AnalyseProcessusController::class, 'valider'])->name('auditor.ap.analyse-processus.valider');
-//         // analyse-forces-faiblesses
-//         Route::get('analyse-forces-faiblesses', [App\Http\Controllers\Auditor\Ap\AnalyseForcesFaiblessesController::class, 'index'])->name('audit.ap.preparation.analyse-forces-faiblesses');
-//         Route::get('analyse-forces-faiblesses/{form}/edit', [App\Http\Controllers\Auditor\Ap\AnalyseForcesFaiblessesController::class, 'edit'])->name('auditor.ap.analyse-forces-faiblesses.edit');
-//         Route::post('analyse-forces-faiblesses', [App\Http\Controllers\Auditor\Ap\AnalyseForcesFaiblessesController::class, 'store'])->name('auditor.ap.analyse-forces-faiblesses.store');
-//         Route::put('analyse-forces-faiblesses/{form}', [App\Http\Controllers\Auditor\Ap\AnalyseForcesFaiblessesController::class, 'update'])->name('auditor.ap.analyse-forces-faiblesses.update');
-//         Route::delete('analyse-forces-faiblesses/{form}', [App\Http\Controllers\Auditor\Ap\AnalyseForcesFaiblessesController::class, 'destroy'])->name('auditor.ap.analyse-forces-faiblesses.destroy');
-//         Route::post('analyse-forces-faiblesses/{form}/soumettre', [App\Http\Controllers\Auditor\Ap\AnalyseForcesFaiblessesController::class, 'soumettre'])->name('auditor.ap.analyse-forces-faiblesses.soumettre');
-//         Route::post('analyse-forces-faiblesses/{form}/valider', [App\Http\Controllers\Auditor\Ap\AnalyseForcesFaiblessesController::class, 'valider'])->name('auditor.ap.analyse-forces-faiblesses.valider');
-//         // indicateurs-performance
-//         Route::get('indicateurs-performance', [App\Http\Controllers\Auditor\Ap\IndicateursPerformanceController::class, 'index'])->name('audit.ap.preparation.indicateurs-performance');
-//         Route::get('indicateurs-performance/{form}/edit', [App\Http\Controllers\Auditor\Ap\IndicateursPerformanceController::class, 'edit'])->name('auditor.ap.indicateurs-performance.edit');
-//         Route::post('indicateurs-performance', [App\Http\Controllers\Auditor\Ap\IndicateursPerformanceController::class, 'store'])->name('auditor.ap.indicateurs-performance.store');
-//         Route::put('indicateurs-performance/{form}', [App\Http\Controllers\Auditor\Ap\IndicateursPerformanceController::class, 'update'])->name('auditor.ap.indicateurs-performance.update');
-//         Route::delete('indicateurs-performance/{form}', [App\Http\Controllers\Auditor\Ap\IndicateursPerformanceController::class, 'destroy'])->name('auditor.ap.indicateurs-performance.destroy');
-//         Route::post('indicateurs-performance/{form}/soumettre', [App\Http\Controllers\Auditor\Ap\IndicateursPerformanceController::class, 'soumettre'])->name('auditor.ap.indicateurs-performance.soumettre');
-//         Route::post('indicateurs-performance/{form}/valider', [App\Http\Controllers\Auditor\Ap\IndicateursPerformanceController::class, 'valider'])->name('auditor.ap.indicateurs-performance.valider');
-//         // programme-travail
-//         Route::get('programme-travail', [App\Http\Controllers\Auditor\Ap\ProgrammeTravailController::class, 'index'])->name('audit.ap.preparation.programme-travail');
-//         Route::get('programme-travail/{form}/edit', [App\Http\Controllers\Auditor\Ap\ProgrammeTravailController::class, 'edit'])->name('auditor.ap.programme-travail.edit');
-//         Route::post('programme-travail', [App\Http\Controllers\Auditor\Ap\ProgrammeTravailController::class, 'store'])->name('auditor.ap.programme-travail.store');
-//         Route::put('programme-travail/{form}', [App\Http\Controllers\Auditor\Ap\ProgrammeTravailController::class, 'update'])->name('auditor.ap.programme-travail.update');
-//         Route::delete('programme-travail/{form}', [App\Http\Controllers\Auditor\Ap\ProgrammeTravailController::class, 'destroy'])->name('auditor.ap.programme-travail.destroy');
-//         Route::post('programme-travail/{form}/soumettre', [App\Http\Controllers\Auditor\Ap\ProgrammeTravailController::class, 'soumettre'])->name('auditor.ap.programme-travail.soumettre');
-//         Route::post('programme-travail/{form}/valider', [App\Http\Controllers\Auditor\Ap\ProgrammeTravailController::class, 'valider'])->name('auditor.ap.programme-travail.valider');
-//     }); // end preparation
-//     // ── Phase 2 : Realisation ──
-//     Route::prefix('realisation')->group(function () {
-//         // evaluations-performance
-//         Route::get('evaluations-performance', [App\Http\Controllers\Auditor\Ap\EvaluationsPerformanceController::class, 'index'])->name('audit.ap.realisation.evaluations-performance');
-//         Route::get('evaluations-performance/{form}/edit', [App\Http\Controllers\Auditor\Ap\EvaluationsPerformanceController::class, 'edit'])->name('auditor.ap.evaluations-performance.edit');
-//         Route::post('evaluations-performance', [App\Http\Controllers\Auditor\Ap\EvaluationsPerformanceController::class, 'store'])->name('auditor.ap.evaluations-performance.store');
-//         Route::put('evaluations-performance/{form}', [App\Http\Controllers\Auditor\Ap\EvaluationsPerformanceController::class, 'update'])->name('auditor.ap.evaluations-performance.update');
-//         Route::delete('evaluations-performance/{form}', [App\Http\Controllers\Auditor\Ap\EvaluationsPerformanceController::class, 'destroy'])->name('auditor.ap.evaluations-performance.destroy');
-//         Route::post('evaluations-performance/{form}/soumettre', [App\Http\Controllers\Auditor\Ap\EvaluationsPerformanceController::class, 'soumettre'])->name('auditor.ap.evaluations-performance.soumettre');
-//         Route::post('evaluations-performance/{form}/valider', [App\Http\Controllers\Auditor\Ap\EvaluationsPerformanceController::class, 'valider'])->name('auditor.ap.evaluations-performance.valider');
-//         // benchmarking
-//         Route::get('benchmarking', [App\Http\Controllers\Auditor\Ap\BenchmarkingController::class, 'index'])->name('audit.ap.realisation.benchmarking');
-//         Route::get('benchmarking/{form}/edit', [App\Http\Controllers\Auditor\Ap\BenchmarkingController::class, 'edit'])->name('auditor.ap.benchmarking.edit');
-//         Route::post('benchmarking', [App\Http\Controllers\Auditor\Ap\BenchmarkingController::class, 'store'])->name('auditor.ap.benchmarking.store');
-//         Route::put('benchmarking/{form}', [App\Http\Controllers\Auditor\Ap\BenchmarkingController::class, 'update'])->name('auditor.ap.benchmarking.update');
-//         Route::delete('benchmarking/{form}', [App\Http\Controllers\Auditor\Ap\BenchmarkingController::class, 'destroy'])->name('auditor.ap.benchmarking.destroy');
-//         Route::post('benchmarking/{form}/soumettre', [App\Http\Controllers\Auditor\Ap\BenchmarkingController::class, 'soumettre'])->name('auditor.ap.benchmarking.soumettre');
-//         Route::post('benchmarking/{form}/valider', [App\Http\Controllers\Auditor\Ap\BenchmarkingController::class, 'valider'])->name('auditor.ap.benchmarking.valider');
-//         // feuilles-travail
-//         Route::get('feuilles-travail', [App\Http\Controllers\Auditor\Ap\FeuillesTravailController::class, 'index'])->name('audit.ap.realisation.feuilles-travail');
-//         Route::get('feuilles-travail/{form}/edit', [App\Http\Controllers\Auditor\Ap\FeuillesTravailController::class, 'edit'])->name('auditor.ap.feuilles-travail.edit');
-//         Route::post('feuilles-travail', [App\Http\Controllers\Auditor\Ap\FeuillesTravailController::class, 'store'])->name('auditor.ap.feuilles-travail.store');
-//         Route::put('feuilles-travail/{form}', [App\Http\Controllers\Auditor\Ap\FeuillesTravailController::class, 'update'])->name('auditor.ap.feuilles-travail.update');
-//         Route::delete('feuilles-travail/{form}', [App\Http\Controllers\Auditor\Ap\FeuillesTravailController::class, 'destroy'])->name('auditor.ap.feuilles-travail.destroy');
-//         Route::post('feuilles-travail/{form}/soumettre', [App\Http\Controllers\Auditor\Ap\FeuillesTravailController::class, 'soumettre'])->name('auditor.ap.feuilles-travail.soumettre');
-//         Route::post('feuilles-travail/{form}/valider', [App\Http\Controllers\Auditor\Ap\FeuillesTravailController::class, 'valider'])->name('auditor.ap.feuilles-travail.valider');
-//         // constats-ecarts
-//         Route::get('constats-ecarts', [App\Http\Controllers\Auditor\Ap\ConstatsEcartsController::class, 'index'])->name('audit.ap.realisation.constats-ecarts');
-//         Route::get('constats-ecarts/{form}/edit', [App\Http\Controllers\Auditor\Ap\ConstatsEcartsController::class, 'edit'])->name('auditor.ap.constats-ecarts.edit');
-//         Route::post('constats-ecarts', [App\Http\Controllers\Auditor\Ap\ConstatsEcartsController::class, 'store'])->name('auditor.ap.constats-ecarts.store');
-//         Route::put('constats-ecarts/{form}', [App\Http\Controllers\Auditor\Ap\ConstatsEcartsController::class, 'update'])->name('auditor.ap.constats-ecarts.update');
-//         Route::delete('constats-ecarts/{form}', [App\Http\Controllers\Auditor\Ap\ConstatsEcartsController::class, 'destroy'])->name('auditor.ap.constats-ecarts.destroy');
-//         Route::post('constats-ecarts/{form}/soumettre', [App\Http\Controllers\Auditor\Ap\ConstatsEcartsController::class, 'soumettre'])->name('auditor.ap.constats-ecarts.soumettre');
-//         Route::post('constats-ecarts/{form}/valider', [App\Http\Controllers\Auditor\Ap\ConstatsEcartsController::class, 'valider'])->name('auditor.ap.constats-ecarts.valider');
-//     }); // end realisation
-//     // ── Phase 3 : Conclusion ──
-//     Route::prefix('conclusion')->group(function () {
-//         // rapport-performance
-//         Route::get('rapport-performance', [App\Http\Controllers\Auditor\Ap\RapportPerformanceController::class, 'index'])->name('audit.ap.conclusion.rapport-performance');
-//         Route::get('rapport-performance/{form}/edit', [App\Http\Controllers\Auditor\Ap\RapportPerformanceController::class, 'edit'])->name('auditor.ap.rapport-performance.edit');
-//         Route::post('rapport-performance', [App\Http\Controllers\Auditor\Ap\RapportPerformanceController::class, 'store'])->name('auditor.ap.rapport-performance.store');
-//         Route::put('rapport-performance/{form}', [App\Http\Controllers\Auditor\Ap\RapportPerformanceController::class, 'update'])->name('auditor.ap.rapport-performance.update');
-//         Route::delete('rapport-performance/{form}', [App\Http\Controllers\Auditor\Ap\RapportPerformanceController::class, 'destroy'])->name('auditor.ap.rapport-performance.destroy');
-//         Route::post('rapport-performance/{form}/soumettre', [App\Http\Controllers\Auditor\Ap\RapportPerformanceController::class, 'soumettre'])->name('auditor.ap.rapport-performance.soumettre');
-//         Route::post('rapport-performance/{form}/valider', [App\Http\Controllers\Auditor\Ap\RapportPerformanceController::class, 'valider'])->name('auditor.ap.rapport-performance.valider');
-//         // plan-amelioration
-//         Route::get('plan-amelioration', [App\Http\Controllers\Auditor\Ap\PlanAmeliorationController::class, 'index'])->name('audit.ap.conclusion.plan-amelioration');
-//         Route::get('plan-amelioration/{form}/edit', [App\Http\Controllers\Auditor\Ap\PlanAmeliorationController::class, 'edit'])->name('auditor.ap.plan-amelioration.edit');
-//         Route::post('plan-amelioration', [App\Http\Controllers\Auditor\Ap\PlanAmeliorationController::class, 'store'])->name('auditor.ap.plan-amelioration.store');
-//         Route::put('plan-amelioration/{form}', [App\Http\Controllers\Auditor\Ap\PlanAmeliorationController::class, 'update'])->name('auditor.ap.plan-amelioration.update');
-//         Route::delete('plan-amelioration/{form}', [App\Http\Controllers\Auditor\Ap\PlanAmeliorationController::class, 'destroy'])->name('auditor.ap.plan-amelioration.destroy');
-//         Route::post('plan-amelioration/{form}/soumettre', [App\Http\Controllers\Auditor\Ap\PlanAmeliorationController::class, 'soumettre'])->name('auditor.ap.plan-amelioration.soumettre');
-//         Route::post('plan-amelioration/{form}/valider', [App\Http\Controllers\Auditor\Ap\PlanAmeliorationController::class, 'valider'])->name('auditor.ap.plan-amelioration.valider');
-//     }); // end conclusion
-//     // ── Phase 4 : Suivi ──
-//     Route::prefix('suivi')->group(function () {
-//         // suivi-indicateurs
-//         Route::get('suivi-indicateurs', [App\Http\Controllers\Auditor\Ap\SuiviIndicateursController::class, 'index'])->name('audit.ap.suivi.suivi-indicateurs');
-//         Route::get('suivi-indicateurs/{form}/edit', [App\Http\Controllers\Auditor\Ap\SuiviIndicateursController::class, 'edit'])->name('auditor.ap.suivi-indicateurs.edit');
-//         Route::post('suivi-indicateurs', [App\Http\Controllers\Auditor\Ap\SuiviIndicateursController::class, 'store'])->name('auditor.ap.suivi-indicateurs.store');
-//         Route::put('suivi-indicateurs/{form}', [App\Http\Controllers\Auditor\Ap\SuiviIndicateursController::class, 'update'])->name('auditor.ap.suivi-indicateurs.update');
-//         Route::delete('suivi-indicateurs/{form}', [App\Http\Controllers\Auditor\Ap\SuiviIndicateursController::class, 'destroy'])->name('auditor.ap.suivi-indicateurs.destroy');
-//         Route::post('suivi-indicateurs/{form}/soumettre', [App\Http\Controllers\Auditor\Ap\SuiviIndicateursController::class, 'soumettre'])->name('auditor.ap.suivi-indicateurs.soumettre');
-//         Route::post('suivi-indicateurs/{form}/valider', [App\Http\Controllers\Auditor\Ap\SuiviIndicateursController::class, 'valider'])->name('auditor.ap.suivi-indicateurs.valider');
-//     }); // end suivi
-//     // ── Phase 5 : Recommandation ──
-//     Route::prefix('recommandation')->group(function () {
-//         // fiche-recommandation
-//         Route::get('fiche-recommandation', [App\Http\Controllers\Auditor\Ap\FicheRecommandationController::class, 'index'])->name('audit.ap.recommandation.fiche-recommandation');
-//         Route::get('fiche-recommandation/{form}/edit', [App\Http\Controllers\Auditor\Ap\FicheRecommandationController::class, 'edit'])->name('auditor.ap.fiche-recommandation.edit');
-//         Route::post('fiche-recommandation', [App\Http\Controllers\Auditor\Ap\FicheRecommandationController::class, 'store'])->name('auditor.ap.fiche-recommandation.store');
-//         Route::put('fiche-recommandation/{form}', [App\Http\Controllers\Auditor\Ap\FicheRecommandationController::class, 'update'])->name('auditor.ap.fiche-recommandation.update');
-//         Route::delete('fiche-recommandation/{form}', [App\Http\Controllers\Auditor\Ap\FicheRecommandationController::class, 'destroy'])->name('auditor.ap.fiche-recommandation.destroy');
-//         Route::post('fiche-recommandation/{form}/soumettre', [App\Http\Controllers\Auditor\Ap\FicheRecommandationController::class, 'soumettre'])->name('auditor.ap.fiche-recommandation.soumettre');
-//         Route::post('fiche-recommandation/{form}/valider', [App\Http\Controllers\Auditor\Ap\FicheRecommandationController::class, 'valider'])->name('auditor.ap.fiche-recommandation.valider');
-//         // plan-action
-//         Route::get('plan-action', [App\Http\Controllers\Auditor\Ap\PlanActionController::class, 'index'])->name('audit.ap.recommandation.plan-action');
-//         Route::get('plan-action/{form}/edit', [App\Http\Controllers\Auditor\Ap\PlanActionController::class, 'edit'])->name('auditor.ap.plan-action.edit');
-//         Route::post('plan-action', [App\Http\Controllers\Auditor\Ap\PlanActionController::class, 'store'])->name('auditor.ap.plan-action.store');
-//         Route::put('plan-action/{form}', [App\Http\Controllers\Auditor\Ap\PlanActionController::class, 'update'])->name('auditor.ap.plan-action.update');
-//         Route::delete('plan-action/{form}', [App\Http\Controllers\Auditor\Ap\PlanActionController::class, 'destroy'])->name('auditor.ap.plan-action.destroy');
-//         Route::post('plan-action/{form}/soumettre', [App\Http\Controllers\Auditor\Ap\PlanActionController::class, 'soumettre'])->name('auditor.ap.plan-action.soumettre');
-//         Route::post('plan-action/{form}/valider', [App\Http\Controllers\Auditor\Ap\PlanActionController::class, 'valider'])->name('auditor.ap.plan-action.valider');
-//     }); // end recommandation
-//}); // end ap
+// ═══════════════════════════════════════════════════════════════════════════
+//  À AJOUTER dans routes/web.php
+//  Dans le groupe : Route::prefix('m/audit.core')->middleware(['web','auth','audit.session'])
+// ═══════════════════════════════════════════════════════════════════════════
 
+
+Route::prefix('param-marches')
+    ->name('audit.param-marches.')
+    ->group(function () {
+
+    // ── Vue principale ────────────────────────────────────────────────
+    Route::get('/', [ParametrageMarchesController::class, 'index'])->name('index');
+
+    // ── API JSON globale ──────────────────────────────────────────────
+    Route::get('/api/all', [ParametrageMarchesController::class, 'apiAll'])->name('api.all');
+
+    // ── Seed / Reset ──────────────────────────────────────────────────
+    Route::post('/seed',  [ParametrageMarchesController::class, 'seed']) ->name('seed');
+    Route::post('/reset', [ParametrageMarchesController::class, 'reset'])->name('reset');
+
+    // ── Détection automatique du mode de passation ────────────────────
+    Route::post('/detecter-mode', [ParametrageMarchesController::class, 'detecterModePassation'])->name('detecter-mode');
+
+    // ── TYPES D'ENTITÉS / AC ──────────────────────────────────────────
+    Route::post  ('/types-entites',      [ParametrageMarchesController::class, 'storeTypeEntite'])  ->name('types-entites.store');
+    Route::put   ('/types-entites/{id}', [ParametrageMarchesController::class, 'updateTypeEntite']) ->name('types-entites.update');
+    Route::delete('/types-entites/{id}', [ParametrageMarchesController::class, 'destroyTypeEntite'])->name('types-entites.destroy');
+
+    // ── SOURCES DE FINANCEMENT ────────────────────────────────────────
+    Route::post  ('/sources-financement',      [ParametrageMarchesController::class, 'storeSourceFinancement'])  ->name('sources-financement.store');
+    Route::put   ('/sources-financement/{id}', [ParametrageMarchesController::class, 'updateSourceFinancement']) ->name('sources-financement.update');
+    Route::delete('/sources-financement/{id}', [ParametrageMarchesController::class, 'destroySourceFinancement'])->name('sources-financement.destroy');
+
+    // ── NATURES DE MARCHÉ ─────────────────────────────────────────────
+    Route::post  ('/natures-marche',      [ParametrageMarchesController::class, 'storeNatureMarche'])  ->name('natures-marche.store');
+    Route::put   ('/natures-marche/{id}', [ParametrageMarchesController::class, 'updateNatureMarche']) ->name('natures-marche.update');
+    Route::delete('/natures-marche/{id}', [ParametrageMarchesController::class, 'destroyNatureMarche'])->name('natures-marche.destroy');
+
+    // ── MODES DE PASSATION ────────────────────────────────────────────
+    Route::post  ('/modes-passation',      [ParametrageMarchesController::class, 'storeModePassation'])  ->name('modes-passation.store');
+    Route::put   ('/modes-passation/{id}', [ParametrageMarchesController::class, 'updateModePassation']) ->name('modes-passation.update');
+    Route::delete('/modes-passation/{id}', [ParametrageMarchesController::class, 'destroyModePassation'])->name('modes-passation.destroy');
+
+    // ── ORGANES DE CONTRÔLE ───────────────────────────────────────────
+    Route::post  ('/organes',      [ParametrageMarchesController::class, 'storeOrgane'])  ->name('organes.store');
+    Route::put   ('/organes/{id}', [ParametrageMarchesController::class, 'updateOrgane']) ->name('organes.update');
+    Route::delete('/organes/{id}', [ParametrageMarchesController::class, 'destroyOrgane'])->name('organes.destroy');
+
+    // ── ORGANES LIÉS AUX MODES PM (pivot pm_mode_organes) ────────────
+    // POST   body: { mode_passation_code, organe_code }
+    // DELETE body: { mode_passation_code, organe_code }
+    Route::post  ('/mode-organes', [ParametrageMarchesController::class, 'storeModeOrgane']) ->name('mode-organes.store');
+    Route::delete('/mode-organes', [ParametrageMarchesController::class, 'destroyModeOrgane'])->name('mode-organes.destroy');
+
+    // ── SEUILS GÉNÉRAUX ───────────────────────────────────────────────
+    Route::post  ('/seuils-generaux',      [ParametrageMarchesController::class, 'storeSeuilGeneral'])  ->name('seuils-generaux.store');
+    Route::put   ('/seuils-generaux/{id}', [ParametrageMarchesController::class, 'updateSeuilGeneral']) ->name('seuils-generaux.update');
+    Route::delete('/seuils-generaux/{id}', [ParametrageMarchesController::class, 'destroySeuilGeneral'])->name('seuils-generaux.destroy');
+
+    // ── SEUILS PAR AC (pm_seuils_ac) ─────────────────────────────────
+    Route::post  ('/seuils-ac',      [ParametrageMarchesController::class, 'storeSeuilAC'])  ->name('seuils-ac.store');
+    Route::put   ('/seuils-ac/{id}', [ParametrageMarchesController::class, 'updateSeuilAC']) ->name('seuils-ac.update');
+    Route::delete('/seuils-ac/{id}', [ParametrageMarchesController::class, 'destroySeuilAC'])->name('seuils-ac.destroy');
+
+    // ── ORGANES LIÉS AUX PLAGES DE SEUIL AC (pm_seuils_ac_organes) ───
+    // POST   body: { seuil_ac_id, organe_code }
+    // DELETE body: { seuil_ac_id, organe_code }
+    Route::post  ('/seuils-ac-organes', [ParametrageMarchesController::class, 'storeSeuilAcOrgane']) ->name('seuils-ac-organes.store');
+    Route::delete('/seuils-ac-organes', [ParametrageMarchesController::class, 'destroySeuilAcOrgane'])->name('seuils-ac-organes.destroy');
+
+    // ── OPÉRATIONS (pm_operations) ────────────────────────────────────
+    Route::post  ('/operations',      [ParametrageMarchesController::class, 'storeOperation'])  ->name('operations.store');
+    Route::put   ('/operations/{id}', [ParametrageMarchesController::class, 'updateOperation']) ->name('operations.update');
+    Route::delete('/operations/{id}', [ParametrageMarchesController::class, 'destroyOperation'])->name('operations.destroy');
+
+    // ── DATES DE RÉFÉRENCE (pm_dates_reference) ───────────────────────
+    Route::post  ('/dates-reference',      [ParametrageMarchesController::class, 'storeDateReference'])  ->name('dates-reference.store');
+    Route::put   ('/dates-reference/{id}', [ParametrageMarchesController::class, 'updateDateReference']) ->name('dates-reference.update');
+    Route::delete('/dates-reference/{id}', [ParametrageMarchesController::class, 'destroyDateReference'])->name('dates-reference.destroy');
+
+    // ── DÉLAIS (pm_delais) ────────────────────────────────────────────
+    Route::post  ('/delais',      [ParametrageMarchesController::class, 'storeDelai'])  ->name('delais.store');
+    Route::put   ('/delais/{id}', [ParametrageMarchesController::class, 'updateDelai']) ->name('delais.update');
+    Route::delete('/delais/{id}', [ParametrageMarchesController::class, 'destroyDelai'])->name('delais.destroy');
+
+    // ── ORGANES LIÉS AUX DÉLAIS (pm_delai_organes) ───────────────────
+    // POST   body: { delai_id, organe_code }
+    // DELETE body: { delai_id, organe_code }
+    Route::post  ('/delai-organes', [ParametrageMarchesController::class, 'storeDelaiOrgane']) ->name('delai-organes.store');
+    Route::delete('/delai-organes', [ParametrageMarchesController::class, 'destroyDelaiOrgane'])->name('delai-organes.destroy');
+});
 
 });
 
