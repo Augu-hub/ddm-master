@@ -48,6 +48,12 @@ class RiskMatrixConfig extends Model
             ->orderBy('sort_order');
     }
 
+    public function masteryLevels(): HasMany
+    {
+        return $this->hasMany(RiskMasteryLevel::class, 'matrix_config_id')
+            ->orderBy('sort_order');
+    }
+
     // ─── Scopes ───────────────────────────────────────────────────────────────
 
     public function scopeForTenant(Builder $query, int $tenantId): Builder
@@ -62,9 +68,6 @@ class RiskMatrixConfig extends Model
 
     // ─── Méthodes métier ──────────────────────────────────────────────────────
 
-    /**
-     * Active cette config et désactive toutes les autres du même tenant.
-     */
     public function activate(): void
     {
         static::where('tenant_id', $this->tenant_id)
@@ -74,51 +77,13 @@ class RiskMatrixConfig extends Model
         $this->update(['is_active' => true]);
     }
 
-    /**
-     * Score maximum possible pour cette matrice (ex: 5×5 = 25).
-     */
     public function getMaxScoreAttribute(): int
     {
         return $this->matrix_size * $this->matrix_size;
     }
 
-    /**
-     * Libellé de la matrice (ex: "5×5").
-     */
     public function getMatrixLabelAttribute(): string
     {
         return "{$this->matrix_size}×{$this->matrix_size}";
-    }
-
-    /**
-     * Résout la zone de criticité correspondant à un score donné.
-     */
-    public function resolveZone(int $score): ?RiskCriticalityZone
-    {
-        return $this->criticalityZones
-            ->first(fn (RiskCriticalityZone $zone) =>
-                $score >= $zone->min_score && $score <= $zone->max_score
-            );
-    }
-
-    /**
-     * Génère la grille Impact × Fréquence avec score et zone.
-     * Retourne un tableau 2D [impact_score][freq_score] => ['score', 'zone']
-     */
-    public function buildMatrix(): array
-    {
-        $matrix = [];
-
-        foreach ($this->impactLevels as $impact) {
-            foreach ($this->frequencyLevels as $freq) {
-                $score = $impact->score * $freq->score;
-                $matrix[$impact->score][$freq->score] = [
-                    'score' => $score,
-                    'zone'  => $this->resolveZone($score),
-                ];
-            }
-        }
-
-        return $matrix;
     }
 }

@@ -4,149 +4,202 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
-use Illuminate\Support\Facades\Log;
 
 class MistralRiskController extends Controller
 {
-    private const MISTRAL_API_URL = 'https://api.mistral.ai/v1/chat/completions';
-    private const MISTRAL_MODEL   = 'mistral-large-latest';
-    private const NB_SUGGESTIONS  = 4;
+    private string $apiUrl   = 'https://api.mistral.ai/v1/chat/completions';
+    private string $model    = 'mistral-large-latest';
 
+    private function tenantId(): int
+    {
+        return (int) (session('tenant_id') ?? 1);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // POST /risks/mistral/suggest
+    // mode = 'factors'  → suggère des facteurs de risque pour une activité
+    // mode = 'risks'    → suggère des risques pour un facteur donné
+    // ═══════════════════════════════════════════════════════════════════════
     public function suggest(Request $request): JsonResponse
     {
-        $request->validate([
-            'secteur'              => 'required|string|max:255',
-            'activite_code'        => 'required|string|max:50',
-            'activite_nom'         => 'required|string|max:255',
-            'processus_code'       => 'required|string|max:50',
-            'processus_nom'        => 'required|string|max:255',
-            'macro_processus'      => 'nullable|string|max:255',
-            'nomenclature_domaine' => 'nullable|string|max:255',
-            'nomenclature_famille' => 'nullable|string|max:255',
-            'nomenclature_type'    => 'nullable|string|max:255',
-        ]);
+        $mode = $request->input('mode', 'factors');
 
-        $prompt = $this->buildPrompt($request);
+        return match ($mode) {
+            'factors' => $this->suggestFactors($request),
+            'risks'   => $this->suggestRisks($request),
+            default   => response()->json(['error' => 'Mode inconnu'], 422),
+        };
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // Suggérer les facteurs de risque d'une activité
+    // ─────────────────────────────────────────────────────────────────────
+    private function suggestFactors(Request $request): JsonResponse
+    {
+        $tid          = $this->tenantId();
+        $activityId   = $request->integer('activity_id');
+        $activityName = $request->string('activity_name');
+        $processName  = $request->string('process_name');
+        $macroName    = $request->string('macro_name');
+        $macroKind    = $request->string('macro_kind');
+
+        // Contexte utilisateur connecté (pour personnaliser les suggestions)
+        $userName  = auth()->user()?->name ?? 'utilisateur';
+        $userRole  = auth()->user()?->role  ?? null;
+
+        // Récupérer les risques déjà existants pour cette activité
+        $existingRisks = DB::connection('tenant')
+            ->table('risk_register')
+            ->where('tenant_id', $tid)
+            ->where('activity_id', $activityId)
+            ->whereNull('deleted_at')
+            ->pluck('libelle')
+            ->implode(', ');
+
+        $systemPrompt = <<<PROMPT
+Tu es un expert en gestion des risques opérationnels et en cartographie des processus.
+Tu analyses des activités d'entreprise et identifies les facteurs de risque majeurs.
+Réponds UNIQUEMENT en JSON valide, sans texte avant ou après, sans balises markdown.
+PROMPT;
+
+        $existingLine = $existingRisks ? "- Risques déjà identifiés : {$existingRisks}" : "";
+        $userPrompt = "Analyse cette activité et identifie ses facteurs de risque :\n\n"
+            . "- Macro-processus : {$macroName} (type : {$macroKind})\n"
+            . "- Processus : {$processName}\n"
+            . "- Activité : {$activityName}\n"
+            . "- Responsable connecté : {$userName}\n"
+            . ($existingLine ? "{$existingLine}\n" : "")
+            . "\nGénère exactement 1 facteurs de risque pour cette activité pas plus de 100 caractères.\n"
+            . "Un facteur de risque est la condition propice qui favorise la survenance du risque"
+            . "Réponds en JSON strict :\n"
+            . '{' . "\n"
+            . '  "description": "Une phrase décrivant le contexte de risque global de cette activité",' . "\n"
+            . '  "factors": [' . "\n"
+            . '    "Facteur 1 - description courte en 9-12 mots",' . "\n"
+            
+            . '  ]' . "\n"
+            . '}';
+
+        return $this->callMistral($systemPrompt, $userPrompt, function ($content) {
+            $data = json_decode($content, true);
+            return response()->json([
+                'description' => $data['description'] ?? '',
+                'factors'     => $data['factors']     ?? [],
+            ]);
+        });
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // Suggérer des risques pour un facteur + activité
+    // ─────────────────────────────────────────────────────────────────────
+    //une catégorie regroupant plusieurs risques liés
+    private function suggestRisks(Request $request): JsonResponse
+    {
+        $tid          = $this->tenantId();
+        $activityId   = $request->integer('activity_id');
+        $activityName = $request->string('activity_name');
+        $processName  = $request->string('process_name');
+        $macroName    = $request->string('macro_name');
+        $factorLabel  = $request->string('factor_label');
+        $factorDesc   = $request->string('factor_description', '');
+
+        // Risques déjà existants pour ce facteur
+        $existingRisks = [];
+        if ($request->filled('factor_id')) {
+            $existingRisks = DB::connection('tenant')
+                ->table('risk_register')
+                ->where('tenant_id', $tid)
+                ->where('factor_id', $request->integer('factor_id'))
+                ->whereNull('deleted_at')
+                ->pluck('libelle')
+                ->toArray();
+        }
+
+        $userName = auth()->user()?->name ?? 'utilisateur';
+        $existing = empty($existingRisks) ? '' : implode('; ', $existingRisks);
+
+        $systemPrompt = <<<PROMPT
+Tu es un expert en gestion des risques opérationnels pour des entreprises africaines.
+Tu génères des risques précis, concrets et actionnables.
+Réponds UNIQUEMENT en JSON valide, sans texte avant ou après, sans balises markdown.
+PROMPT;
+
+        $factorDescLine = $factorDesc ? "- Description du facteur : {$factorDesc}" : "";
+        $existingLine2  = $existing    ? "- Risques déjà enregistrés (ne pas répéter) : {$existing}" : "";
+        $userPrompt = "Génère des risques pour ce contexte :\n\n"
+            . "- Macro-processus : {$macroName}\n"
+            . "- Processus : {$processName}\n"
+            . "- Activité : {$activityName}\n"
+            . "- Facteur de risque : {$factorLabel}\n"
+            . ($factorDescLine ? "{$factorDescLine}\n" : "")
+            . ($existingLine2  ? "{$existingLine2}\n"  : "")
+            . "- Connecté en tant que : {$userName}\n\n"
+            . "Génère 3 à 5 risques distincts pas plus de 100 caractères, précis, liés directement à ce facteur de risque.\n"
+            . "Formule chaque risque comme un événement négatif potentiel.\n\n"
+            . "Réponds en JSON strict :\n"
+            . '{' . "\n"
+            . '  "risks": [' . "\n"
+            . '    "Libellé risque 1",' . "\n"
+            . '    "Libellé risque 2",' . "\n"
+            . '    "Libellé risque 3"' . "\n"
+            . '  ]' . "\n"
+            . '}';
+
+        return $this->callMistral($systemPrompt, $userPrompt, function ($content) {
+            $data = json_decode($content, true);
+            return response()->json([
+                'risks' => $data['risks'] ?? [],
+            ]);
+        });
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // Appel API Mistral
+    // ─────────────────────────────────────────────────────────────────────
+    private function callMistral(string $system, string $user, callable $onSuccess): JsonResponse
+    {
+        $apiKey = config('services.mistral.key') ?? env('MISTRAL_API_KEY');
+
+        if (!$apiKey) {
+            return response()->json(['error' => 'Clé API Mistral non configurée.'], 500);
+        }
 
         try {
-            $response = Http::timeout(45)
-                ->withHeaders([
-                    'Authorization' => 'Bearer ' . config('services.mistral.api_key'),
-                    'Content-Type'  => 'application/json',
-                ])
-                ->post(self::MISTRAL_API_URL, [
-                    'model'       => self::MISTRAL_MODEL,
+            $response = Http::withToken($apiKey)
+                ->timeout(30)
+                ->post($this->apiUrl, [
+                    'model'       => $this->model,
                     'temperature' => 0.4,
+                    'max_tokens'  => 800,
                     'messages'    => [
-                        ['role' => 'system', 'content' => $this->systemPrompt()],
-                        ['role' => 'user',   'content' => $prompt],
+                        ['role' => 'system', 'content' => $system],
+                        ['role' => 'user',   'content' => $user],
                     ],
                 ]);
 
             if (!$response->successful()) {
-                Log::error('MistralRisk API error', [
-                    'status' => $response->status(),
-                    'body'   => $response->body(),
-                ]);
-                return response()->json(['error' => 'Erreur API Mistral'], 502);
+                return response()->json([
+                    'error' => 'Erreur API Mistral : ' . $response->status(),
+                ], 500);
             }
 
-            $content = $response->json('choices.0.message.content', '');
-            $risks   = $this->parseResponse($content);
+            $content = $response->json('choices.0.message.content') ?? '';
 
-            return response()->json(['suggestions' => $risks]);
+            // Nettoyer les éventuels blocs markdown ```json ... ```
+            $content = preg_replace('/^```json\s*/m', '', $content);
+            $content = preg_replace('/^```\s*/m',     '', $content);
+            $content = trim($content);
+
+            if (!json_decode($content)) {
+                return response()->json(['error' => 'Réponse IA non parseable.'], 500);
+            }
+
+            return $onSuccess($content);
 
         } catch (\Exception $e) {
-            Log::error('MistralRisk exception', ['message' => $e->getMessage()]);
-            return response()->json(['error' => 'Service indisponible'], 503);
+            return response()->json(['error' => $e->getMessage()], 500);
         }
-    }
-
-    private function systemPrompt(): string
-    {
-        return 'Tu es un expert en gestion des risques certifie ISO 31000, COSO ERM et Basel II. '
-            . 'Tu analyses des processus metier et identifies des risques operationnels, financiers, '
-            . 'strategiques et de conformite. '
-            . 'Tu reponds UNIQUEMENT en JSON valide, sans texte avant ou apres, sans bloc markdown. '
-            . 'Ta reponse est un tableau JSON de risques structures. '
-            . 'Chaque risque est precis, actionnable et adapte au contexte fourni. '
-            . 'Tes suggestions sont redigees en francais professionnel.';
-    }
-
-    private function buildPrompt(Request $request): string
-    {
-        $n        = self::NB_SUGGESTIONS;
-        $secteur  = $request->secteur;
-        $actCode  = $request->activite_code;
-        $actNom   = $request->activite_nom;
-        $procCode = $request->processus_code;
-        $procNom  = $request->processus_nom;
-        $macro    = $request->macro_processus ?? '';
-
-        $nomCtx = '';
-        if ($request->nomenclature_type) {
-            $nomCtx = "Type de risque cible : {$request->nomenclature_type}";
-            if ($request->nomenclature_famille) $nomCtx .= " (famille : {$request->nomenclature_famille})";
-            if ($request->nomenclature_domaine) $nomCtx .= " (domaine : {$request->nomenclature_domaine})";
-        } elseif ($request->nomenclature_famille) {
-            $nomCtx = "Famille de risque : {$request->nomenclature_famille}";
-        } elseif ($request->nomenclature_domaine) {
-            $nomCtx = "Domaine de risque : {$request->nomenclature_domaine}";
-        }
-
-        return "Contexte de l'organisation :\n"
-            . "- Secteur d'activite : {$secteur}\n"
-            . "- Macro-processus : {$macro}\n"
-            . "- Processus : {$procCode} - {$procNom}\n"
-            . "- Activite analysee : {$actCode} - {$actNom}\n"
-            . ($nomCtx ? "- {$nomCtx}\n" : '')
-            . "\n"
-            . "Genere exactement {$n} risques distincts et realistes pour cette activite dans ce secteur.\n"
-            . "\n"
-            . "Reponds avec ce JSON (tableau de {$n} objets, rien d'autre) :\n"
-            . "[\n"
-            . "  {\n"
-            . '    "libelle": "Intitule concis du risque (max 120 caracteres)",' . "\n"
-            . '    "causes": "Description des causes potentielles (2-4 phrases)",' . "\n"
-            . '    "consequences": "Description des consequences et impacts (2-4 phrases)",' . "\n"
-            . '    "controles_existants": "Controles et dispositifs de maitrise recommandes (2-4 phrases)",' . "\n"
-            . '    "plan_traitement": "Plan action et mesures de traitement suggeres (2-4 phrases)"' . "\n"
-            . "  }\n"
-            . "]\n"
-            . "\n"
-            . "Consignes :\n"
-            . "- Chaque risque doit etre distinct et specifique a l'activite \"{$actNom}\"\n"
-            . "- Adapte le vocabulaire au secteur \"{$secteur}\"\n"
-            . "- Respecte le cadre ISO 31000 et COSO ERM\n"
-            . "- Les libelles commencent par un nom (ex: Rupture de..., Contamination de..., Defaut de...)\n"
-            . "- Ne numerote pas les risques";
-    }
-
-    private function parseResponse(string $content): array
-    {
-        $clean = preg_replace('/```json\s*/i', '', $content);
-        $clean = preg_replace('/```\s*/i', '', $clean);
-        $clean = trim($clean);
-
-        $decoded = json_decode($clean, true);
-
-        if (!is_array($decoded)) {
-            Log::warning('MistralRisk: reponse non parseable', ['content' => $content]);
-            return [];
-        }
-
-        return array_values(array_filter(array_map(function ($item) {
-            if (!isset($item['libelle']) || empty(trim($item['libelle']))) {
-                return null;
-            }
-            return [
-                'libelle'             => trim($item['libelle'] ?? ''),
-                'causes'              => trim($item['causes'] ?? ''),
-                'consequences'        => trim($item['consequences'] ?? ''),
-                'controles_existants' => trim($item['controles_existants'] ?? ''),
-                'plan_traitement'     => trim($item['plan_traitement'] ?? ''),
-            ];
-        }, $decoded)));
     }
 }
