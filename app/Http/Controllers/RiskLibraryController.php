@@ -3,20 +3,27 @@
 namespace App\Http\Controllers;
 
 use App\Models\RiskRegister;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 use Inertia\Response;
 
 class RiskLibraryController extends Controller
 {
-    // ── Index ─────────────────────────────────────────────────────────────────
+    private function tenantId(): int
+    {
+        return (int)(session('tenant_id') ?? 1);
+    }
 
+    // ═══════════════════════════════════════════════════════════════════════
+    // INDEX — bibliothèque en vue tableau
+    // ═══════════════════════════════════════════════════════════════════════
     public function index(): Response
     {
-        $tenantId = session('tenant_id') ?? 1;
+        $tid = $this->tenantId();
 
         $risks = RiskRegister::on('tenant')
-            ->tenant($tenantId)
+            ->tenant($tid)
             ->bibliotheque()
             ->with([
                 'activity.process.macroProcess',
@@ -27,102 +34,130 @@ class RiskLibraryController extends Controller
             ])
             ->orderBy('moved_to_library_at', 'desc')
             ->get()
-            ->map(fn ($r) => $this->formatRisk($r));
+            ->map(fn($r) => $this->formatRisk($r));
 
         return Inertia::render('dashboards/Risk/RiskLibrary/Index', [
-            'tree'  => $this->buildTree($risks),
-            'stats' => $this->getStats($tenantId),
+            'risks'         => $risks,
+            'tree'          => $this->buildTree($risks),
+            'stats'         => $this->getStats($tid),
+            'nomenclatures' => $this->getNomenclatures(),
         ]);
     }
 
-    // ── Retirer de la bibliothèque ────────────────────────────────────────────
+    // ═══════════════════════════════════════════════════════════════════════
+    // UPDATE — remplir les champs d'analyse depuis la bibliothèque
+    // ═══════════════════════════════════════════════════════════════════════
+    public function update(Request $request, int $id)
+    {
+        $tid  = $this->tenantId();
+        $risk = RiskRegister::on('tenant')
+            ->tenant($tid)
+            ->bibliotheque()
+            ->findOrFail($id);
 
+        $v = $request->validate([
+            'causes'                        => 'nullable|string',
+            'consequences'                  => 'nullable|string',
+            'consequences_autres_processus' => 'nullable|string',
+            'cout_consequences'             => 'nullable|string',
+            'controles_existants'           => 'nullable|string',
+            'entite_partenaire_impliquee'   => 'nullable|string',
+            'risque_realise'                => 'nullable|boolean',
+            'owner'                         => 'nullable|string|max:255',
+            'nomenclature_id'               => 'nullable|integer',
+            'plan_traitement'               => 'nullable|string',
+        ]);
+
+        $risk->update($v);
+
+        return back()->with('success', "Risque {$risk->code_risk} mis à jour.");
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // REMOVE FROM LIBRARY
+    // ═══════════════════════════════════════════════════════════════════════
     public function removeFromLibrary(int $id)
     {
-        $tenantId = session('tenant_id') ?? 1;
-
+        $tid  = $this->tenantId();
         $risk = RiskRegister::on('tenant')
-            ->tenant($tenantId)
+            ->tenant($tid)
             ->bibliotheque()
-            ->where('id', $id)
-            ->firstOrFail();
+            ->findOrFail($id);
 
         $risk->update(['moved_to_library_at' => null]);
 
         return back()->with('success', "Risque {$risk->code_risk} retiré de la bibliothèque.");
     }
 
-    // ── Helpers privés ────────────────────────────────────────────────────────
+    // ═══════════════════════════════════════════════════════════════════════
+    // PRIVATE
+    // ═══════════════════════════════════════════════════════════════════════
 
-    /**
-     * Construit l'arborescence :
-     * Macro-processus → Processus → Activité → Risques
-     */
     private function buildTree($risks): array
     {
         $tree = [];
-
         foreach ($risks as $risk) {
-            $macroId   = $risk['macro_process_id']   ?? 0;
-            $processId = $risk['process_id']          ?? 0;
-            $actId     = $risk['activity_id']         ?? 0;
+            $macroId   = $risk['macro_process_id'] ?? 0;
+            $processId = $risk['process_id']        ?? 0;
+            $actId     = $risk['activity_id']       ?? 0;
 
-            // ── Macro-processus ────────────────────────────────────────────
             if (!isset($tree[$macroId])) {
                 $tree[$macroId] = [
-                    'id'        => $macroId,
-                    'code'      => $risk['macro_process_code'] ?? '—',
-                    'name'      => $risk['macro_process_name'] ?? 'Sans macro-processus',
-                    'kind'      => $risk['macro_process_kind'] ?? null,
+                    'id' => $macroId, 'code' => $risk['macro_process_code'] ?? '—',
+                    'name' => $risk['macro_process_name'] ?? 'Sans macro-processus',
+                    'kind' => $risk['macro_process_kind'] ?? null,
                     'processes' => [],
                 ];
             }
-
-            // ── Processus ──────────────────────────────────────────────────
             if (!isset($tree[$macroId]['processes'][$processId])) {
                 $tree[$macroId]['processes'][$processId] = [
-                    'id'         => $processId,
-                    'code'       => $risk['process_code'] ?? '—',
-                    'name'       => $risk['process_name'] ?? 'Sans processus',
+                    'id' => $processId, 'code' => $risk['process_code'] ?? '—',
+                    'name' => $risk['process_name'] ?? 'Sans processus',
                     'activities' => [],
                 ];
             }
-
-            // ── Activité ───────────────────────────────────────────────────
             if (!isset($tree[$macroId]['processes'][$processId]['activities'][$actId])) {
                 $tree[$macroId]['processes'][$processId]['activities'][$actId] = [
-                    'id'    => $actId,
-                    'code'  => $risk['activity_code'] ?? '—',
-                    'name'  => $risk['activity_name'] ?? 'Sans activité',
+                    'id' => $actId, 'code' => $risk['activity_code'] ?? '—',
+                    'name' => $risk['activity_name'] ?? 'Sans activité',
                     'risks' => [],
                 ];
             }
-
-            $tree[$macroId]['processes'][$processId]['activities'][$actId]['risks'][] = $risk;
+            // Déduplication : ne pas ajouter deux fois le même risque
+            $existingIds = array_column($tree[$macroId]['processes'][$processId]['activities'][$actId]['risks'], 'id');
+            if (!in_array($risk['id'], $existingIds)) {
+                $tree[$macroId]['processes'][$processId]['activities'][$actId]['risks'][] = $risk;
+            }
         }
 
-        // Réindexation des tableaux associatifs → tableaux séquentiels
         return array_values(array_map(function ($macro) {
             $macro['processes'] = array_values(array_map(function ($process) {
-                $process['activities'] = array_values(array_map(function ($activity) {
-                    return $activity;
-                }, $process['activities']));
+                $process['activities'] = array_values($process['activities']);
                 return $process;
             }, $macro['processes']));
             return $macro;
         }, $tree));
     }
 
-    private function getStats(int $tenantId): array
+    private function getStats(int $tid): array
     {
-        $base = RiskRegister::on('tenant')->tenant($tenantId);
-
+        $base = RiskRegister::on('tenant')->tenant($tid);
         return [
-            'total_registre'    => (clone $base)->registre()->count(),
-            'total_bibliotheque'=> (clone $base)->bibliotheque()->count(),
-            'total_actif'       => (clone $base)->bibliotheque()->actif()->count(),
-            'total_draft'       => (clone $base)->bibliotheque()->draft()->count(),
+            'total_registre'     => (clone $base)->registre()->count(),
+            'total_bibliotheque' => (clone $base)->bibliotheque()->count(),
+            'total_actif'        => (clone $base)->bibliotheque()->actif()->count(),
+            'total_draft'        => (clone $base)->bibliotheque()->draft()->count(),
         ];
+    }
+
+    private function getNomenclatures(): array
+    {
+        return DB::connection('tenant')
+            ->table('risk_nomenclatures')
+            ->select('id', 'label', 'parent_id', 'level')
+            ->orderBy('label')
+            ->get()
+            ->toArray();
     }
 
     private function formatRisk(RiskRegister $r): array
@@ -136,39 +171,44 @@ class RiskLibraryController extends Controller
         $frequency = $r->relationLoaded('frequencyLevel')      ? $r->frequencyLevel      : null;
 
         return [
-            'id'                   => $r->id,
-            'code_risk'            => $r->code_risk,
-            'libelle'              => $r->libelle,
-            'description'          => $r->description,
-            'entity_id'            => $r->entity_id,
-            'activity_id'          => $r->activity_id,
-            'process_id'           => $activity?->process_id,
-            'macro_process_id'     => $process?->macro_process_id,
-            'activity_code'        => $activity?->code,
-            'activity_name'        => $activity?->name,
-            'process_code'         => $process?->code,
-            'process_name'         => $process?->name,
-            'macro_process_code'   => $macro?->code,
-            'macro_process_name'   => $macro?->name,
-            'macro_process_kind'   => $macro?->kind,
-            'nomenclature_label'   => $nomen?->label,
-            'causes'               => $r->causes,
-            'consequences'         => $r->consequences,
-            'controles_existants'  => $r->controles_existants,
-            'owner'                => $r->owner,
-            'plan_traitement'      => $r->plan_traitement,
-            'impact_label'         => $impact?->label,
-            'impact_score'         => $impact?->score,
-            'frequency_label'      => $frequency?->label,
-            'frequency_score'      => $frequency?->score,
-            'criticality_score'    => $r->criticality_score,
-            'zone_label'           => $zone?->label,
-            'zone_color'           => $zone?->color_hex ?? null,
-            'statut'               => $r->statut,
-            'statut_label'         => $r->statut_label,
-            'statut_badge'         => $r->statut_badge,
-            'moved_to_library_at'  => $r->moved_to_library_at?->format('d/m/Y'),
-            'created_at'           => $r->created_at?->format('d/m/Y'),
+            'id'                            => $r->id,
+            'code_risk'                     => $r->code_risk,
+            'libelle'                       => $r->libelle,
+            'description'                   => $r->description,
+            'entity_id'                     => $r->entity_id,
+            'activity_id'                   => $r->activity_id,
+            'process_id'                    => $activity?->process_id,
+            'macro_process_id'              => $process?->macro_process_id,
+            'activity_code'                 => $activity?->code,
+            'activity_name'                 => $activity?->name,
+            'process_code'                  => $process?->code,
+            'process_name'                  => $process?->name,
+            'macro_process_code'            => $macro?->code,
+            'macro_process_name'            => $macro?->name,
+            'macro_process_kind'            => $macro?->kind,
+            'nomenclature_id'               => $r->nomenclature_id,
+            'nomenclature_label'            => $nomen?->label,
+            'causes'                        => $r->causes,
+            'consequences'                  => $r->consequences,
+            'consequences_autres_processus' => $r->consequences_autres_processus,
+            'cout_consequences'             => $r->cout_consequences,
+            'controles_existants'           => $r->controles_existants,
+            'entite_partenaire_impliquee'   => $r->entite_partenaire_impliquee,
+            'owner'                         => $r->owner,
+            'plan_traitement'               => $r->plan_traitement,
+            'risque_realise'                => (bool)$r->risque_realise,
+            'impact_label'                  => $impact?->label,
+            'impact_score'                  => $impact?->score,
+            'frequency_label'               => $frequency?->label,
+            'frequency_score'               => $frequency?->score,
+            'criticality_score'             => $r->criticality_score,
+            'zone_label'                    => $zone?->label,
+            'zone_color'                    => $zone?->color_code,
+            'statut'                        => $r->statut,
+            'statut_label'                  => $r->statut_label,
+            'statut_badge'                  => $r->statut_badge,
+            'moved_to_library_at'           => $r->moved_to_library_at?->format('d/m/Y'),
+            'created_at'                    => $r->created_at?->format('d/m/Y'),
         ];
     }
 }

@@ -10,11 +10,12 @@ use App\Http\Controllers\MistralImpactController;
 use App\Http\Controllers\MistralImpactCriteriaController;
 use App\Http\Controllers\Risk\MistralNomenclatureController;
 use App\Http\Controllers\Risk\NomenclatureController;
+use App\Http\Controllers\Risk\RiskEvaluationController;
 use App\Http\Controllers\Risk\RiskMatrixController;
 use App\Http\Controllers\Risk\SessionController;
 use App\Http\Controllers\Risk\RiskMatrixConfigController;
 use App\Http\Controllers\RiskAnalysesController;
-use App\Http\Controllers\RiskEvaluationController;
+
 use App\Http\Controllers\RiskIncidentController;
 use App\Http\Controllers\RiskIncidentLibraryController;
 use App\Http\Controllers\RiskLibraryController;
@@ -109,9 +110,26 @@ Route::prefix('risk-library')->name('risk-library.')->group(function () {
     Route::post('/{id}/remove-from-library', [RiskLibraryController::class, 'removeFromLibrary'])->name('remove-from-library')->whereNumber('id');
 });
 
+ 
 Route::prefix('risks-analyses')->name('risks-analyses.')->group(function () {
-    Route::get('/',                          [RiskAnalysesController::class, 'index'])            ->name('index');
+    Route::get('/',                 [RiskAnalysesController::class, 'index'])          ->name('index');
+    Route::post('/mistral-suggest', [RiskAnalysesController::class, 'mistralSuggest']) ->name('mistral-suggest');
+    Route::match(['PUT','POST'], '/{id}', [RiskAnalysesController::class, 'update'])   ->name('update')->whereNumber('id');
     Route::post('/{id}/remove-from-library', [RiskAnalysesController::class, 'removeFromLibrary'])->name('remove-from-library')->whereNumber('id');
+});
+ 
+
+Route::prefix('evaluation')->name('evaluation.')->group(function () {
+ 
+    // ── Évaluation inhérente ──────────────────────────────────────────────
+    Route::get('/inherente',       [RiskEvaluationController::class, 'inherente'])      ->name('inherente');
+    Route::post('/inherente/store',[RiskEvaluationController::class, 'storeInherente']) ->name('inherente.store');
+ 
+    // ── Évaluation résiduelle (à venir) ───────────────────────────────────
+    // Route::get('/residuelle',  [RiskEvaluationController::class, 'residuelle'])     ->name('residuelle');
+ 
+    // ── Évaluation cible (à venir) ────────────────────────────────────────
+    // Route::get('/cible',       [RiskEvaluationController::class, 'cible'])          ->name('cible');
 });
 
 // ── CONFIGURATION MATRICE ─────────────────────────────────────────────────

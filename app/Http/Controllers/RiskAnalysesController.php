@@ -3,8 +3,10 @@
 namespace App\Http\Controllers;
 
 use App\Models\RiskRegister;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Http;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -16,7 +18,7 @@ class RiskAnalysesController extends Controller
     }
 
     // ═══════════════════════════════════════════════════════════════════════
-    // INDEX — bibliothèque en vue tableau
+    // INDEX
     // ═══════════════════════════════════════════════════════════════════════
     public function index(): Response
     {
@@ -46,7 +48,7 @@ class RiskAnalysesController extends Controller
     }
 
     // ═══════════════════════════════════════════════════════════════════════
-    // UPDATE — remplir les champs d'analyse depuis la bibliothèque
+    // UPDATE — enregistrer l'analyse d'un risque en bibliothèque
     // ═══════════════════════════════════════════════════════════════════════
     public function update(Request $request, int $id)
     {
@@ -71,7 +73,6 @@ class RiskAnalysesController extends Controller
 
         $risk->update($v);
 
-        // Retour JSON si requête Ajax (Accept: application/json)
         if ($request->expectsJson()) {
             return response()->json([
                 'success' => true,
@@ -106,13 +107,117 @@ class RiskAnalysesController extends Controller
     }
 
     // ═══════════════════════════════════════════════════════════════════════
+    // MISTRAL SUGGEST — causes / conséquences / plan de traitement
+    // POST risks-analyses/mistral-suggest
+    // ═══════════════════════════════════════════════════════════════════════
+    public function mistralSuggest(Request $request): JsonResponse
+    {
+        $v = $request->validate([
+            'libelle'              => 'required|string|max:500',
+            'process_name'         => 'nullable|string|max:255',
+            'activity_name'        => 'nullable|string|max:255',
+            'macro_process_name'   => 'nullable|string|max:255',
+            'macro_process_kind'   => 'nullable|string|max:100',
+            'nomenclature_context' => 'nullable|string|max:255',
+            'criticality_score'    => 'nullable|numeric',
+            'zone_label'           => 'nullable|string|max:100',
+            'impact_label'         => 'nullable|string|max:100',
+            'frequency_label'      => 'nullable|string|max:100',
+        ]);
+
+        $prompt = $this->buildSuggestPrompt($v);
+
+        try {
+            $response = Http::withHeaders([
+                'Authorization' => 'Bearer ' . config('services.mistral.api_key'),
+                'Content-Type'  => 'application/json',
+            ])->timeout(30)->post('https://api.mistral.ai/v1/chat/completions', [
+                'model'       => 'mistral-small-latest',
+                'temperature' => 0.3,
+                'max_tokens'  => 800,
+                'messages'    => [
+                    [
+                        'role'    => 'system',
+                        'content' => 'Tu es un expert en gestion des risques (ISO 31000, COSO). '
+                            . 'Tu réponds UNIQUEMENT en JSON valide, sans commentaire ni balise markdown. '
+                            . 'Langue : français professionnel.',
+                    ],
+                    [
+                        'role'    => 'user',
+                        'content' => $prompt,
+                    ],
+                ],
+            ]);
+
+            if (!$response->successful()) {
+                return response()->json(['message' => 'Erreur API Mistral : ' . $response->status()], 502);
+            }
+
+            $content = $response->json('choices.0.message.content', '{}');
+            // Nettoyer les balises markdown éventuelles
+            $content = preg_replace('/```json|```/', '', $content);
+            $data    = json_decode(trim($content), true);
+
+            if (!is_array($data)) {
+                return response()->json(['message' => 'Réponse IA invalide'], 502);
+            }
+
+            return response()->json([
+                'suggestions' => [
+                    'causes'         => $data['causes']         ?? null,
+                    'consequences'   => $data['consequences']   ?? null,
+                    'plan_traitement'=> $data['plan_traitement'] ?? null,
+                ],
+            ]);
+
+        } catch (\Exception $e) {
+            return response()->json(['message' => 'Erreur : ' . $e->getMessage()], 500);
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
     // PRIVATE
     // ═══════════════════════════════════════════════════════════════════════
 
-    /**
-     * Construit l'arbre macro-processus > processus > activité > risques
-     * utilisé par la vue pour le rendu groupé en liste gauche.
-     */
+    private function buildSuggestPrompt(array $v): string
+    {
+        $parts = [];
+        $parts[] = "Risque : \"{$v['libelle']}\"";
+
+        if (!empty($v['macro_process_name']))
+            $parts[] = "Macro-processus : {$v['macro_process_name']} ({$v['macro_process_kind']})";
+        if (!empty($v['process_name']))
+            $parts[] = "Processus : {$v['process_name']}";
+        if (!empty($v['activity_name']))
+            $parts[] = "Activité : {$v['activity_name']}";
+        if (!empty($v['nomenclature_context']))
+            $parts[] = "Type/nomenclature : {$v['nomenclature_context']}";
+        if (!empty($v['zone_label']))
+            $parts[] = "Criticité : {$v['zone_label']} (score {$v['criticality_score']})";
+        if (!empty($v['impact_label']))
+            $parts[] = "Impact : {$v['impact_label']} · Fréquence : {$v['frequency_label']}";
+
+        $context = implode("\n", $parts);
+
+        return <<<PROMPT
+Contexte du risque :
+{$context}
+
+Sur la base de ce contexte, génère en JSON :
+{
+  "causes": "liste des causes probables séparées par \\n- ",
+  "consequences": "liste des conséquences directes séparées par \\n- ",
+  "plan_traitement": "liste des actions de traitement recommandées séparées par \\n- "
+}
+
+Règles :
+- Ne pas inclure les entités/partenaires, les zones de criticité ni les liaisons avec d'autres processus
+- Réponse uniquement en JSON valide, sans markdown
+- Maximum 5 points par champ
+- Langue : français professionnel
+PROMPT;
+    }
+
     private function buildTree($risks): array
     {
         $tree = [];
@@ -176,9 +281,12 @@ class RiskAnalysesController extends Controller
 
     private function getNomenclatures(): array
     {
+        // Retourne les 2 niveaux : parents (level 1) + enfants (level 2)
         return DB::connection('tenant')
             ->table('risk_nomenclatures')
             ->select('id', 'label', 'parent_id', 'level')
+            ->whereIn('level', [1, 2])
+            ->orderBy('level')
             ->orderBy('label')
             ->get()
             ->toArray();
@@ -205,17 +313,13 @@ class RiskAnalysesController extends Controller
         $impact    = $r->relationLoaded('impactLevel')         ? $r->impactLevel         : null;
         $frequency = $r->relationLoaded('frequencyLevel')      ? $r->frequencyLevel      : null;
 
-        // Objectif : issu du macro-processus (ou processus selon ton modèle)
         $objective = $macro?->objective ?? $process?->objective ?? null;
 
         return [
-            // Identifiants
             'id'                            => $r->id,
             'code_risk'                     => $r->code_risk,
             'libelle'                       => $r->libelle,
             'description'                   => $r->description,
-
-            // Relations arbre
             'entity_id'                     => $r->entity_id,
             'activity_id'                   => $r->activity_id,
             'process_id'                    => $activity?->process_id,
@@ -227,15 +331,9 @@ class RiskAnalysesController extends Controller
             'macro_process_code'            => $macro?->code,
             'macro_process_name'            => $macro?->name,
             'macro_process_kind'            => $macro?->kind,
-
-            // Objectif (affiché dans la colonne "Objectifs" du tableau)
             'objective'                     => $objective,
-
-            // Nomenclature
             'nomenclature_id'               => $r->nomenclature_id,
             'nomenclature_label'            => $nomen?->label,
-
-            // Champs d'analyse — colonnes du tableau Excel
             'causes'                        => $r->causes,
             'consequences'                  => $r->consequences,
             'consequences_autres_processus' => $r->consequences_autres_processus,
@@ -245,8 +343,6 @@ class RiskAnalysesController extends Controller
             'owner'                         => $r->owner,
             'plan_traitement'               => $r->plan_traitement,
             'risque_realise'                => (bool)$r->risque_realise,
-
-            // Évaluation criticité
             'impact_label'                  => $impact?->label,
             'impact_score'                  => $impact?->score,
             'frequency_label'               => $frequency?->label,
@@ -254,8 +350,6 @@ class RiskAnalysesController extends Controller
             'criticality_score'             => $r->criticality_score,
             'zone_label'                    => $zone?->label,
             'zone_color'                    => $zone?->color_code,
-
-            // Statut
             'statut'                        => $r->statut,
             'statut_label'                  => $r->statut_label,
             'statut_badge'                  => $r->statut_badge,

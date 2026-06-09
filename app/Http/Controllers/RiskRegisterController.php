@@ -394,21 +394,28 @@ class RiskRegisterController extends Controller
             ->select('p.code as p_code', 'a.code as a_code')
             ->first();
 
-        // Format : [CODE_PROCESSUS][CODE_ACTIVITE]-R01
-        // Exemple : P03R + A01P03R → P03RA01-R01
-        // On garde le code processus complet, puis extrait le préfixe activité
-        $pCode = $row ? strtoupper($row->p_code) : 'P00';
-        $aCode = $row ? strtoupper($row->a_code)  : 'A00';
+        $pCode = strtoupper($row?->p_code ?? 'P00');
+        $aCode = strtoupper($row?->a_code  ?? 'A00');
 
-        // Préfixe activité = partie unique de l'activité (sans répéter le code process)
-        // A01P03R → A01  |  A02P03R → A02
+        // Extraire le préfixe unique de l'activité :
+        // Cas normal   : A01P03R → retirer P03R en fin → A01
+        // Cas exception: A01P03S avec process P01S → P01S absent → matcher A01 au début
         $aPrefix = preg_replace('/' . preg_quote($pCode, '/') . '$/', '', $aCode);
-        if (empty($aPrefix)) $aPrefix = $aCode;
 
-        // Code risque = P03RA01-R01
+        if ($aPrefix === $aCode) {
+            // Le code process n'est pas à la fin du code activité
+            // → extraire le segment Axx au début (ex: A01P03S → A01)
+            if (preg_match('/^(A\d+)/', $aCode, $m)) {
+                $aPrefix = $m[1];
+            } else {
+                $aPrefix = substr($aCode, 0, 3);
+            }
+        }
+
+        // Préfixe final : P03RA01 | P02RA03 | P01SA01
         $prefix = $pCode . $aPrefix;
 
-        // Compter les risques existants pour cette activité (hors supprimés)
+        // Numéro séquentiel unique par activité
         $seq = DB::connection('tenant')->table('risk_register')
             ->where('tenant_id', $tid)
             ->where('activity_id', $activityId)
@@ -417,7 +424,6 @@ class RiskRegisterController extends Controller
 
         $candidate = $prefix . '-R' . str_pad($seq, 2, '0', STR_PAD_LEFT);
 
-        // Garantir l'unicité
         while (DB::connection('tenant')->table('risk_register')
             ->where('tenant_id', $tid)->where('code_risk', $candidate)->exists()) {
             $seq++;
