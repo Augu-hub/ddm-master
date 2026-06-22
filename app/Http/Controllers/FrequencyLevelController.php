@@ -5,10 +5,12 @@ namespace App\Http\Controllers;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\StoreFrequencyLevelRequest;
 use App\Http\Requests\UpdateFrequencyLevelRequest;
+use App\Models\RiskAppetiteLevel;
 use App\Models\RiskFrequencyCriterion;
 use App\Models\RiskFrequencyCriteriaTemplate;
 use App\Models\RiskFrequencyLevel;
 use App\Models\RiskMatrixConfig;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -39,30 +41,20 @@ class FrequencyLevelController extends Controller
                 ?: optional($matrixConfigs->first())['id'];
 
         // ── Niveaux de fréquence ───────────────────────────────────────────────
-        // La colonne `criteria` de risk_frequency_levels est un champ JSON natif
-        // (pas une relation Eloquent vers risk_frequency_criteria).
-        // Les critères structurés (par template) sont dans risk_frequency_criteria.
-        // On charge les deux séparément et on les fusionne.
-
         if ($selectedConfigId) {
-
-            // 1. Niveaux de base (sans eager-load de relation criteria)
             $levels = RiskFrequencyLevel::forTenant($tenantId)
                 ->forConfig($selectedConfigId)
                 ->ordered()
                 ->get();
 
-            // 2. Critères structurés (table risk_frequency_criteria) groupés par level_id
-            $criteriaRows = RiskFrequencyCriterion::where('tenant_id', $tenantId)
+            $criteriaRows    = RiskFrequencyCriterion::where('tenant_id', $tenantId)
                 ->whereIn('frequency_level_id', $levels->pluck('id'))
                 ->whereNull('deleted_at')
                 ->orderBy('sort_order')
                 ->get();
-
             $criteriaByLevel = $criteriaRows->groupBy('frequency_level_id');
 
             $frequencyLevels = $levels->map(function ($l) use ($criteriaByLevel) {
-                // Critères structurés pour ce niveau
                 $structuredCriteria = ($criteriaByLevel->get($l->id) ?? collect())
                     ->map(fn($c) => [
                         'id'          => $c->id,
@@ -72,36 +64,30 @@ class FrequencyLevelController extends Controller
                         'sort_order'  => $c->sort_order,
                     ])->values()->all();
 
-                // Critères JSON natifs de la colonne `criteria` (legacy)
                 $jsonCriteria = [];
                 if (!empty($l->criteria)) {
-                    $decoded = is_array($l->criteria)
-                        ? $l->criteria
-                        : json_decode($l->criteria, true);
-                    if (is_array($decoded)) {
-                        $jsonCriteria = $decoded;
-                    }
+                    $decoded = is_array($l->criteria) ? $l->criteria : json_decode($l->criteria, true);
+                    if (is_array($decoded)) $jsonCriteria = $decoded;
                 }
 
                 return [
-                    'id'              => $l->id,
-                    'label'           => $l->label,
-                    'score'           => $l->score,
-                    'description'     => $l->description,
-                    'recurrence'      => $l->recurrence,
-                    'full_label'      => $l->full_label   ?? $l->label,
-                    'color_code'      => $l->color_code,
-                    'sort_order'      => $l->sort_order,
-                    'criteria'        => $structuredCriteria,   // critères structurés (templates)
-                    'criteria_json'   => $jsonCriteria,         // critères JSON natifs (legacy)
+                    'id'            => $l->id,
+                    'label'         => $l->label,
+                    'score'         => $l->score,
+                    'description'   => $l->description,
+                    'recurrence'    => $l->recurrence,
+                    'full_label'    => $l->full_label ?? $l->label,
+                    'color_code'    => $l->color_code,
+                    'sort_order'    => $l->sort_order,
+                    'criteria'      => $structuredCriteria,
+                    'criteria_json' => $jsonCriteria,
                 ];
             });
-
         } else {
             $frequencyLevels = collect();
         }
 
-        // ── Templates de critères pour cette config ────────────────────────────
+        // ── Templates de critères avec appétence ───────────────────────────────
         $criteriaTemplates = $selectedConfigId
             ? RiskFrequencyCriteriaTemplate::where('tenant_id', $tenantId)
                 ->where('matrix_config_id', $selectedConfigId)
@@ -109,18 +95,28 @@ class FrequencyLevelController extends Controller
                 ->orderBy('sort_order')
                 ->get()
                 ->map(fn($t) => [
-                    'id'          => $t->id,
-                    'designation' => $t->designation,
-                    'hint'        => $t->hint,
-                    'sort_order'  => $t->sort_order,
+                    'id'                   => $t->id,
+                    'designation'          => $t->designation,
+                    'hint'                 => $t->hint,
+                    'sort_order'           => $t->sort_order,
+                    'appetite_id'          => $t->appetite_id ?? null,
+                    'appetite_description' => $t->appetite_description ?? null,
                 ])
             : collect();
+
+        // ── Appétences actives du tenant ───────────────────────────────────────
+        $appetites = RiskAppetiteLevel::where('tenant_id', $tenantId)
+            ->where('is_active', true)
+            ->orderBy('sort_order')
+            ->get(['id', 'code', 'label', 'color', 'description', 'score_min', 'score_max'])
+            ->toArray();
 
         return Inertia::render('dashboards/Risk/Matrix/Frequencylevel', [
             'matrixConfigs'     => $matrixConfigs,
             'selectedConfigId'  => $selectedConfigId,
             'frequencyLevels'   => $frequencyLevels,
             'criteriaTemplates' => $criteriaTemplates,
+            'appetites'         => $appetites,
         ]);
     }
 
@@ -183,8 +179,11 @@ class FrequencyLevelController extends Controller
         return back()->with('success', 'Ordre mis à jour.');
     }
 
-    // ─── Templates de critères ─────────────────────────────────────────────────
+    // ─── Templates CRUD ────────────────────────────────────────────────────────
 
+    /**
+     * Créer un critère template — sans appétence (assignée ensuite via assignTemplateAppetite).
+     */
     public function storeTemplate(Request $request): RedirectResponse
     {
         $tenantId  = (int)(session('tenant_id') ?? 1);
@@ -202,6 +201,8 @@ class FrequencyLevelController extends Controller
             'matrix_config_id' => $validated['matrix_config_id'],
             'designation'      => $validated['designation'],
             'hint'             => $validated['hint'] ?? null,
+            'appetite_id'      => null,
+            'appetite_description' => null,
             'sort_order'       => $validated['sort_order']
                 ?? RiskFrequencyCriteriaTemplate::where('matrix_config_id', $validated['matrix_config_id'])->count(),
         ]);
@@ -236,12 +237,17 @@ class FrequencyLevelController extends Controller
             'sort_order'  => ['nullable', 'integer', 'min:0'],
         ]);
 
-        $template->update($validated);
+        $template->update([
+            'designation' => $validated['designation'],
+            'hint'        => $validated['hint'] ?? null,
+            'sort_order'  => $validated['sort_order'] ?? $template->sort_order,
+        ]);
 
+        // Propager la nouvelle désignation sur toutes les instances
         RiskFrequencyCriterion::where('template_id', $template->id)
             ->update(['designation' => $validated['designation']]);
 
-        return back()->with('success', "Critère « {$template->designation} » mis à jour sur tous les niveaux.");
+        return back()->with('success', "Critère « {$template->designation} » mis à jour.");
     }
 
     public function destroyTemplate(int $template): RedirectResponse
@@ -272,6 +278,63 @@ class FrequencyLevelController extends Controller
         return back()->with('success', 'Ordre des critères mis à jour.');
     }
 
+    /**
+     * Assigner (ou retirer) une appétence à un critère template existant.
+     * Route : POST /frequency/templates/{template}/appetite
+     * Body  : { appetite_id: int|null }
+     * Retour: JSON (appelé en fetch depuis la Vue, pas en Inertia router)
+     */
+    public function assignTemplateAppetite(Request $request, int $template): JsonResponse
+    {
+        $tenantId = (int)(session('tenant_id') ?? 1);
+        $template = RiskFrequencyCriteriaTemplate::where('tenant_id', $tenantId)
+            ->whereNull('deleted_at')
+            ->findOrFail($template);
+
+        $validated = $request->validate([
+            'appetite_id' => ['nullable', 'integer', 'exists:risk_appetite_levels,id'],
+        ]);
+
+        $appetiteId          = $validated['appetite_id'] ?? null;
+        $appetiteDescription = null;
+        $appetite            = null;
+
+        if ($appetiteId !== null) {
+            $appetite = RiskAppetiteLevel::where('id', $appetiteId)
+                ->where('tenant_id', $tenantId)
+                ->where('is_active', true)
+                ->first();
+
+            if (!$appetite) {
+                return response()->json(['message' => 'Appétence invalide ou inactive.'], 422);
+            }
+
+            $appetiteDescription = $appetite->description;
+        }
+
+        $template->update([
+            'appetite_id'          => $appetiteId,
+            'appetite_description' => $appetiteDescription,
+        ]);
+
+        return response()->json([
+            'template_id'          => $template->id,
+            'appetite_id'          => $appetiteId,
+            'appetite_description' => $appetiteDescription,
+            'appetite'             => $appetite ? [
+                'id'          => $appetite->id,
+                'label'       => $appetite->label,
+                'color'       => $appetite->color,
+                'description' => $appetite->description,
+                'score_min'   => $appetite->score_min,
+                'score_max'   => $appetite->score_max,
+            ] : null,
+            'message' => $appetiteId
+                ? "Appétence « {$appetite->label} » assignée au critère."
+                : "Appétence retirée du critère.",
+        ]);
+    }
+
     // ─── IA — Contenu critères ─────────────────────────────────────────────────
 
     public function suggestCriteriaContent(Request $request)
@@ -296,7 +359,7 @@ class FrequencyLevelController extends Controller
             ->where('matrix_config_id', $configId)
             ->whereNull('deleted_at')
             ->orderBy('sort_order')
-            ->get(['id', 'designation', 'hint']);
+            ->get(['id', 'designation', 'hint', 'appetite_id', 'appetite_description']);
 
         if ($levels->isEmpty() || $templates->isEmpty()) {
             return response()->json([
@@ -304,29 +367,50 @@ class FrequencyLevelController extends Controller
             ], 422);
         }
 
+        // Récupérer les labels d'appétences pour enrichir le prompt
+        $appetiteIds = $templates->pluck('appetite_id')->filter()->unique()->values();
+        $appetiteMap = [];
+        if ($appetiteIds->isNotEmpty()) {
+            $appetiteMap = RiskAppetiteLevel::whereIn('id', $appetiteIds)
+                ->get(['id', 'label', 'color', 'score_min', 'score_max', 'description'])
+                ->keyBy('id')
+                ->toArray();
+        }
+
         $levelsDesc = $levels->map(fn($l) =>
-            "- Niveau {$l->score} « {$l->label} »" .
-            ($l->recurrence ? " (récurrence : {$l->recurrence})" : '') .
-            ($l->description ? " : {$l->description}" : '')
+            "- Niveau {$l->score} « {$l->label} »"
+            . ($l->recurrence ? " (récurrence : {$l->recurrence})" : '')
+            . ($l->description ? " : {$l->description}" : '')
         )->implode("\n");
 
-        $criteriaDesc = $templates->map(fn($t, $i) =>
-            ($i + 1) . ". « {$t->designation} »" .
-            ($t->hint ? " — Indice : {$t->hint}" : '')
-        )->implode("\n");
+        $criteriaDesc = $templates->map(function ($t, $i) use ($appetiteMap) {
+            $line = ($i + 1) . ". « {$t->designation} »";
+            if ($t->appetite_id && isset($appetiteMap[$t->appetite_id])) {
+                $apt  = $appetiteMap[$t->appetite_id];
+                $line .= " — Appétence : {$apt['label']} (score {$apt['score_min']}–{$apt['score_max']})";
+                if (!empty($apt['description'])) {
+                    $line .= " : {$apt['description']}";
+                }
+            }
+            if ($t->hint) {
+                $line .= " — Indice : {$t->hint}";
+            }
+            return $line;
+        })->implode("\n");
 
-        $sector  = $request->input('sector');
-        $context = $request->input('context', '');
-
-        $levelIds   = $levels->pluck('id')->implode(', ');
+        $sector      = $request->input('sector');
+        $context     = $request->input('context', '');
+        $levelIds    = $levels->pluck('id')->implode(', ');
         $templateIds = $templates->pluck('id')->implode(', ');
 
         $prompt = "Tu es un expert en gestion des risques dans le secteur : {$sector}.\n"
             . ($context ? "{$context}\n\n" : "\n")
             . "Voici les niveaux de fréquence de la matrice de risques :\n{$levelsDesc}\n\n"
             . "Voici les critères d'évaluation à renseigner pour chaque niveau :\n{$criteriaDesc}\n\n"
-            . "Pour CHAQUE niveau et CHAQUE critère, génère une description précise, observable et mesurable,\n"
-            . "adaptée au niveau de fréquence concerné et au secteur {$sector}.\n\n"
+            . "Pour CHAQUE niveau et CHAQUE critère, génère une description précise, observable et mesurable.\n"
+            . "IMPORTANT : pour chaque critère qui possède une appétence définie, la description doit \n"
+            . "être cohérente avec cette tolérance au risque (ex: appétence 'Averse' → seuils très bas,\n"
+            . "appétence 'Ouvert' → seuils plus élevés). Le contenu doit refléter ce niveau d'exigence.\n\n"
             . "Réponds UNIQUEMENT en JSON valide, sans balises markdown, sans commentaires.\n"
             . "Format attendu :\n"
             . "{\n"

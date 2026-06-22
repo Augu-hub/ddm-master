@@ -10,12 +10,12 @@ use App\Http\Controllers\MistralImpactController;
 use App\Http\Controllers\MistralImpactCriteriaController;
 use App\Http\Controllers\Risk\MistralNomenclatureController;
 use App\Http\Controllers\Risk\NomenclatureController;
-use App\Http\Controllers\Risk\RiskActionPlanController;
 use App\Http\Controllers\Risk\RiskEvaluationController;
 use App\Http\Controllers\Risk\RiskMatrixController;
 use App\Http\Controllers\Risk\SessionController;
 use App\Http\Controllers\Risk\RiskMatrixConfigController;
 use App\Http\Controllers\RiskAnalysesController;
+
 use App\Http\Controllers\RiskIncidentController;
 use App\Http\Controllers\RiskIncidentLibraryController;
 use App\Http\Controllers\RiskLibraryController;
@@ -56,6 +56,9 @@ Route::prefix('incidents')->name('incidents.')->group(function () {
 });
 
 // ── LIEN PUBLIC DE DÉNONCIATION ───────────────────────────────────────────
+// Ces routes sont DANS le module risk.core (préfixe m/risk.core)
+// Elles ne nécessitent pas d'auth — le middleware est géré par le groupe parent
+// Le lien généré sera : http://ddm-master.test/m/risk.core/report/{token}
 Route::get( '/report/{token}', [RiskIncidentController::class, 'reporterPage'])      ->name('incident.reporter.page');
 Route::post('/report/{token}', [RiskIncidentController::class, 'storePublicReport']) ->name('incident.reporter.store');
 
@@ -81,8 +84,24 @@ Route::prefix('risks')->name('risks.')->group(function () {
     Route::post('/{id}/activate',            [RiskRegisterController::class, 'activate'])         ->name('activate')            ->whereNumber('id');
     Route::post('/{id}/move-to-library',     [RiskRegisterController::class, 'moveToLibrary'])    ->name('move-to-library')     ->whereNumber('id');
     Route::post('/{id}/remove-from-library', [RiskRegisterController::class, 'removeFromLibrary'])->name('remove-from-library') ->whereNumber('id');
-    Route::post('/factors-for-activities',   [RiskRegisterController::class, 'factorsForActivities'])->name('factors-for-activities');
-    Route::post('/factors',                  [RiskRegisterController::class, 'storeFactor'])           ->name('factors.store');
+
+    Route::post('/risks/factors-for-activities', [RiskRegisterController::class, 'factorsForActivities'])->name('risks.factors-for-activities');
+Route::post('/risks/factors',               [RiskRegisterController::class, 'storeFactor'])           ->name('risks.factors.store');
+
+    });
+
+
+
+        Route::post('/risks/factors-for-activities', [RiskRegisterController::class, 'factorsForActivities'])->name('risks.factors-for-activities');
+Route::post('/risks/factors',               [RiskRegisterController::class, 'storeFactor'])           ->name('risks.factors.store');
+
+
+// ── ÉVALUATION DES RISQUES ────────────────────────────────────────────────
+Route::prefix('evaluation')->name('evaluation.')->group(function () {
+    Route::get('/inherente',  [RiskEvaluationController::class, 'inherente']) ->name('inherente');
+    Route::get('/residuelle', [RiskEvaluationController::class, 'residuelle'])->name('residuelle');
+    Route::get('/cible',      [RiskEvaluationController::class, 'cible'])     ->name('cible');
+    Route::post('/{id}/save', [RiskEvaluationController::class, 'save'])      ->name('save')->whereNumber('id');
 });
 
 // ── BIBLIOTHÈQUE DES RISQUES ──────────────────────────────────────────────
@@ -91,40 +110,19 @@ Route::prefix('risk-library')->name('risk-library.')->group(function () {
     Route::post('/{id}/remove-from-library', [RiskLibraryController::class, 'removeFromLibrary'])->name('remove-from-library')->whereNumber('id');
 });
 
-// ── ANALYSES DES RISQUES ──────────────────────────────────────────────────
+ 
 Route::prefix('risks-analyses')->name('risks-analyses.')->group(function () {
     Route::get('/',                 [RiskAnalysesController::class, 'index'])          ->name('index');
     Route::post('/mistral-suggest', [RiskAnalysesController::class, 'mistralSuggest']) ->name('mistral-suggest');
     Route::match(['PUT','POST'], '/{id}', [RiskAnalysesController::class, 'update'])   ->name('update')->whereNumber('id');
     Route::post('/{id}/remove-from-library', [RiskAnalysesController::class, 'removeFromLibrary'])->name('remove-from-library')->whereNumber('id');
 });
+ 
 
-// ═══════════════════════════════════════════════════════════════════════════
-// ÉVALUATION DES RISQUES (groupe unique)
-// ═══════════════════════════════════════════════════════════════════════════
-Route::prefix('evaluation')->name('evaluation.')->group(function () {
 
-    // Vues (toutes rendent la même page EvaluationGlobale.vue avec initialStep)
-    Route::get('/inherente',  [RiskEvaluationController::class, 'inherente']) ->name('inherente');
-    Route::get('/controle',   [RiskEvaluationController::class, 'controle'])  ->name('controle');
-    Route::get('/residuelle', [RiskEvaluationController::class, 'residuelle'])->name('residuelle');
-    Route::get('/cible',      [RiskEvaluationController::class, 'cible'])     ->name('cible');
+use App\Http\Controllers\Risk\RiskActionPlanController;
 
-    // Stores JSON (fetch depuis Vue) — sauvegarde étape par étape
-    Route::post('/inherente/store',  [RiskEvaluationController::class, 'storeInherente']) ->name('inherente.store');
-    Route::post('/controle/store',   [RiskEvaluationController::class, 'storeControle'])  ->name('controle.store');
-    Route::post('/residuelle/store', [RiskEvaluationController::class, 'storeResiduelle'])->name('residuelle.store');
-    Route::post('/cible/store',      [RiskEvaluationController::class, 'storeCible'])     ->name('cible.store');
-    Route::post('/decision/store',   [RiskEvaluationController::class, 'storeDecision'])  ->name('decision.store');
-
-    // ── ACTIONS SUR RISQUE ─────────────────────────────────────────────────────
-    Route::post('/risk-action', [RiskEvaluationController::class, 'addActionToRisk'])->name('risk-action.store');
-    Route::get('/risk/{riskId}/actions', [RiskEvaluationController::class, 'getRiskActions'])->name('risk-actions.index');
-});
-
-// ═══════════════════════════════════════════════════════════════════════════
-// PLAN D'ACTION ET SUIVI
-// ═══════════════════════════════════════════════════════════════════════════
+// ── PLAN D'ACTION ET SUIVI ─────────────────────────────────────────────────
 Route::prefix('action-plan')->name('action-plan.')->group(function () {
     // Vue principale
     Route::get('/', [RiskActionPlanController::class, 'index'])->name('index');
@@ -151,9 +149,24 @@ Route::prefix('action-plan')->name('action-plan.')->group(function () {
     Route::get('/{planId}/history', [RiskActionPlanController::class, 'getHistory'])->name('history')->whereNumber('planId');
 });
 
-// ═══════════════════════════════════════════════════════════════════════════
-// CONFIGURATION MATRICE
-// ═══════════════════════════════════════════════════════════════════════════
+Route::prefix('evaluation')->name('evaluation.')->group(function () {
+
+    // Vues (toutes rendent la même page EvaluationGlobale.vue avec initialStep)
+    Route::get('/inherente',  [RiskEvaluationController::class, 'inherente']) ->name('inherente');
+    Route::get('/controle',   [RiskEvaluationController::class, 'controle'])  ->name('controle');
+    Route::get('/residuelle', [RiskEvaluationController::class, 'residuelle'])->name('residuelle');
+    Route::get('/cible',      [RiskEvaluationController::class, 'cible'])     ->name('cible');
+
+    // Stores JSON (fetch depuis Vue) — sauvegarde étape par étape
+    Route::post('/inherente/store',  [RiskEvaluationController::class, 'storeInherente']) ->name('inherente.store');
+    Route::post('/controle/store',   [RiskEvaluationController::class, 'storeControle'])  ->name('controle.store');
+    Route::post('/residuelle/store', [RiskEvaluationController::class, 'storeResiduelle'])->name('residuelle.store');
+    Route::post('/cible/store',      [RiskEvaluationController::class, 'storeCible'])     ->name('cible.store');
+    Route::post('/decision/store',   [RiskEvaluationController::class, 'storeDecision'])  ->name('decision.store');
+});
+
+// ── CONFIGURATION MATRICE ─────────────────────────────────────────────────
+// IMPORTANT : routes statiques AVANT /{id}
 Route::prefix('matrix-config')->name('matrix-config.')->group(function () {
     Route::put('/impact-levels/{id}',    [RiskMatrixConfigController::class, 'updateImpact'])   ->name('impact.update')        ->whereNumber('id');
     Route::put('/frequency-levels/{id}', [RiskMatrixConfigController::class, 'updateFrequency'])->name('frequency.update')     ->whereNumber('id');
@@ -177,12 +190,13 @@ Route::prefix('matrix')->name('matrix.')->group(function () {
     Route::put('/risks/{id}',    [RiskMatrixController::class, 'updateRisk'])  ->name('risks.update') ->whereNumber('id');
     Route::delete('/risks/{id}', [RiskMatrixController::class, 'destroyRisk'])->name('risks.destroy')->whereNumber('id');
 });
+// Critères impact
 
-// ── CRITÈRES IMPACT ───────────────────────────────────────────────────────
 Route::post('/criteria/suggest', [ImpactLevelController::class, 'suggestCriteria'])->name('criteria.suggest');
 Route::post('/mistral/suggest',  [ImpactLevelController::class, 'suggestLevels'])  ->name('mistral.suggest');
-
 // ── NIVEAUX D'IMPACT ──────────────────────────────────────────────────────
+// ── NIVEAUX D'IMPACT ──────────────────────────────────────────────────────
+// ── NIVEAUX D'IMPACT ─────────────────────────────────────────────────────────
 Route::prefix('impact')->name('impact.')->group(function () {
     Route::post('/reorder',                 [ImpactLevelController::class, 'reorder'])              ->name('reorder');
     Route::post('/mistral/suggest',         [ImpactLevelController::class, 'suggestLevels'])        ->name('mistral.suggest');
@@ -193,10 +207,12 @@ Route::prefix('impact')->name('impact.')->group(function () {
     Route::put('/{impact_level}',           [ImpactLevelController::class, 'update'])               ->name('update') ->whereNumber('impact_level');
     Route::delete('/{impact_level}',        [ImpactLevelController::class, 'destroy'])              ->name('destroy')->whereNumber('impact_level');
 
+    // Critère instance (cellule matrice) — update description uniquement
     Route::prefix('{impact_level}/criteria')->name('criteria.')->whereNumber('impact_level')->group(function () {
         Route::put('/{criterion}', [ImpactLevelController::class, 'updateCriterion'])->name('update')->whereNumber('criterion');
     });
 
+    // Templates de critères
     Route::prefix('templates')->name('templates.')->group(function () {
         Route::post('/',                          [ImpactLevelController::class, 'storeTemplate'])        ->name('store');
         Route::put('/{template}',                 [ImpactLevelController::class, 'updateTemplate'])       ->name('update') ->whereNumber('template');
@@ -205,7 +221,6 @@ Route::prefix('impact')->name('impact.')->group(function () {
         Route::post('/{template}/appetite',       [ImpactLevelController::class, 'assignTemplateAppetite'])->name('appetite')->whereNumber('template');
     });
 });
-
 // ── NIVEAUX DE FRÉQUENCE ──────────────────────────────────────────────────
 Route::prefix('frequency')->name('frequency.')->group(function () {
     Route::post('/reorder',             [FrequencyLevelController::class,   'reorder'])->name('reorder');
@@ -214,20 +229,18 @@ Route::prefix('frequency')->name('frequency.')->group(function () {
     Route::post('/',                    [FrequencyLevelController::class,   'store'])  ->name('store');
     Route::put('/{frequency_level}',    [FrequencyLevelController::class,   'update']) ->name('update') ->whereNumber('frequency_level');
     Route::delete('/{frequency_level}', [FrequencyLevelController::class,   'destroy'])->name('destroy')->whereNumber('frequency_level');
-    
     Route::prefix('{frequency_level}/criteria')->name('criteria.')->whereNumber('frequency_level')->group(function () {
         Route::post('/reorder',      [FrequencyCriterionController::class, 'reorder'])->name('reorder');
         Route::post('/',             [FrequencyCriterionController::class, 'store'])  ->name('store');
         Route::put('/{criterion}',   [FrequencyCriterionController::class, 'update']) ->name('update') ->whereNumber('criterion');
         Route::delete('/{criterion}',[FrequencyCriterionController::class, 'destroy'])->name('destroy')->whereNumber('criterion');
     });
-    
     Route::post('/templates/{template}/appetite', [FrequencyLevelController::class, 'assignTemplateAppetite'])
-        ->name('templates.appetite')->whereNumber('template');
+    ->name('templates.appetite')
+    ->whereNumber('template');
     Route::post('/criteria/mistral/suggest',  [MistralFrequencyCriteriaController::class, 'suggest'])    ->name('criteria.mistral.suggest');
     Route::post('/criteria/suggest-content',  [FrequencyLevelController::class, 'suggestCriteriaContent'])->name('criteria.suggest-content');
     Route::post('/criteria/apply-content',    [FrequencyLevelController::class, 'applyCriteriaContent'])  ->name('criteria.apply-content');
-    
     Route::prefix('templates')->name('templates.')->group(function () {
         Route::post('/',             [FrequencyLevelController::class, 'storeTemplate'])   ->name('store');
         Route::put('/{template}',    [FrequencyLevelController::class, 'updateTemplate'])  ->name('update') ->whereNumber('template');

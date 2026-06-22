@@ -713,7 +713,7 @@ const typeColor       = (code: string) =>
                         </div>
 
                         <div class="mb-3">
-                            <label class="form-label fw-semibold small">Description</label>
+                            <label class="form-label fw-semibold small">Tolérance <span class="text-danger">*</span></label>
                             <textarea v-model="aptForm.description"
                                       class="form-control form-control-sm" rows="2"
                                       placeholder="Ex : Tolérance nulle, contrôles maximaux obligatoires.">
