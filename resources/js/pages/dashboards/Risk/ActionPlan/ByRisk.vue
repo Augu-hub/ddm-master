@@ -34,11 +34,11 @@
         </div>
 
         <div class="ap-topbar-actions">
-          <button class="btn-primary btn-icon-only" @click="openCreate()" title="Nouvelle action">
-            <i class="ti ti-plus"></i>
+          <button class="btn-primary" @click="openCreate()">
+            <i class="ti ti-plus"></i> Nouvelle action
           </button>
-          <button class="btn-secondary btn-icon-only" @click="openCreateMultiple()" title="Actions multiples">
-            <i class="ti ti-layers"></i>
+          <button class="btn-secondary" @click="openCreateMultiple()">
+            <i class="ti ti-layers"></i> Actions multiples
           </button>
           <button class="btn-icon" @click="reload()" title="Actualiser">
             <i class="ti ti-refresh"></i>
@@ -98,177 +98,15 @@
           <button v-if="hasFilters" class="btn-clear" @click="clearFilters">
             <i class="ti ti-x"></i> Effacer
           </button>
-          <button class="btn-toggle-all" @click="toggleAllRisks">
-            <i :class="['ti', allExpanded?'ti-fold-up':'ti-fold-down']"></i>
-            {{ allExpanded ? 'Tout replier' : 'Tout déplier' }}
-          </button>
         </div>
       </div>
 
       <!-- ═══ CORPS ═══ -->
       <div class="ap-body">
 
-        <!-- Panneau global de création (sans risque présélectionné) -->
-        <div v-if="formPanel.open && !formPanel.risk_id" class="inline-panel inline-panel--floating">
-          <div class="ipf-hdr">
-            <span><i class="ti ti-list-check"></i> {{ formPanel.id ? "Modifier l'action" : 'Nouvelle action' }}</span>
-            <button class="ip-close" @click="closeForm"><i class="ti ti-x"></i></button>
-          </div>
-          <div class="fgrid">
-            <div class="fg fg-full">
-              <label class="flbl">Titre de l'action *</label>
-              <input v-model="form.title" class="finp" placeholder="Ex : Mettre en place une procédure de validation…" />
-            </div>
-            <div class="fg fg-full">
-              <label class="flbl">Description courte</label>
-              <textarea v-model="form.description" rows="2" class="finp"></textarea>
-            </div>
-            <div class="fg fg-full">
-              <label class="flbl">Plan d'action détaillé</label>
-              <textarea v-model="form.action_plan" rows="4" class="finp" placeholder="Décrivez les étapes…"></textarea>
-            </div>
-            <div class="fg">
-              <label class="flbl">Risque associé *</label>
-              <select v-model="form.risk_id" class="finp">
-                <option value="">— Sélectionner —</option>
-                <optgroup v-for="grp in risksByProcess" :key="grp.process" :label="grp.process">
-                  <option v-for="r in grp.risks" :key="r.id" :value="r.id">
-                    {{ r.code_risk }} — {{ truncate(r.libelle, 45) }}
-                  </option>
-                </optgroup>
-              </select>
-            </div>
-            <div class="fg">
-              <label class="flbl">Entité</label>
-              <select v-model="form.entity_id" class="finp">
-                <option value="">— Aucune —</option>
-                <option v-for="e in entities" :key="e.id" :value="e.id">{{ e.name }}</option>
-              </select>
-            </div>
-            <div class="fg">
-              <label class="flbl">Priorité *</label>
-              <select v-model="form.priority" class="finp">
-                <option v-for="p in priorities" :key="p.value" :value="p.value">{{ p.label }}</option>
-              </select>
-            </div>
-            <div class="fg">
-              <label class="flbl">Statut *</label>
-              <select v-model="form.status" class="finp">
-                <option v-for="s in statuses" :key="s.value" :value="s.value">{{ s.label }}</option>
-              </select>
-            </div>
-            <div class="fg">
-              <label class="flbl">Responsable</label>
-              <select v-model="form.assigned_to" class="finp">
-                <option value="">— Non assigné —</option>
-                <option v-for="u in users" :key="u.id" :value="u.id">{{ u.name }}</option>
-              </select>
-            </div>
-            <div class="fg">
-              <label class="flbl">Date de début</label>
-              <input v-model="form.start_date" type="date" class="finp" />
-            </div>
-            <div class="fg">
-              <label class="flbl">Date cible *</label>
-              <input v-model="form.target_date" type="date" class="finp" />
-            </div>
-            <div class="fg">
-              <label class="flbl">Coût estimé (XOF)</label>
-              <input v-model.number="form.cost_estimate" type="number" step="1000" class="finp" placeholder="0" />
-            </div>
-            <div class="fg fg-full">
-              <label class="flbl">Notes</label>
-              <textarea v-model="form.notes" rows="2" class="finp"></textarea>
-            </div>
-          </div>
-          <div class="ip-footer">
-            <button class="btn-cancel" @click="closeForm"><i class="ti ti-x"></i> Annuler</button>
-            <button class="btn-save" :disabled="!form.title||!form.risk_id||!form.target_date||saving" @click="saveForm">
-              <i :class="saving?'ti ti-loader-2 spin':'ti ti-check'"></i>
-              {{ saving ? 'Enregistrement…' : 'Enregistrer' }}
-            </button>
-          </div>
-        </div>
-
-        <div v-if="multiPanel.open && !multiPanel.risk_id" class="inline-panel inline-panel--floating">
-          <div class="ipf-hdr">
-            <span><i class="ti ti-layers"></i> Actions multiples</span>
-            <button class="ip-close" @click="closeMulti"><i class="ti ti-x"></i></button>
-          </div>
-          <div class="multi-hint">
-            <i class="ti ti-info-circle"></i>
-            Chaque ligne = une action distincte. Seules les lignes avec un titre seront créées.
-          </div>
-          <div class="fg" style="margin-bottom:12px">
-            <label class="flbl">Risque associé *</label>
-            <select v-model="multiPanel.risk_id" class="finp">
-              <option value="">— Sélectionner un risque —</option>
-              <optgroup v-for="grp in risksByProcess" :key="grp.process" :label="grp.process">
-                <option v-for="r in grp.risks" :key="r.id" :value="r.id">
-                  {{ r.code_risk }} — {{ truncate(r.libelle, 45) }}
-                </option>
-              </optgroup>
-            </select>
-          </div>
-          <div class="multi-opts">
-            <label class="multi-opt-chk">
-              <input type="checkbox" v-model="multiSameDates" />
-              Même date cible pour toutes les actions
-            </label>
-            <input v-if="multiSameDates" v-model="multiCommonDate" type="date" class="finp finp-inline" />
-          </div>
-          <div class="multi-list">
-            <div v-for="(item, i) in multiItems" :key="i" class="multi-item">
-              <span class="multi-idx">{{ i + 1 }}</span>
-              <div class="multi-fields">
-                <input v-model="item.title" class="finp" placeholder="Titre de l'action *" />
-                <input v-model="item.description" class="finp" placeholder="Description" />
-                <select v-model="item.priority" class="finp">
-                  <option v-for="p in priorities" :key="p.value" :value="p.value">{{ p.label }}</option>
-                </select>
-                <select v-model="item.status" class="finp">
-                  <option v-for="s in statuses" :key="s.value" :value="s.value">{{ s.label }}</option>
-                </select>
-                <select v-model="item.assigned_to" class="finp">
-                  <option value="">— Responsable —</option>
-                  <option v-for="u in users" :key="u.id" :value="u.id">{{ u.name }}</option>
-                </select>
-                <input v-if="!multiSameDates" v-model="item.target_date" type="date" class="finp" />
-              </div>
-              <button class="multi-del" @click="removeMultiItem(i)" title="Supprimer">
-                <i class="ti ti-x"></i>
-              </button>
-            </div>
-          </div>
-          <div class="multi-footer-actions">
-            <button class="btn-add-sm" @click="addMultiItem">
-              <i class="ti ti-plus"></i> Ajouter une ligne
-            </button>
-            <span class="multi-count">{{ validMultiItems }} action(s) valide(s)</span>
-          </div>
-          <div class="ip-footer">
-            <button class="btn-cancel" @click="closeMulti"><i class="ti ti-x"></i> Annuler</button>
-            <button class="btn-save" :disabled="!validMultiItems||!multiPanel.risk_id||multiSaving" @click="saveMultiple">
-              <i :class="multiSaving?'ti ti-loader-2 spin':'ti ti-check'"></i>
-              {{ multiSaving ? 'Envoi…' : 'Créer ' + validMultiItems + ' actions' }}
-            </button>
-          </div>
-        </div>
-
-        <!-- Groupes par processus, chacun dépliable indépendamment -->
-        <div v-for="proc in groupedByProcess" :key="proc.key" class="proc-group">
-          <div class="proc-hdr" @click="toggleProcess(proc.key)">
-            <i :class="['ti', expandedProcesses.has(proc.key)?'ti-chevron-down':'ti-chevron-right','proc-toggle']"></i>
-            <span class="proc-macro" v-if="proc.macro_name">{{ proc.macro_name }} ›</span>
-            <span class="proc-name">{{ proc.process_name || 'Processus non défini' }}</span>
-            <span v-if="proc.process_code" class="proc-code">{{ proc.process_code }}</span>
-            <span class="proc-count">{{ proc.risks.length }} risque{{ proc.risks.length>1?'s':'' }}</span>
-          </div>
-
-          <div v-if="expandedProcesses.has(proc.key)" class="proc-body">
         <!-- Groupes par risque (avec actions) -->
         <div
-          v-for="group in proc.risks"
+          v-for="group in groupedByRisk"
           :key="group.risk_id"
           class="risk-group"
         >
@@ -301,8 +139,8 @@
                 {{ DECISION_LABELS[group.decision] || group.decision }}
               </span>
               <span class="rg-count">{{ group.actions.length }} action{{ group.actions.length>1?'s':'' }}</span>
-              <button class="btn-add-action" @click.stop="openCreate(group.risk_id)" title="Nouvelle action">
-                <i class="ti ti-plus"></i>
+              <button class="btn-add-action" @click.stop="openCreate(group.risk_id)">
+                <i class="ti ti-plus"></i> Action
               </button>
               <button class="btn-multi-sm" @click.stop="openCreateMultiple(group.risk_id)" title="Actions multiples">
                 <i class="ti ti-layers"></i>
@@ -436,221 +274,57 @@
               </div>
             </div>
 
-            <!-- ═══ RECOMMANDATION (contient les plans d'action de ce risque) ═══ -->
-            <div class="reco-block">
-              <div class="reco-hdr">
-                <i class="ti ti-bulb"></i>
-                <span>Recommandation</span>
-                <button
-                  class="reco-edit-btn"
-                  @click.stop="openRecoEdit(group.risk_id, group.recommendation_content)"
-                  :title="group.recommendation_content ? 'Modifier la recommandation' : 'Ajouter une recommandation'"
-                >
-                  <i :class="group.recommendation_content ? 'ti ti-pencil' : 'ti ti-plus'"></i>
-                </button>
-              </div>
-
-              <!-- Édition inline de la recommandation -->
-              <div v-if="recoEdit.open && recoEdit.risk_id===group.risk_id" class="reco-edit">
-                <textarea
-                  v-model="recoEdit.content" rows="4" class="finp"
-                  placeholder="Décrivez la recommandation / le plan de traitement pour ce risque…"
-                ></textarea>
-                <div class="ip-footer">
-                  <button class="btn-cancel" @click="closeRecoEdit"><i class="ti ti-x"></i> Annuler</button>
-                  <button class="btn-save" :disabled="recoSaving" @click="saveReco">
-                    <i :class="recoSaving?'ti ti-loader-2 spin':'ti ti-check'"></i>
-                    {{ recoSaving ? 'Enregistrement…' : 'Enregistrer' }}
+            <!-- Section actions -->
+            <div class="actions-section">
+              <div class="as-hdr">
+                <span class="as-title">
+                  <i class="ti ti-list-details"></i>
+                  Actions de traitement ({{ group.actions.length }})
+                </span>
+                <div class="as-btns">
+                  <button class="btn-add-sm" @click="openCreate(group.risk_id)">
+                    <i class="ti ti-plus"></i> Ajouter
+                  </button>
+                  <button class="btn-multi-sm2" @click="openCreateMultiple(group.risk_id)">
+                    <i class="ti ti-layers"></i> Multiples
                   </button>
                 </div>
               </div>
 
-              <div v-else class="reco-body">
-                <p v-if="group.recommendation_content" class="reco-text">{{ group.recommendation_content }}</p>
-                <p v-else class="reco-empty">Aucune recommandation formalisée — cliquez sur « + » pour en ajouter une.</p>
-                <div v-if="group.controles_existants" class="reco-sub">
-                  <span class="reco-sub-lbl"><i class="ti ti-shield-check"></i> Contrôles existants</span>
-                  <p>{{ group.controles_existants }}</p>
-                </div>
+              <div v-if="!group.actions.length" class="as-empty">
+                <i class="ti ti-inbox"></i>
+                <p>Aucune action définie pour ce risque</p>
+                <button class="btn-add" @click="openCreate(group.risk_id)">
+                  <i class="ti ti-plus"></i> Créer une action
+                </button>
+              </div>
 
-                <!-- Plans d'action de cette recommandation -->
-                <div class="actions-section">
-                  <div class="as-hdr">
-                    <span class="as-title">
-                      <i class="ti ti-list-details"></i>
-                      Plans d'action ({{ group.actions.length }})
-                    </span>
-                    <div class="as-btns">
-                      <button class="btn-add-sm btn-icon-only" @click="openCreate(group.risk_id)" title="Ajouter un plan d'action">
-                        <i class="ti ti-plus"></i>
-                      </button>
-                      <button class="btn-multi-sm2" @click="openCreateMultiple(group.risk_id)" title="Actions multiples">
-                        <i class="ti ti-layers"></i>
-                      </button>
-                    </div>
-                  </div>
-
-                  <!-- Panneau inline : actions multiples scoping ce risque -->
-                  <div v-if="multiPanel.open && multiPanel.risk_id===group.risk_id" class="inline-panel">
-                    <div class="ipf-hdr">
-                      <span><i class="ti ti-layers"></i> Actions multiples</span>
-                      <span class="m-risk-code">{{ group.code_risk }}</span>
-                      <button class="ip-close" @click="closeMulti"><i class="ti ti-x"></i></button>
-                    </div>
-                    <div class="multi-hint">
-                      <i class="ti ti-info-circle"></i>
-                      Chaque ligne = une action distincte. Seules les lignes avec un titre seront créées.
-                    </div>
-                    <div class="multi-opts">
-                      <label class="multi-opt-chk">
-                        <input type="checkbox" v-model="multiSameDates" />
-                        Même date cible pour toutes les actions
-                      </label>
-                      <input v-if="multiSameDates" v-model="multiCommonDate" type="date" class="finp finp-inline" />
-                    </div>
-                    <div class="multi-list">
-                      <div v-for="(item, i) in multiItems" :key="i" class="multi-item">
-                        <span class="multi-idx">{{ i + 1 }}</span>
-                        <div class="multi-fields">
-                          <input v-model="item.title" class="finp" placeholder="Titre de l'action *" />
-                          <input v-model="item.description" class="finp" placeholder="Description" />
-                          <select v-model="item.priority" class="finp">
-                            <option v-for="p in priorities" :key="p.value" :value="p.value">{{ p.label }}</option>
-                          </select>
-                          <select v-model="item.status" class="finp">
-                            <option v-for="s in statuses" :key="s.value" :value="s.value">{{ s.label }}</option>
-                          </select>
-                          <select v-model="item.assigned_to" class="finp">
-                            <option value="">— Responsable —</option>
-                            <option v-for="u in users" :key="u.id" :value="u.id">{{ u.name }}</option>
-                          </select>
-                          <input v-if="!multiSameDates" v-model="item.target_date" type="date" class="finp" />
-                        </div>
-                        <button class="multi-del" @click="removeMultiItem(i)" title="Supprimer">
-                          <i class="ti ti-x"></i>
-                        </button>
-                      </div>
-                    </div>
-                    <div class="multi-footer-actions">
-                      <button class="btn-add-sm" @click="addMultiItem">
-                        <i class="ti ti-plus"></i> Ajouter une ligne
-                      </button>
-                      <span class="multi-count">{{ validMultiItems }} action(s) valide(s)</span>
-                    </div>
-                    <div class="ip-footer">
-                      <button class="btn-cancel" @click="closeMulti"><i class="ti ti-x"></i> Annuler</button>
-                      <button class="btn-save" :disabled="!validMultiItems||!multiPanel.risk_id||multiSaving" @click="saveMultiple">
-                        <i :class="multiSaving?'ti ti-loader-2 spin':'ti ti-check'"></i>
-                        {{ multiSaving ? 'Envoi…' : 'Créer ' + validMultiItems + ' actions' }}
-                      </button>
-                    </div>
-                  </div>
-
-                  <div
-                    v-if="!group.actions.length && !(formPanel.open && formPanel.risk_id===group.risk_id && !formPanel.id)"
-                    class="as-empty"
-                  >
-                    <i class="ti ti-inbox"></i>
-                    <p>Aucun plan d'action pour cette recommandation</p>
-                    <button class="btn-add" @click="openCreate(group.risk_id)">
-                      <i class="ti ti-plus"></i> Créer un plan d'action
-                    </button>
-                  </div>
-
-                  <div
-                    v-if="group.actions.length || (formPanel.open && formPanel.risk_id===group.risk_id && !formPanel.id)"
-                    class="actions-table-wrap"
-                  >
-                  <table class="actions-table">
-                    <thead>
-                      <tr>
-                        <th>Code</th>
-                        <th>Titre / Description</th>
-                        <th>Priorité</th>
-                        <th>Statut</th>
-                        <th>Responsable</th>
-                        <th>Début</th>
-                        <th>Échéance</th>
-                        <th>Avancement</th>
-                        <th>Coût estimé</th>
-                        <th>Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      <!-- Ligne de création : horizontale, alignée sur les colonnes du tableau -->
-                      <tr v-if="formPanel.open && formPanel.risk_id===group.risk_id && !formPanel.id" class="arow-form">
-                        <td><span class="a-code a-code--new">Nouveau</span></td>
-                        <td class="rf-td-title">
-                          <input v-model="form.title" class="finp finp-cell" placeholder="Titre du plan d'action *" />
-                          <input v-model="form.description" class="finp finp-cell finp-cell-sub" placeholder="Description courte (optionnel)" />
-                        </td>
-                        <td>
-                          <select v-model="form.priority" class="finp finp-cell">
-                            <option v-for="p in priorities" :key="p.value" :value="p.value">{{ p.label }}</option>
-                          </select>
-                        </td>
-                        <td>
-                          <select v-model="form.status" class="finp finp-cell">
-                            <option v-for="s in statuses" :key="s.value" :value="s.value">{{ s.label }}</option>
-                          </select>
-                        </td>
-                        <td>
-                          <select v-model="form.assigned_to" class="finp finp-cell">
-                            <option value="">— Non assigné —</option>
-                            <option v-for="u in users" :key="u.id" :value="u.id">{{ u.name }}</option>
-                          </select>
-                        </td>
-                        <td><input v-model="form.start_date" type="date" class="finp finp-cell" /></td>
-                        <td><input v-model="form.target_date" type="date" class="finp finp-cell" placeholder="Échéance *" /></td>
-                        <td class="rf-td-muted">— <span class="rf-hint">(suivi)</span></td>
-                        <td><input v-model.number="form.cost_estimate" type="number" step="1000" class="finp finp-cell" placeholder="Coût XOF" /></td>
-                        <td>
-                          <div class="a-btns">
-                            <button class="aib aib-save" :disabled="!form.title||!form.risk_id||!form.target_date||saving" @click="saveForm" title="Enregistrer">
-                              <i :class="saving?'ti ti-loader-2 spin':'ti ti-check'"></i>
-                            </button>
-                            <button class="aib aib-del" @click="closeForm" title="Annuler">
-                              <i class="ti ti-x"></i>
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                      <!-- Champs complémentaires (facultatifs), toujours visibles sur la même ligne logique -->
-                      <tr v-if="formPanel.open && formPanel.risk_id===group.risk_id && !formPanel.id" class="arow-form arow-form-extra">
-                        <td colspan="10">
-                          <div class="rf-extra-row">
-                            <div class="rf-extra-fld">
-                              <label class="flbl">Entité</label>
-                              <select v-model="form.entity_id" class="finp">
-                                <option value="">— Aucune —</option>
-                                <option v-for="e in entities" :key="e.id" :value="e.id">{{ e.name }}</option>
-                              </select>
-                            </div>
-                            <div class="rf-extra-fld rf-extra-fld--wide">
-                              <label class="flbl">Plan d'action détaillé</label>
-                              <input v-model="form.action_plan" class="finp" placeholder="Décrivez les étapes…" />
-                            </div>
-                            <div class="rf-extra-fld rf-extra-fld--wide">
-                              <label class="flbl">Notes</label>
-                              <input v-model="form.notes" class="finp" placeholder="Notes complémentaires" />
-                            </div>
-                          </div>
-                        </td>
-                      </tr>
-                    </tbody>
-                    <tbody>
+              <table v-else class="actions-table">
+                <thead>
+                  <tr>
+                    <th>Code</th>
+                    <th>Titre / Description</th>
+                    <th>Priorité</th>
+                    <th>Statut</th>
+                    <th>Responsable</th>
+                    <th>Début</th>
+                    <th>Échéance</th>
+                    <th>Avancement</th>
+                    <th>Coût estimé</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
                   <template v-for="action in group.actions" :key="action.id">
                     <tr
                       :class="[
                         'arow',
                         isOverdue(action)?'arow--late':'',
-                        action.status==='completed'?'arow--done':'',
-                        expandedActions.has(action.id)?'arow--open':''
+                        action.status==='completed'?'arow--done':''
                       ]"
                       @click="toggleActionDetail(action.id)"
                     >
                       <td>
-                        <i :class="['ti', expandedActions.has(action.id)?'ti-chevron-down':'ti-chevron-right', 'a-toggle']"></i>
                         <span class="a-code">{{ action.code }}</span>
                         <span v-if="action.is_auto_generated" class="a-auto" title="Généré automatiquement">
                           <i class="ti ti-robot"></i>
@@ -686,7 +360,7 @@
                       <td class="a-cost">{{ fmtCur(action.cost_estimate) }}</td>
                       <td>
                         <div class="a-btns">
-                          <button class="aib" @click.stop="toggleActionDetail(action.id)" title="Détail">
+                          <button class="aib" @click.stop="openDetail(action)" title="Détail">
                             <i class="ti ti-eye"></i>
                           </button>
                           <button class="aib" @click.stop="openEdit(action)" title="Modifier">
@@ -699,84 +373,8 @@
                       </td>
                     </tr>
 
-                    <!-- Panneau d'édition inline pour cette action précise -->
-                    <tr v-if="formPanel.open && formPanel.id===action.id" class="arow-detail">
-                      <td colspan="10">
-                        <div class="action-detail-inline">
-                          <div class="ipf-hdr ipf-hdr--edit">
-                            <span><i class="ti ti-pencil"></i> Modifier l'action</span>
-                            <span class="a-code">{{ action.code }}</span>
-                            <button class="ip-close" @click="closeForm"><i class="ti ti-x"></i></button>
-                          </div>
-                          <div class="fgrid">
-                            <div class="fg fg-full">
-                              <label class="flbl">Titre de l'action *</label>
-                              <input v-model="form.title" class="finp" />
-                            </div>
-                            <div class="fg fg-full">
-                              <label class="flbl">Description courte</label>
-                              <textarea v-model="form.description" rows="2" class="finp"></textarea>
-                            </div>
-                            <div class="fg fg-full">
-                              <label class="flbl">Plan d'action détaillé</label>
-                              <textarea v-model="form.action_plan" rows="4" class="finp"></textarea>
-                            </div>
-                            <div class="fg">
-                              <label class="flbl">Entité</label>
-                              <select v-model="form.entity_id" class="finp">
-                                <option value="">— Aucune —</option>
-                                <option v-for="e in entities" :key="e.id" :value="e.id">{{ e.name }}</option>
-                              </select>
-                            </div>
-                            <div class="fg">
-                              <label class="flbl">Priorité *</label>
-                              <select v-model="form.priority" class="finp">
-                                <option v-for="p in priorities" :key="p.value" :value="p.value">{{ p.label }}</option>
-                              </select>
-                            </div>
-                            <div class="fg">
-                              <label class="flbl">Statut *</label>
-                              <select v-model="form.status" class="finp">
-                                <option v-for="s in statuses" :key="s.value" :value="s.value">{{ s.label }}</option>
-                              </select>
-                            </div>
-                            <div class="fg">
-                              <label class="flbl">Responsable</label>
-                              <select v-model="form.assigned_to" class="finp">
-                                <option value="">— Non assigné —</option>
-                                <option v-for="u in users" :key="u.id" :value="u.id">{{ u.name }}</option>
-                              </select>
-                            </div>
-                            <div class="fg">
-                              <label class="flbl">Date de début</label>
-                              <input v-model="form.start_date" type="date" class="finp" />
-                            </div>
-                            <div class="fg">
-                              <label class="flbl">Date cible *</label>
-                              <input v-model="form.target_date" type="date" class="finp" />
-                            </div>
-                            <div class="fg">
-                              <label class="flbl">Coût estimé (XOF)</label>
-                              <input v-model.number="form.cost_estimate" type="number" step="1000" class="finp" />
-                            </div>
-                            <div class="fg fg-full">
-                              <label class="flbl">Notes</label>
-                              <textarea v-model="form.notes" rows="2" class="finp"></textarea>
-                            </div>
-                          </div>
-                          <div class="ip-footer">
-                            <button class="btn-cancel" @click="closeForm"><i class="ti ti-x"></i> Annuler</button>
-                            <button class="btn-save" :disabled="!form.title||!form.risk_id||!form.target_date||saving" @click="saveForm">
-                              <i :class="saving?'ti ti-loader-2 spin':'ti ti-check'"></i>
-                              {{ saving ? 'Enregistrement…' : 'Enregistrer' }}
-                            </button>
-                          </div>
-                        </div>
-                      </td>
-                    </tr>
-
-                    <!-- Ligne de détail inline (vue) -->
-                    <tr v-if="expandedActions.has(action.id) && !(formPanel.open && formPanel.id===action.id)" class="arow-detail">
+                    <!-- Ligne de détail inline -->
+                    <tr v-if="expandedActions.has(action.id)" class="arow-detail">
                       <td colspan="10">
                         <div class="action-detail-inline">
                           <div class="adi-grid">
@@ -813,117 +411,14 @@
                               </div>
                             </div>
                           </div>
-
-                          <!-- Suivi (c'est ici, et uniquement ici, que se calcule la progression) -->
-                          <div class="d-section">
-                            <div class="d-sec-hdr">
-                              <span><i class="ti ti-checkbox"></i> Suivi ({{ (detailCache[action.id]?.tasks||[]).length }}) <em class="d-sec-hint">— calcule l'avancement</em></span>
-                              <button class="btn-add-sm btn-icon-only" @click="openTaskCreate(action.id)" title="Ajouter un suivi">
-                                <i class="ti ti-plus"></i>
-                              </button>
-                            </div>
-
-                            <div v-if="taskPanel.open && taskPanel.plan_id===action.id" class="task-inline-form">
-                              <div class="fgrid">
-                                <div class="fg fg-full">
-                                  <label class="flbl">Titre *</label>
-                                  <input v-model="taskForm.title" class="finp" />
-                                </div>
-                                <div class="fg fg-full">
-                                  <label class="flbl">Description</label>
-                                  <textarea v-model="taskForm.description" rows="2" class="finp"></textarea>
-                                </div>
-                                <div class="fg">
-                                  <label class="flbl">Responsable</label>
-                                  <select v-model="taskForm.assigned_to" class="finp">
-                                    <option value="">—</option>
-                                    <option v-for="u in users" :key="u.id" :value="u.id">{{ u.name }}</option>
-                                  </select>
-                                </div>
-                                <div class="fg">
-                                  <label class="flbl">Date cible</label>
-                                  <input v-model="taskForm.target_date" type="date" class="finp" />
-                                </div>
-                                <div class="fg">
-                                  <label class="flbl">Statut</label>
-                                  <select v-model="taskForm.status" class="finp">
-                                    <option value="pending">À faire</option>
-                                    <option value="in_progress">En cours</option>
-                                    <option value="completed">Terminé</option>
-                                    <option value="cancelled">Annulé</option>
-                                  </select>
-                                </div>
-                              </div>
-                              <div class="task-inline-footer">
-                                <button class="btn-cancel" @click="closeTaskPanel"><i class="ti ti-x"></i> Annuler</button>
-                                <button class="btn-save" :disabled="!taskForm.title||taskSaving" @click="saveTask">
-                                  <i :class="taskSaving?'ti ti-loader-2 spin':'ti ti-check'"></i> Enregistrer
-                                </button>
-                              </div>
-                            </div>
-
-                            <div v-if="detailCache[action.id]?.loading" class="d-empty">Chargement…</div>
-                            <div v-else-if="(detailCache[action.id]?.tasks||[]).length" class="tasks-list">
-                              <div v-for="t in detailCache[action.id].tasks" :key="t.id" :class="['task-item','task-'+t.status]">
-                                <i :class="['ti', t.status==='completed'?'ti-check-circle':'ti-circle', 'task-ic']"></i>
-                                <div class="task-info">
-                                  <span class="task-title">{{ t.title }}</span>
-                                  <span class="task-meta">{{ t.assigned_to_name||'—' }} · {{ fmtDate(t.target_date)||'—' }}</span>
-                                </div>
-                                <span :class="['stat','stat-'+t.status]" style="font-size:9px">{{ statLabel(t.status) }}</span>
-                                <div class="task-btns">
-                                  <button class="aib" @click="editTask(t)"><i class="ti ti-pencil"></i></button>
-                                  <button class="aib aib-del" @click="deleteTask(t)"><i class="ti ti-trash"></i></button>
-                                </div>
-                              </div>
-                            </div>
-                            <div v-else class="d-empty">Aucun suivi défini pour l'instant</div>
-                          </div>
-
-                          <!-- Commentaires -->
-                          <div class="d-section">
-                            <div class="d-sec-hdr"><span><i class="ti ti-message"></i> Commentaires ({{ (detailCache[action.id]?.comments||[]).length }})</span></div>
-                            <div class="cmt-input-row">
-                              <textarea v-model="newComments[action.id]" rows="2" class="finp" placeholder="Ajouter un commentaire…"></textarea>
-                              <button class="btn-send" @click="addComment(action.id)" :disabled="!newComments[action.id]?.trim()">
-                                <i class="ti ti-send"></i>
-                              </button>
-                            </div>
-                            <div v-for="c in (detailCache[action.id]?.comments||[])" :key="c.id" class="cmt-item">
-                              <div class="cmt-meta">
-                                <strong>{{ c.user_name||'Anonyme' }}</strong>
-                                <span class="cmt-date">{{ fmtDateTime(c.created_at) }}</span>
-                                <span v-if="c.is_internal" class="cmt-internal">Interne</span>
-                              </div>
-                              <p>{{ c.comment }}</p>
-                            </div>
-                            <div v-if="!(detailCache[action.id]?.comments||[]).length" class="d-empty">Aucun commentaire</div>
-                          </div>
-
-                          <!-- Historique -->
-                          <div class="d-section">
-                            <div class="d-sec-hdr"><span><i class="ti ti-clock-history"></i> Historique</span></div>
-                            <div v-for="h in (detailCache[action.id]?.history||[])" :key="h.id" class="hist-item">
-                              <span class="hist-action">{{ h.action }}</span>
-                              <span class="hist-desc">{{ h.description }}</span>
-                              <span class="hist-user">{{ h.user_name||'Système' }}</span>
-                              <span class="hist-date">{{ fmtDateTime(h.created_at) }}</span>
-                            </div>
-                            <div v-if="!(detailCache[action.id]?.history||[]).length" class="d-empty">Aucun historique</div>
-                          </div>
                         </div>
                       </td>
                     </tr>
                   </template>
                 </tbody>
               </table>
-              </div>
-            </div>
-              </div>
             </div>
           </template>
-        </div>
-          </div>
         </div>
 
         <!-- Risques sans plan d'action -->
@@ -934,27 +429,46 @@
             <span>Risques sans plan d'action ({{ risksWithoutActions.length }})</span>
           </div>
           <div v-if="showNoAction" class="nar-list">
-            <template v-for="r in risksWithoutActions" :key="r.id">
-              <div class="nar-item">
-                <span class="nar-code">{{ r.code_risk }}</span>
-                <span class="nar-lib">{{ truncate(r.libelle, 75) }}</span>
-                <span class="nar-ctx">{{ r.process_code }} › {{ r.activity_code }}</span>
-                <div v-if="r.criticality_score" class="rscore rscore--i" :style="{ background: r.zone_color||'#6b7280' }">
-                  <i class="ti ti-shield-bolt"></i>{{ r.criticality_score }}
-                </div>
-                <span v-if="r.decision" :class="['dec-badge','dec-'+r.decision.toLowerCase()]">
-                  {{ DECISION_LABELS[r.decision]||r.decision }}
-                </span>
-                <button class="btn-add-sm btn-icon-only" @click="openCreate(r.id)" title="Ajouter une action">
-                  <i class="ti ti-plus"></i>
-                </button>
+            <div v-for="r in risksWithoutActions" :key="r.id" class="nar-item">
+              <span class="nar-code">{{ r.code_risk }}</span>
+              <span class="nar-lib">{{ truncate(r.libelle, 75) }}</span>
+              <span class="nar-ctx">{{ r.process_code }} › {{ r.activity_code }}</span>
+              <div v-if="r.criticality_score" class="rscore rscore--i" :style="{ background: r.zone_color||'#6b7280' }">
+                <i class="ti ti-shield-bolt"></i>{{ r.criticality_score }}
               </div>
-              <div v-if="formPanel.open && formPanel.risk_id===r.id" class="inline-panel inline-panel--nar">
-                <div class="ipf-hdr">
-                  <span><i class="ti ti-list-check"></i> Nouvelle action</span>
-                  <span class="m-risk-code">{{ r.code_risk }}</span>
-                  <button class="ip-close" @click="closeForm"><i class="ti ti-x"></i></button>
-                </div>
+              <span v-if="r.decision" :class="['dec-badge','dec-'+r.decision.toLowerCase()]">
+                {{ DECISION_LABELS[r.decision]||r.decision }}
+              </span>
+              <button class="btn-add-sm" @click="openCreate(r.id)">
+                <i class="ti ti-plus"></i> Action
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- État vide global -->
+        <div v-if="!groupedByRisk.length && !risksWithoutActions.length" class="empty-state">
+          <i class="ti ti-clipboard-off"></i>
+          <p>Aucun résultat pour ces filtres</p>
+          <button class="btn-add" @click="openCreate()">
+            <i class="ti ti-plus"></i> Créer une action
+          </button>
+        </div>
+      </div>
+
+      <!-- ═══ MODAL CRÉER / MODIFIER ═══ -->
+      <Teleport to="body">
+        <Transition name="mf">
+          <div v-if="formModal.open" class="modal-overlay" @click.self="formModal.open=false">
+            <div class="modal-box" @click.stop>
+              <div class="modal-hdr">
+                <span>
+                  <i class="ti ti-list-check"></i>
+                  {{ formModal.id ? 'Modifier' : 'Nouvelle' }} action
+                </span>
+                <button class="modal-x" @click="formModal.open=false"><i class="ti ti-x"></i></button>
+              </div>
+              <div class="modal-body">
                 <div class="fgrid">
                   <div class="fg fg-full">
                     <label class="flbl">Titre de l'action *</label>
@@ -967,6 +481,17 @@
                   <div class="fg fg-full">
                     <label class="flbl">Plan d'action détaillé</label>
                     <textarea v-model="form.action_plan" rows="4" class="finp" placeholder="Décrivez les étapes…"></textarea>
+                  </div>
+                  <div class="fg">
+                    <label class="flbl">Risque associé *</label>
+                    <select v-model="form.risk_id" class="finp">
+                      <option value="">— Sélectionner —</option>
+                      <optgroup v-for="grp in risksByProcess" :key="grp.process" :label="grp.process">
+                        <option v-for="r in grp.risks" :key="r.id" :value="r.id">
+                          {{ r.code_risk }} — {{ truncate(r.libelle, 45) }}
+                        </option>
+                      </optgroup>
+                    </select>
                   </div>
                   <div class="fg">
                     <label class="flbl">Entité</label>
@@ -1006,32 +531,328 @@
                     <label class="flbl">Coût estimé (XOF)</label>
                     <input v-model.number="form.cost_estimate" type="number" step="1000" class="finp" placeholder="0" />
                   </div>
+                  <div class="fg">
+                    <label class="flbl">Coût réel (XOF)</label>
+                    <input v-model.number="form.actual_cost" type="number" step="1000" class="finp" placeholder="0" />
+                  </div>
                   <div class="fg fg-full">
                     <label class="flbl">Notes</label>
                     <textarea v-model="form.notes" rows="2" class="finp"></textarea>
                   </div>
-                </div>
-                <div class="ip-footer">
-                  <button class="btn-cancel" @click="closeForm"><i class="ti ti-x"></i> Annuler</button>
-                  <button class="btn-save" :disabled="!form.title||!form.risk_id||!form.target_date||saving" @click="saveForm">
-                    <i :class="saving?'ti ti-loader-2 spin':'ti ti-check'"></i>
-                    {{ saving ? 'Enregistrement…' : 'Enregistrer' }}
-                  </button>
+                  <!-- Décision — depuis risk_action_statuses (getDecisionStatuses) -->
+                  <div v-if="decisionStatuses.length" class="fg">
+                    <label class="flbl">Décision de traitement</label>
+                    <select v-model="form.source_status" class="finp">
+                      <option value="">— Aucune —</option>
+                      <option v-for="ds in decisionStatuses" :key="ds.code" :value="ds.code">
+                        {{ ds.label }}{{ ds.auto_create_plan ? ' ✓ auto' : '' }}
+                      </option>
+                    </select>
+                    <span v-if="form.source_status" class="dec-hint">
+                      <span v-for="ds in decisionStatuses.filter(d=>d.code===form.source_status)" :key="ds.code" :style="{color:ds.color,fontWeight:700}">
+                        Priorité suggérée : {{ ds.default_priority }}
+                      </span>
+                    </span>
+                  </div>
                 </div>
               </div>
-            </template>
+              <div class="modal-footer">
+                <button class="btn-cancel" @click="formModal.open=false">
+                  <i class="ti ti-x"></i> Annuler
+                </button>
+                <button
+                  class="btn-save"
+                  :disabled="!form.title||!form.risk_id||!form.target_date||saving"
+                  @click="saveForm"
+                >
+                  <i :class="saving?'ti ti-loader-2 spin':'ti ti-check'"></i>
+                  {{ saving ? 'Enregistrement…' : 'Enregistrer' }}
+                </button>
+              </div>
+            </div>
           </div>
-        </div>
+        </Transition>
+      </Teleport>
 
-        <!-- État vide global -->
-        <div v-if="!groupedByRisk.length && !risksWithoutActions.length" class="empty-state">
-          <i class="ti ti-clipboard-off"></i>
-          <p>Aucun résultat pour ces filtres</p>
-          <button class="btn-add" @click="openCreate()">
-            <i class="ti ti-plus"></i> Créer une action
-          </button>
-        </div>
-      </div>
+      <!-- ═══ MODAL ACTIONS MULTIPLES ═══ -->
+      <Teleport to="body">
+        <Transition name="mf">
+          <div v-if="multiModal.open" class="modal-overlay" @click.self="multiModal.open=false">
+            <div class="modal-box modal-xl" @click.stop>
+              <div class="modal-hdr">
+                <span><i class="ti ti-layers"></i> Actions multiples</span>
+                <span v-if="multiModal.risk_id" class="m-risk-code">
+                  {{ getRiskCode(multiModal.risk_id) }}
+                </span>
+                <button class="modal-x" @click="multiModal.open=false"><i class="ti ti-x"></i></button>
+              </div>
+              <div class="modal-body">
+                <div class="multi-hint">
+                  <i class="ti ti-info-circle"></i>
+                  Chaque ligne = une action distincte. Seules les lignes avec un titre seront créées.
+                </div>
+
+                <!-- Risque cible si non défini -->
+                <div v-if="!multiModal.risk_id" class="fg" style="margin-bottom:12px">
+                  <label class="flbl">Risque associé *</label>
+                  <select v-model="multiModal.risk_id" class="finp">
+                    <option value="">— Sélectionner un risque —</option>
+                    <optgroup v-for="grp in risksByProcess" :key="grp.process" :label="grp.process">
+                      <option v-for="r in grp.risks" :key="r.id" :value="r.id">
+                        {{ r.code_risk }} — {{ truncate(r.libelle, 45) }}
+                      </option>
+                    </optgroup>
+                  </select>
+                </div>
+
+                <!-- Options communes -->
+                <div class="multi-opts">
+                  <label class="multi-opt-chk">
+                    <input type="checkbox" v-model="multiSameDates" />
+                    Même date cible pour toutes les actions
+                  </label>
+                  <input v-if="multiSameDates" v-model="multiCommonDate" type="date" class="finp finp-inline" />
+                </div>
+
+                <!-- Lignes -->
+                <div class="multi-list">
+                  <div v-for="(item, i) in multiItems" :key="i" class="multi-item">
+                    <span class="multi-idx">{{ i + 1 }}</span>
+                    <div class="multi-fields">
+                      <input v-model="item.title" class="finp" placeholder="Titre de l'action *" />
+                      <input v-model="item.description" class="finp" placeholder="Description" />
+                      <select v-model="item.priority" class="finp">
+                        <option v-for="p in priorities" :key="p.value" :value="p.value">{{ p.label }}</option>
+                      </select>
+                      <select v-model="item.status" class="finp">
+                        <option v-for="s in statuses" :key="s.value" :value="s.value">{{ s.label }}</option>
+                      </select>
+                      <select v-model="item.assigned_to" class="finp">
+                        <option value="">— Responsable —</option>
+                        <option v-for="u in users" :key="u.id" :value="u.id">{{ u.name }}</option>
+                      </select>
+                      <input v-if="!multiSameDates" v-model="item.target_date" type="date" class="finp" />
+                    </div>
+                    <button class="multi-del" @click="removeMultiItem(i)" title="Supprimer">
+                      <i class="ti ti-x"></i>
+                    </button>
+                  </div>
+                </div>
+
+                <div class="multi-footer-actions">
+                  <button class="btn-add-sm" @click="addMultiItem">
+                    <i class="ti ti-plus"></i> Ajouter une ligne
+                  </button>
+                  <span class="multi-count">{{ validMultiItems }} action(s) valide(s)</span>
+                </div>
+              </div>
+              <div class="modal-footer">
+                <button class="btn-cancel" @click="multiModal.open=false">
+                  <i class="ti ti-x"></i> Annuler
+                </button>
+                <button
+                  class="btn-save"
+                  :disabled="!validMultiItems||!multiModal.risk_id||multiSaving"
+                  @click="saveMultiple"
+                >
+                  <i :class="multiSaving?'ti ti-loader-2 spin':'ti ti-check'"></i>
+                  {{ multiSaving ? 'Envoi…' : 'Créer ' + validMultiItems + ' actions' }}
+                </button>
+              </div>
+            </div>
+          </div>
+        </Transition>
+      </Teleport>
+
+      <!-- ═══ MODAL DÉTAIL ACTION ═══ -->
+      <Teleport to="body">
+        <Transition name="mf">
+          <div v-if="detailModal.open" class="modal-overlay" @click.self="detailModal.open=false">
+            <div class="modal-box modal-xl" @click.stop>
+              <div class="modal-hdr">
+                <span class="d-code">{{ detailModal.plan?.code }}</span>
+                <span class="d-title">{{ detailModal.plan?.title }}</span>
+                <span :class="['prio','prio-'+detailModal.plan?.priority]">{{ prioLabel(detailModal.plan?.priority) }}</span>
+                <span :class="['stat','stat-'+detailModal.plan?.status]">{{ statLabel(detailModal.plan?.status) }}</span>
+                <div class="d-hdr-actions">
+                  <button class="btn-edit-sm" @click="openEdit(detailModal.plan);detailModal.open=false">
+                    <i class="ti ti-pencil"></i> Modifier
+                  </button>
+                  <button class="modal-x" @click="detailModal.open=false"><i class="ti ti-x"></i></button>
+                </div>
+              </div>
+
+              <div class="modal-body d-body" v-if="detailModal.plan">
+                <!-- Risque associé -->
+                <div class="d-risk-banner">
+                  <i class="ti ti-shield-bolt d-risk-icon"></i>
+                  <div>
+                    <div class="d-risk-code">{{ detailModal.plan.code_risk }}</div>
+                    <div class="d-risk-lib">{{ detailModal.plan.risk_libelle }}</div>
+                    <div class="d-risk-ctx">
+                      {{ detailModal.plan.macro_name }} › {{ detailModal.plan.process_name }} › {{ detailModal.plan.activity_name }}
+                    </div>
+                  </div>
+                  <div class="d-eval-scores">
+                    <div v-if="detailModal.plan.criticality_score" class="rscore rscore--i" :style="{ background: detailModal.plan.zone_color||'#6b7280' }">
+                      <i class="ti ti-shield-bolt"></i>{{ detailModal.plan.criticality_score }}
+                    </div>
+                    <div v-if="detailModal.plan.residual_criticality_score" class="rscore rscore--r" :style="{ background: detailModal.plan.residual_zone_color||'#8b5cf6' }">
+                      <i class="ti ti-shield-half"></i>{{ detailModal.plan.residual_criticality_score }}
+                    </div>
+                    <div v-if="detailModal.plan.target_criticality_score" class="rscore rscore--t" :style="{ background: detailModal.plan.target_zone_color||'#0d9488' }">
+                      <i class="ti ti-target"></i>{{ detailModal.plan.target_criticality_score }}
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Grille info -->
+                <div class="d-info-grid">
+                  <div class="d-sec">
+                    <div class="d-sec-title">Informations</div>
+                    <div class="d-row"><span>Entité</span><span>{{ detailModal.plan.entity_name||'—' }}</span></div>
+                    <div class="d-row"><span>Responsable</span><span>{{ detailModal.plan.assigned_to_name||'Non assigné' }}</span></div>
+                    <div class="d-row"><span>Créé par</span><span>{{ detailModal.plan.created_by_name||'—' }}</span></div>
+                    <div class="d-row"><span>Auto-généré</span><span>{{ detailModal.plan.is_auto_generated?'Oui':'Non' }}</span></div>
+                    <div v-if="detailModal.plan.source_status" class="d-row"><span>Source</span><span>{{ detailModal.plan.source_status }}</span></div>
+                  </div>
+                  <div class="d-sec">
+                    <div class="d-sec-title">Échéances</div>
+                    <div class="d-row"><span>Début</span><span>{{ fmtDate(detailModal.plan.start_date)||'—' }}</span></div>
+                    <div class="d-row"><span>Cible</span><span :class="isOverdue(detailModal.plan)?'text-red':''">{{ fmtDate(detailModal.plan.target_date)||'—' }}</span></div>
+                    <div class="d-row"><span>Terminé le</span><span>{{ fmtDate(detailModal.plan.completion_date)||'—' }}</span></div>
+                    <div class="d-row"><span>Avancement</span><span>{{ detailModal.plan.progress||0 }}%</span></div>
+                  </div>
+                  <div class="d-sec">
+                    <div class="d-sec-title">Coûts</div>
+                    <div class="d-row"><span>Estimé</span><span>{{ fmtCur(detailModal.plan.cost_estimate) }}</span></div>
+                    <div class="d-row"><span>Réel</span><span>{{ fmtCur(detailModal.plan.actual_cost) }}</span></div>
+                  </div>
+                </div>
+
+                <div v-if="detailModal.plan.action_plan" class="d-text-block">
+                  <div class="d-sec-title">Plan d'action</div>
+                  <p class="prewrap">{{ detailModal.plan.action_plan }}</p>
+                </div>
+                <div v-if="detailModal.plan.notes" class="d-text-block">
+                  <div class="d-sec-title">Notes</div>
+                  <p>{{ detailModal.plan.notes }}</p>
+                </div>
+
+                <!-- Tâches -->
+                <div class="d-section">
+                  <div class="d-sec-hdr">
+                    <span><i class="ti ti-checkbox"></i> Tâches ({{ detailTasks.length }})</span>
+                    <button class="btn-add-sm" @click="openTaskCreate">
+                      <i class="ti ti-plus"></i> Tâche
+                    </button>
+                  </div>
+                  <div v-if="detailTasks.length" class="tasks-list">
+                    <div v-for="t in detailTasks" :key="t.id" :class="['task-item','task-'+t.status]">
+                      <i :class="['ti', t.status==='completed'?'ti-check-circle':'ti-circle', 'task-ic']"></i>
+                      <div class="task-info">
+                        <span class="task-title">{{ t.title }}</span>
+                        <span class="task-meta">{{ t.assigned_to_name||'—' }} · {{ fmtDate(t.target_date)||'—' }}</span>
+                      </div>
+                      <span :class="['stat','stat-'+t.status]" style="font-size:9px">{{ statLabel(t.status) }}</span>
+                      <div class="task-btns">
+                        <button class="aib" @click="editTask(t)"><i class="ti ti-pencil"></i></button>
+                        <button class="aib aib-del" @click="deleteTask(t)"><i class="ti ti-trash"></i></button>
+                      </div>
+                    </div>
+                  </div>
+                  <div v-else class="d-empty">Aucune tâche définie</div>
+                </div>
+
+                <!-- Commentaires -->
+                <div class="d-section">
+                  <div class="d-sec-hdr"><span><i class="ti ti-message"></i> Commentaires</span></div>
+                  <div class="cmt-input-row">
+                    <textarea v-model="newComment" rows="2" class="finp" placeholder="Ajouter un commentaire…"></textarea>
+                    <button class="btn-send" @click="addComment" :disabled="!newComment.trim()">
+                      <i class="ti ti-send"></i>
+                    </button>
+                  </div>
+                  <div v-for="c in detailComments" :key="c.id" class="cmt-item">
+                    <div class="cmt-meta">
+                      <strong>{{ c.user_name||'Anonyme' }}</strong>
+                      <span class="cmt-date">{{ fmtDateTime(c.created_at) }}</span>
+                      <span v-if="c.is_internal" class="cmt-internal">Interne</span>
+                    </div>
+                    <p>{{ c.comment }}</p>
+                  </div>
+                  <div v-if="!detailComments.length" class="d-empty">Aucun commentaire</div>
+                </div>
+
+                <!-- Historique -->
+                <div class="d-section">
+                  <div class="d-sec-hdr"><span><i class="ti ti-clock-history"></i> Historique</span></div>
+                  <div v-for="h in detailHistory" :key="h.id" class="hist-item">
+                    <span class="hist-action">{{ h.action }}</span>
+                    <span class="hist-desc">{{ h.description }}</span>
+                    <span class="hist-user">{{ h.user_name||'Système' }}</span>
+                    <span class="hist-date">{{ fmtDateTime(h.created_at) }}</span>
+                  </div>
+                  <div v-if="!detailHistory.length" class="d-empty">Aucun historique</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </Transition>
+      </Teleport>
+
+      <!-- ═══ MODAL TÂCHE ═══ -->
+      <Teleport to="body">
+        <Transition name="mf">
+          <div v-if="taskModal.open" class="modal-overlay" @click.self="taskModal.open=false">
+            <div class="modal-box modal-sm" @click.stop>
+              <div class="modal-hdr">
+                <span>{{ taskModal.id ? 'Modifier' : 'Nouvelle' }} tâche</span>
+                <button class="modal-x" @click="taskModal.open=false"><i class="ti ti-x"></i></button>
+              </div>
+              <div class="modal-body">
+                <div class="fgrid">
+                  <div class="fg fg-full">
+                    <label class="flbl">Titre *</label>
+                    <input v-model="taskForm.title" class="finp" />
+                  </div>
+                  <div class="fg fg-full">
+                    <label class="flbl">Description</label>
+                    <textarea v-model="taskForm.description" rows="2" class="finp"></textarea>
+                  </div>
+                  <div class="fg">
+                    <label class="flbl">Responsable</label>
+                    <select v-model="taskForm.assigned_to" class="finp">
+                      <option value="">—</option>
+                      <option v-for="u in users" :key="u.id" :value="u.id">{{ u.name }}</option>
+                    </select>
+                  </div>
+                  <div class="fg">
+                    <label class="flbl">Date cible</label>
+                    <input v-model="taskForm.target_date" type="date" class="finp" />
+                  </div>
+                  <div class="fg">
+                    <label class="flbl">Statut</label>
+                    <select v-model="taskForm.status" class="finp">
+                      <option value="pending">À faire</option>
+                      <option value="in_progress">En cours</option>
+                      <option value="completed">Terminé</option>
+                      <option value="cancelled">Annulé</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+              <div class="modal-footer">
+                <button class="btn-cancel" @click="taskModal.open=false"><i class="ti ti-x"></i> Annuler</button>
+                <button class="btn-save" :disabled="!taskForm.title||taskSaving" @click="saveTask">
+                  <i :class="taskSaving?'ti ti-loader-2 spin':'ti ti-check'"></i>
+                  Enregistrer
+                </button>
+              </div>
+            </div>
+          </div>
+        </Transition>
+      </Teleport>
 
       <!-- ═══ FLASH ═══ -->
       <Transition name="fl">
@@ -1046,11 +867,13 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed } from 'vue'
+import { ref, computed } from 'vue'
 import { router } from '@inertiajs/vue3'
 import VerticalLayout from '@/layoutsparam/VerticalLayout.vue'
 
 // ── PROPS — exactement ce que le contrôleur envoie via Inertia::render() ─────
+// index() → actionPlans, allRisks, stats, entities, users,
+//            priorities, statuses, decisionStatuses, filters
 const props = defineProps({
   actionPlans:      { type: Array,  default: () => [] },
   allRisks:         { type: Array,  default: () => [] },
@@ -1059,8 +882,9 @@ const props = defineProps({
   users:            { type: Array,  default: () => [] },
   priorities:       { type: Array,  default: () => [] },
   statuses:         { type: Array,  default: () => [] },
+  // Depuis getDecisionStatuses() → risk_action_statuses :
+  // { id, code, label, color, icon, sort_order, auto_create_plan, default_priority }
   decisionStatuses: { type: Array,  default: () => [] },
-  recommendations:  { type: Array,  default: () => [] },
   filters:          { type: Object, default: () => ({}) },
 })
 
@@ -1070,7 +894,7 @@ const DECISION_LABELS = {
   REFUSE: 'Refuser',  MITIGE: 'Atténué', CONTROLE: 'Sous contrôle',
 }
 
-// ── STATE GÉNÉRAL ─────────────────────────────────────────────────────────────
+// ── STATE ────────────────────────────────────────────────────────────────────
 const saving      = ref(false)
 const taskSaving  = ref(false)
 const multiSaving = ref(false)
@@ -1080,30 +904,19 @@ const fPriority   = ref(props.filters.priority || '')
 const fRisk       = ref(props.filters.risk_id  ? parseInt(props.filters.risk_id) : '')
 const fEntity     = ref(props.filters.entity_id ? parseInt(props.filters.entity_id) : '')
 const expandedRisks   = ref(new Set())
-const expandedProcesses = ref(new Set())
 const expandedActions = ref(new Set())
 const showNoAction    = ref(false)
 const flashMsg = ref(''); const flashOk = ref(true); let flashTimer = null
 
-// ── PANNEAUX INLINE (remplacent les anciennes modales) ───────────────────────
-// Création / édition d'une action — un seul panneau actif à la fois,
-// positionné dans le template selon formPanel.risk_id / formPanel.id
-const formPanel = ref({ open: false, id: null, risk_id: null })
-
-// Édition inline de la recommandation d'un risque (1 par risque)
-const recoEdit = ref({ open: false, risk_id: null, content: '' })
-const recoSaving = ref(false)
-
-// Création multiple — idem
-const multiPanel = ref({ open: false, risk_id: null })
-
-// Tâche (création / édition) — idem, rattachée à une action précise
-const taskPanel = ref({ open: false, id: null, plan_id: null })
-
-// Cache du détail (tâches / commentaires / historique) par action, chargé à la demande
-// afin de pouvoir garder plusieurs actions ouvertes simultanément sans tout recharger.
-const detailCache = reactive({})
-const newComments = reactive({})
+// Modals
+const formModal   = ref({ open: false, id: null })
+const multiModal  = ref({ open: false, risk_id: null })
+const detailModal = ref({ open: false, plan: null })
+const taskModal   = ref({ open: false, id: null, plan_id: null })
+const detailTasks    = ref([])
+const detailComments = ref([])
+const detailHistory  = ref([])
+const newComment     = ref('')
 
 // Multi
 const multiItems      = ref([])
@@ -1115,6 +928,7 @@ const defaultForm = () => ({
   id: null, risk_id: '', entity_id: '', title: '', description: '', action_plan: '',
   priority: 'medium', status: 'pending', assigned_to: '', target_date: '',
   start_date: '', cost_estimate: null, actual_cost: null, notes: '',
+  // source_status → lié à decisionStatuses (getDecisionStatuses du contrôleur)
   source_status: '',
 })
 const form     = ref(defaultForm())
@@ -1213,6 +1027,7 @@ const filteredPlans = computed(() => {
 const groupedByRisk = computed(() => {
   const riskMap = {}
 
+  // Pré-remplir avec les risques qui ont des actions filtrées
   filteredPlans.value.forEach(p => {
     if (!riskMap[p.risk_id]) {
       riskMap[p.risk_id] = {
@@ -1231,9 +1046,6 @@ const groupedByRisk = computed(() => {
         nomenclature_label:      p.nomenclature_label,
         risk_owner:              p.risk_owner,
         decision:                p.decision,
-        // Recommandation (1 par risque, contient les plans d'action) / héritage plan_traitement
-        recommendation_content:  p.recommendation_content ?? p.plan_traitement ?? null,
-        controles_existants:     p.controles_existants,
         // Inhérent
         criticality_score:       p.criticality_score,
         zone_label:              p.zone_label,
@@ -1285,30 +1097,6 @@ const groupedByRisk = computed(() => {
     .sort((a, b) => (b.criticality_score || 0) - (a.criticality_score || 0))
 })
 
-// Recommandations indexées par risk_id (utile pour les risques sans plan d'action)
-const recommendationMap = computed(() => {
-  const map = {}
-  props.recommendations.forEach(r => { map[r.risk_id] = r })
-  return map
-})
-
-// Regroupés par processus (contient les groupes par risque)
-const groupedByProcess = computed(() => {
-  const map = {}
-  groupedByRisk.value.forEach(g => {
-    const key = g.process_code || g.process_name || 'sans-processus'
-    if (!map[key]) {
-      map[key] = {
-        key, process_code: g.process_code, process_name: g.process_name,
-        macro_code: g.macro_code, macro_name: g.macro_name,
-        risks: [],
-      }
-    }
-    map[key].risks.push(g)
-  })
-  return Object.values(map).sort((a, b) => (a.process_name || '').localeCompare(b.process_name || ''))
-})
-
 // Risques sans aucun plan d'action (sur l'ensemble, pas juste les filtrés)
 const risksWithoutActions = computed(() => {
   const withAP = new Set(props.actionPlans.map(p => p.risk_id))
@@ -1317,13 +1105,7 @@ const risksWithoutActions = computed(() => {
 
 const validMultiItems = computed(() => multiItems.value.filter(i => i.title?.trim()).length)
 
-const allExpanded = computed(() =>
-  groupedByRisk.value.length > 0
-  && groupedByRisk.value.every(g => expandedRisks.value.has(g.risk_id))
-  && groupedByProcess.value.every(p => expandedProcesses.value.has(p.key))
-)
-
-// ── INTERACTIONS GÉNÉRALES ────────────────────────────────────────────────────
+// ── INTERACTIONS ─────────────────────────────────────────────────────────────
 
 const toggleRisk = (id) => {
   const s = new Set(expandedRisks.value)
@@ -1331,30 +1113,9 @@ const toggleRisk = (id) => {
   expandedRisks.value = s
 }
 
-const toggleProcess = (key) => {
-  const s = new Set(expandedProcesses.value)
-  s.has(key) ? s.delete(key) : s.add(key)
-  expandedProcesses.value = s
-}
-
-const toggleAllRisks = () => {
-  if (allExpanded.value) {
-    expandedRisks.value = new Set()
-    expandedProcesses.value = new Set()
-  } else {
-    expandedRisks.value = new Set(groupedByRisk.value.map(g => g.risk_id))
-    expandedProcesses.value = new Set(groupedByProcess.value.map(p => p.key))
-  }
-}
-
 const toggleActionDetail = (id) => {
   const s = new Set(expandedActions.value)
-  if (s.has(id)) {
-    s.delete(id)
-  } else {
-    s.add(id)
-    loadDetail(id)
-  }
+  s.has(id) ? s.delete(id) : s.add(id)
   expandedActions.value = s
 }
 
@@ -1366,31 +1127,19 @@ const clearFilters = () => {
   searchQ.value = ''
 }
 
-// ── CRUD PLANS (inline, sans modale) ─────────────────────────────────────────
-
-const findProcessKeyForRisk = (riskId) => {
-  const g = groupedByRisk.value.find(g => g.risk_id === riskId)
-  if (!g) return null
-  return g.process_code || g.process_name || 'sans-processus'
-}
-
-const ensureRiskVisible = (riskId) => {
-  const pk = findProcessKeyForRisk(riskId)
-  if (pk && !expandedProcesses.value.has(pk)) toggleProcess(pk)
-  if (!expandedRisks.value.has(riskId)) toggleRisk(riskId)
-}
+// ── CRUD PLANS ───────────────────────────────────────────────────────────────
 
 const openCreate = (riskId = null) => {
-  form.value = defaultForm()
+  Object.assign(form.value, defaultForm())
   if (riskId) {
     form.value.risk_id = riskId
-    ensureRiskVisible(riskId)
+    if (!expandedRisks.value.has(riskId)) toggleRisk(riskId)
   }
-  formPanel.value = { open: true, id: null, risk_id: riskId || null }
+  formModal.value = { open: true, id: null }
 }
 
 const openEdit = (plan) => {
-  form.value = {
+  Object.assign(form.value, {
     id:             plan.id,
     risk_id:        plan.risk_id,
     entity_id:      plan.entity_id || '',
@@ -1406,12 +1155,9 @@ const openEdit = (plan) => {
     actual_cost:    plan.actual_cost,
     notes:          plan.notes || '',
     source_status:  plan.source_status || '',
-  }
-  ensureRiskVisible(plan.risk_id)
-  formPanel.value = { open: true, id: plan.id, risk_id: plan.risk_id }
+  })
+  formModal.value = { open: true, id: plan.id }
 }
-
-const closeForm = () => { formPanel.value.open = false }
 
 const saveForm = async () => {
   if (!form.value.title || !form.value.risk_id || !form.value.target_date) return
@@ -1422,7 +1168,7 @@ const saveForm = async () => {
     const [r, d] = await apiFetch(url, form.value, method)
     if (r.ok && d.success) {
       showFlash(d.message || 'Enregistré ✓')
-      formPanel.value.open = false
+      formModal.value.open = false
       reload()
     } else {
       showFlash(d.message || 'Erreur lors de l\'enregistrement', false)
@@ -1431,36 +1177,6 @@ const saveForm = async () => {
     showFlash('Erreur réseau', false)
   } finally {
     saving.value = false
-  }
-}
-
-// ── RECOMMANDATION (1 par risque, contient les plans d'action) ───────────────
-
-const openRecoEdit = (riskId, currentContent) => {
-  recoEdit.value = { open: true, risk_id: riskId, content: currentContent || '' }
-}
-
-const closeRecoEdit = () => { recoEdit.value.open = false }
-
-const saveReco = async () => {
-  if (!recoEdit.value.risk_id) return
-  recoSaving.value = true
-  try {
-    const [r, d] = await apiFetch('/m/risk.core/recommendation', {
-      risk_id: recoEdit.value.risk_id,
-      content: recoEdit.value.content,
-    })
-    if (r.ok && d.success) {
-      showFlash('Recommandation enregistrée ✓')
-      recoEdit.value.open = false
-      reload()
-    } else {
-      showFlash(d.message || "Erreur lors de l'enregistrement de la recommandation", false)
-    }
-  } catch {
-    showFlash('Erreur réseau', false)
-  } finally {
-    recoSaving.value = false
   }
 }
 
@@ -1479,17 +1195,15 @@ const deleteAction = async (plan) => {
   }
 }
 
-// ── CRUD MULTIPLES (inline) ───────────────────────────────────────────────────
+// ── CRUD MULTIPLES ────────────────────────────────────────────────────────────
 
 const openCreateMultiple = (riskId = null) => {
-  multiPanel.value  = { open: true, risk_id: riskId || null }
+  multiModal.value  = { open: true, risk_id: riskId || '' }
   multiItems.value  = [{ title: '', description: '', priority: 'medium', status: 'pending', assigned_to: '', target_date: '' }]
   multiSameDates.value  = false
   multiCommonDate.value = ''
-  if (riskId) ensureRiskVisible(riskId)
+  if (riskId && !expandedRisks.value.has(riskId)) toggleRisk(riskId)
 }
-
-const closeMulti = () => { multiPanel.value.open = false }
 
 const addMultiItem = () => {
   multiItems.value.push({ title: '', description: '', priority: 'medium', status: 'pending', assigned_to: '', target_date: '' })
@@ -1501,13 +1215,13 @@ const removeMultiItem = (i) => {
 
 const saveMultiple = async () => {
   const valid = multiItems.value.filter(i => i.title?.trim())
-  if (!valid.length || !multiPanel.value.risk_id) return
+  if (!valid.length || !multiModal.value.risk_id) return
   multiSaving.value = true
   let ok = 0, err = 0
 
   for (const item of valid) {
     const payload = {
-      risk_id:     multiPanel.value.risk_id,
+      risk_id:     multiModal.value.risk_id,
       title:       item.title.trim(),
       description: item.description || '',
       action_plan: '',
@@ -1528,75 +1242,65 @@ const saveMultiple = async () => {
   multiSaving.value = false
   if (ok > 0) {
     showFlash(`${ok} action(s) créée(s)${err ? ', ' + err + ' erreur(s)' : ''}`)
-    multiPanel.value.open = false
+    multiModal.value.open = false
     reload()
   } else {
     showFlash('Aucune action créée. Vérifiez les données.', false)
   }
 }
 
-// ── DÉTAIL (chargement à la demande, mise en cache par action) ───────────────
+// ── DÉTAIL ────────────────────────────────────────────────────────────────────
 
-const loadDetail = async (actionId) => {
-  if (detailCache[actionId]?.loaded || detailCache[actionId]?.loading) return
-  detailCache[actionId] = { tasks: [], comments: [], history: [], loaded: false, loading: true }
+const openDetail = async (plan) => {
+  detailModal.value = { open: true, plan }
+  detailTasks.value    = []
+  detailComments.value = []
+  detailHistory.value  = []
   try {
     const [tasks, comments, history] = await Promise.all([
-      fetch(`/m/risk.core/action-plan/${actionId}/tasks`).then(r => r.json()),
-      fetch(`/m/risk.core/action-plan/${actionId}/comments`).then(r => r.json()),
-      fetch(`/m/risk.core/action-plan/${actionId}/history`).then(r => r.json()),
+      fetch(`/m/risk.core/action-plan/${plan.id}/tasks`).then(r => r.json()),
+      fetch(`/m/risk.core/action-plan/${plan.id}/comments`).then(r => r.json()),
+      fetch(`/m/risk.core/action-plan/${plan.id}/history`).then(r => r.json()),
     ])
-    detailCache[actionId] = {
-      tasks: tasks.tasks || [], comments: comments.comments || [], history: history.history || [],
-      loaded: true, loading: false,
-    }
-  } catch {
-    detailCache[actionId] = { tasks: [], comments: [], history: [], loaded: false, loading: false }
-  }
-}
-
-const refreshTasks = async (actionId) => {
-  const t = await fetch(`/m/risk.core/action-plan/${actionId}/tasks`).then(r => r.json())
-  if (!detailCache[actionId]) detailCache[actionId] = { tasks: [], comments: [], history: [], loaded: true, loading: false }
-  detailCache[actionId].tasks = t.tasks || []
-}
-
-const refreshComments = async (actionId) => {
-  const c = await fetch(`/m/risk.core/action-plan/${actionId}/comments`).then(r => r.json())
-  if (!detailCache[actionId]) detailCache[actionId] = { tasks: [], comments: [], history: [], loaded: true, loading: false }
-  detailCache[actionId].comments = c.comments || []
+    detailTasks.value    = tasks.tasks      || []
+    detailComments.value = comments.comments || []
+    detailHistory.value  = history.history   || []
+  } catch { /* silencieux */ }
 }
 
 // ── COMMENTAIRES ──────────────────────────────────────────────────────────────
 
-const addComment = async (actionId) => {
-  const text = (newComments[actionId] || '').trim()
-  if (!text) return
+const addComment = async () => {
+  if (!newComment.value.trim() || !detailModal.value.plan) return
   try {
     const [r, d] = await apiFetch('/m/risk.core/action-plan/comment', {
-      plan_id: actionId, comment: text, is_internal: false,
+      plan_id: detailModal.value.plan.id,
+      comment: newComment.value.trim(),
+      is_internal: false,
     })
     if (r.ok && d.success) {
-      newComments[actionId] = ''
+      newComment.value = ''
       showFlash('Commentaire ajouté')
-      await refreshComments(actionId)
+      const c = await fetch(`/m/risk.core/action-plan/${detailModal.value.plan.id}/comments`).then(r => r.json())
+      detailComments.value = c.comments || []
     }
   } catch { showFlash('Erreur', false) }
 }
 
-// ── TÂCHES (inline) ───────────────────────────────────────────────────────────
+// ── TÂCHES ────────────────────────────────────────────────────────────────────
 
-const openTaskCreate = (actionId) => {
-  taskForm.value = { id: null, plan_id: actionId, title: '', description: '', assigned_to: '', target_date: '', status: 'pending' }
-  taskPanel.value = { open: true, id: null, plan_id: actionId }
+const openTaskCreate = () => {
+  Object.assign(taskForm.value, {
+    id: null, plan_id: detailModal.value.plan?.id,
+    title: '', description: '', assigned_to: '', target_date: '', status: 'pending',
+  })
+  taskModal.value = { open: true, id: null }
 }
 
 const editTask = (t) => {
-  taskForm.value = { ...t }
-  taskPanel.value = { open: true, id: t.id, plan_id: t.plan_id }
+  Object.assign(taskForm.value, { ...t, plan_id: detailModal.value.plan?.id })
+  taskModal.value = { open: true, id: t.id }
 }
-
-const closeTaskPanel = () => { taskPanel.value.open = false }
 
 const saveTask = async () => {
   if (!taskForm.value.title) return
@@ -1607,9 +1311,9 @@ const saveTask = async () => {
     const [r, d] = await apiFetch(url, taskForm.value, method)
     if (r.ok && d.success) {
       showFlash('Tâche enregistrée')
-      const planId = taskPanel.value.plan_id
-      taskPanel.value.open = false
-      await refreshTasks(planId)
+      taskModal.value.open = false
+      const t = await fetch(`/m/risk.core/action-plan/${detailModal.value.plan.id}/tasks`).then(r => r.json())
+      detailTasks.value = t.tasks || []
     } else { showFlash(d.message || 'Erreur', false) }
   } catch { showFlash('Erreur réseau', false) }
   finally { taskSaving.value = false }
@@ -1621,7 +1325,8 @@ const deleteTask = async (t) => {
     const [r, d] = await apiFetch(`/m/risk.core/action-plan/task/${t.id}`, {}, 'DELETE')
     if (r.ok && d.success) {
       showFlash('Tâche supprimée')
-      await refreshTasks(t.plan_id)
+      const ts = await fetch(`/m/risk.core/action-plan/${detailModal.value.plan.id}/tasks`).then(r => r.json())
+      detailTasks.value = ts.tasks || []
     }
   } catch { showFlash('Erreur', false) }
 }
@@ -1678,8 +1383,6 @@ const reload = () => router.reload({ preserveState: true })
 .search-box i { position:absolute; left:8px; top:50%; transform:translateY(-50%); color:#94a3b8; font-size:13px; }
 .fsearch { padding:5px 8px 5px 26px; border:1px solid #e2e8f0; border-radius:6px; font-size:11px; background:#f8fafc; width:170px; }
 .btn-clear { display:flex; align-items:center; gap:4px; padding:4px 9px; border:1px solid #e2e8f0; border-radius:6px; background:#fff; color:#64748b; font-size:10px; cursor:pointer; }
-.btn-toggle-all { display:flex; align-items:center; gap:4px; padding:4px 9px; border:1px solid #dbeafe; border-radius:6px; background:#eff6ff; color:#2563eb; font-size:10px; font-weight:700; cursor:pointer; }
-.btn-toggle-all:hover { background:#dbeafe; }
 
 /* ═══ BODY ═══ */
 .ap-body { flex:1; overflow-y:auto; padding:12px 18px; display:flex; flex-direction:column; gap:10px; }
@@ -1742,45 +1445,6 @@ const reload = () => router.reload({ preserveState: true })
 .rmeta-detail summary { cursor:pointer; list-style:none; display:flex; align-items:center; gap:4px; }
 .rmeta-detail p { margin:4px 0 0 16px; line-height:1.6; white-space:pre-line; background:#f8fafc; padding:6px 8px; border-radius:5px; border:1px solid #e2e8f0; }
 
-/* ═══ RECOMMANDATION ═══ */
-.reco-block { margin:0 18px 12px; background:#fffbea; border:1px solid #fde68a; border-radius:10px; overflow:hidden; }
-.reco-hdr { display:flex; align-items:center; gap:6px; padding:8px 14px; background:#fef3c7; font-size:11px; font-weight:800; color:#92400e; text-transform:uppercase; letter-spacing:.03em; }
-.reco-hdr i { font-size:14px; }
-.reco-edit-btn { margin-left:auto; width:22px; height:22px; border:1px solid #fbbf24; background:#fff; color:#92400e; border-radius:6px; cursor:pointer; display:flex; align-items:center; justify-content:center; font-size:12px; }
-.reco-edit-btn:hover { background:#fde68a; }
-.reco-edit { padding:12px 14px; }
-.reco-edit .finp { margin-bottom:8px; }
-.reco-body { padding:10px 14px 12px; }
-.reco-text { font-size:12px; color:#1e293b; line-height:1.7; margin:0; white-space:pre-line; }
-.reco-empty { font-size:11px; color:#a16207; font-style:italic; margin:0; }
-.reco-sub { margin-top:9px; padding-top:8px; border-top:1px dashed #fde68a; }
-.reco-sub-lbl { display:flex; align-items:center; gap:4px; font-size:9px; font-weight:700; color:#166534; text-transform:uppercase; letter-spacing:.03em; margin-bottom:3px; }
-.reco-sub p { font-size:11px; color:#334155; line-height:1.6; margin:0; white-space:pre-line; }
-.reco-body .actions-section { margin-top:12px; padding-top:12px; border-top:1px dashed #fde68a; }
-
-/* ═══ LIGNE DE CRÉATION DANS LE TABLEAU (remplace la carte séparée) ═══ */
-.arow-form td { background:#eff6ff; padding:6px 9px; border-bottom:1px solid #bfdbfe; vertical-align:top; }
-.arow-form:first-of-type td { border-top:2px solid #93c5fd; }
-.finp-cell { padding:5px 7px; font-size:10.5px; }
-.rf-td-title { min-width:200px; }
-.finp-cell-sub { margin-top:4px; font-size:9.5px; color:#64748b; }
-.rf-td-muted { color:#94a3b8; font-size:10px; text-align:center; white-space:nowrap; }
-.rf-hint { font-size:8px; font-style:italic; }
-.a-code--new { background:#dbeafe; color:#1d4ed8; }
-.aib-save { background:#dcfce7; border-color:#86efac; color:#16a34a; }
-.aib-save:hover:not(:disabled) { background:#bbf7d0; }
-.aib-save:disabled { opacity:.4; cursor:not-allowed; }
-.arow-form-extra td { background:#f5f8ff; padding:8px 14px 10px; border-bottom:2px solid #93c5fd; }
-.rf-extra-row { display:flex; gap:12px; flex-wrap:wrap; align-items:flex-end; }
-.rf-extra-fld { display:flex; flex-direction:column; gap:3px; min-width:160px; flex:1; }
-.rf-extra-fld--wide { flex:2; min-width:220px; }
-.rf-extra-fld .finp { font-size:10.5px; padding:5px 8px; }
-
-/* Indice sur l'origine de la progression (suivi, pas le plan d'action) */
-.d-sec-hint { font-style:italic; font-weight:500; color:#94a3b8; text-transform:none; letter-spacing:0; font-size:9px; margin-left:4px; }
-
-
-
 /* ═══ SECTION ACTIONS ═══ */
 .actions-section { padding:10px 14px; }
 .as-hdr { display:flex; align-items:center; justify-content:space-between; margin-bottom:7px; }
@@ -1789,18 +1453,6 @@ const reload = () => router.reload({ preserveState: true })
 .as-empty { text-align:center; padding:18px; color:#94a3b8; }
 .as-empty i { font-size:26px; display:block; margin-bottom:5px; opacity:.3; }
 .as-empty p { margin-bottom:7px; font-size:11px; }
-
-/* ═══ PANNEAUX INLINE (remplacent les modales) ═══ */
-.inline-panel { background:#f8fafc; border:1.5px solid #bfdbfe; border-radius:10px; margin-bottom:12px; box-shadow:0 1px 4px rgba(37,99,235,.08); animation:panelIn .15s ease; }
-.inline-panel--floating { margin:0 0 12px 0; }
-.inline-panel--nar { margin:6px 0 0; }
-@keyframes panelIn { from{ opacity:0; transform:translateY(-4px);} to{ opacity:1; transform:translateY(0);} }
-.ipf-hdr { display:flex; align-items:center; gap:8px; padding:9px 14px; background:#0f172a; color:#e2e8f0; font-size:11px; font-weight:700; border-radius:9px 9px 0 0; }
-.ipf-hdr--edit { background:#312e81; }
-.ip-close { width:24px; height:24px; border:1px solid rgba(255,255,255,.15); background:rgba(255,255,255,.08); color:#94a3b8; border-radius:6px; cursor:pointer; display:flex; align-items:center; justify-content:center; font-size:13px; margin-left:auto; }
-.ip-close:hover { background:rgba(255,0,0,.2); color:#f87171; }
-.ip-footer { display:flex; justify-content:flex-end; gap:8px; padding:10px 14px; border-top:1px solid #e2e8f0; background:#fff; border-radius:0 0 9px 9px; }
-.m-risk-code { font-family:monospace; font-size:10px; font-weight:700; background:#7c3aed; color:#fff; padding:2px 7px; border-radius:4px; }
 
 /* ═══ TABLE ACTIONS ═══ */
 .actions-table { width:100%; border-collapse:collapse; font-size:11px; }
@@ -1811,8 +1463,6 @@ const reload = () => router.reload({ preserveState: true })
 .arow--late { background:#fef2f2 !important; }
 .arow--done { opacity:.7; }
 .arow--done .a-title { text-decoration:line-through; color:#94a3b8; }
-.arow--open { background:#eff6ff !important; }
-.a-toggle { font-size:11px; color:#94a3b8; margin-right:4px; }
 .a-code { font-family:monospace; font-size:9px; font-weight:700; color:#4338ca; background:#ede9fe; padding:1px 5px; border-radius:3px; }
 .a-auto { margin-left:4px; font-size:10px; color:#8b5cf6; }
 .a-title { font-weight:600; color:#0f172a; }
@@ -1846,7 +1496,7 @@ const reload = () => router.reload({ preserveState: true })
 /* Détail inline */
 .arow-detail td { background:#fafbff; padding:0; }
 .action-detail-inline { padding:12px 14px; border-bottom:1px solid #e2e8f0; }
-.adi-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(180px,1fr)); gap:10px; margin-bottom:12px; }
+.adi-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(180px,1fr)); gap:10px; }
 .adi-block--full { grid-column:1/-1; }
 .adi-label { font-size:9px; font-weight:700; color:#64748b; text-transform:uppercase; letter-spacing:.04em; margin-bottom:5px; }
 .adi-text { font-size:10px; color:#1e293b; line-height:1.6; margin:0; white-space:pre-line; background:#fff; padding:7px 9px; border-radius:5px; border:1px solid #e2e8f0; }
@@ -1875,32 +1525,66 @@ const reload = () => router.reload({ preserveState: true })
 .btn-add-sm:hover { background:#1d4ed8; }
 .btn-multi-sm2 { display:flex; align-items:center; gap:3px; padding:4px 9px; background:#ede9fe; color:#7c3aed; border:1.5px solid #c4b5fd; border-radius:6px; font-size:10px; cursor:pointer; }
 
+/* ═══ MODALS ═══ */
+.modal-overlay { position:fixed; inset:0; background:rgba(15,23,42,.7); backdrop-filter:blur(4px); display:flex; align-items:center; justify-content:center; z-index:2000; padding:20px; }
+.modal-box { background:#fff; border-radius:16px; max-width:820px; width:100%; max-height:90vh; display:flex; flex-direction:column; overflow:hidden; box-shadow:0 24px 64px rgba(0,0,0,.3); }
+.modal-xl { max-width:1020px; }
+.modal-sm { max-width:520px; }
+.modal-hdr { display:flex; align-items:center; gap:8px; padding:11px 16px; background:#0f172a; color:#e2e8f0; font-size:12px; font-weight:700; flex-shrink:0; flex-wrap:wrap; }
+.modal-x { width:28px; height:28px; border:1px solid rgba(255,255,255,.1); background:rgba(255,255,255,.07); color:#94a3b8; border-radius:6px; cursor:pointer; display:flex; align-items:center; justify-content:center; font-size:15px; margin-left:auto; }
+.modal-x:hover { background:rgba(255,0,0,.2); color:#f87171; }
+.modal-body { flex:1; overflow-y:auto; padding:16px 18px; }
+.modal-footer { display:flex; justify-content:flex-end; gap:8px; padding:10px 16px; border-top:1px solid #e2e8f0; background:#f8fafc; flex-shrink:0; }
+.btn-cancel { display:flex; align-items:center; gap:4px; padding:7px 14px; border:1.5px solid #e2e8f0; border-radius:7px; background:#fff; color:#475569; font-size:11px; font-weight:600; cursor:pointer; }
+.btn-save { display:flex; align-items:center; gap:5px; padding:7px 16px; background:#2563eb; color:#fff; border:none; border-radius:7px; font-size:11px; font-weight:700; cursor:pointer; }
+.btn-save:hover:not(:disabled) { background:#1d4ed8; }
+.btn-save:disabled { opacity:.45; cursor:not-allowed; }
+.btn-edit-sm { display:flex; align-items:center; gap:4px; padding:4px 11px; background:rgba(255,255,255,.1); color:#e2e8f0; border:1px solid rgba(255,255,255,.15); border-radius:6px; font-size:10px; cursor:pointer; }
+.d-hdr-actions { display:flex; gap:6px; margin-left:auto; }
 /* Formulaire */
-.fgrid { display:grid; grid-template-columns:1fr 1fr; gap:10px; padding:14px; }
+.fgrid { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
 .fg { display:flex; flex-direction:column; gap:3px; }
 .fg-full { grid-column:1/-1; }
 .flbl { font-size:10px; font-weight:700; color:#475569; }
 .finp { padding:6px 9px; border:1px solid #e2e8f0; border-radius:6px; font-size:11px; color:#0f172a; background:#fff; font-family:inherit; width:100%; box-sizing:border-box; }
 .finp:focus { outline:none; border-color:#93c5fd; box-shadow:0 0 0 2px rgba(147,197,253,.25); }
 textarea.finp { resize:vertical; min-height:48px; }
-.finp-readonly { display:flex; align-items:center; background:#f1f5f9; color:#475569; font-weight:600; }
 /* Multi */
-.multi-hint { display:flex; align-items:center; gap:7px; padding:9px 14px; margin:0 14px 12px; background:#fffbeb; border:1px solid #fde68a; border-radius:7px; font-size:10px; color:#92400e; }
-.multi-opts { display:flex; align-items:center; gap:10px; margin:0 14px 10px; font-size:11px; color:#475569; }
+.multi-hint { display:flex; align-items:center; gap:7px; padding:9px 12px; background:#fffbeb; border:1px solid #fde68a; border-radius:7px; font-size:10px; color:#92400e; margin-bottom:12px; }
+.m-risk-code { font-family:monospace; font-size:10px; font-weight:700; background:#8b5cf6; color:#fff; padding:2px 7px; border-radius:4px; }
+.multi-opts { display:flex; align-items:center; gap:10px; margin-bottom:10px; font-size:11px; color:#475569; }
 .finp-inline { width:auto !important; display:inline-block; }
-.multi-list { display:flex; flex-direction:column; gap:6px; max-height:380px; overflow-y:auto; margin:0 14px 10px; }
-.multi-item { display:flex; gap:7px; align-items:flex-start; padding:7px; background:#fff; border-radius:7px; border:1px solid #e2e8f0; }
+.multi-list { display:flex; flex-direction:column; gap:6px; max-height:380px; overflow-y:auto; margin-bottom:10px; }
+.multi-item { display:flex; gap:7px; align-items:flex-start; padding:7px; background:#f8fafc; border-radius:7px; border:1px solid #e2e8f0; }
 .multi-idx { min-width:24px; height:24px; background:#e2e8f0; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:10px; font-weight:700; color:#475569; flex-shrink:0; margin-top:3px; }
 .multi-fields { flex:1; display:grid; grid-template-columns:1.2fr 1fr .6fr .6fr .7fr .6fr; gap:5px; }
 .multi-del { width:24px; height:24px; border:1px solid #e2e8f0; border-radius:4px; background:#fff; cursor:pointer; display:flex; align-items:center; justify-content:center; color:#94a3b8; flex-shrink:0; margin-top:3px; }
 .multi-del:hover { background:#fee2e2; border-color:#fca5a5; color:#dc2626; }
-.multi-footer-actions { display:flex; align-items:center; gap:10px; margin:0 14px 12px; }
+.multi-footer-actions { display:flex; align-items:center; gap:10px; }
 .multi-count { font-size:10px; color:#64748b; font-weight:600; }
-
-/* Détail : tâches / commentaires / historique inline */
-.d-section { border:1px solid #e2e8f0; border-radius:9px; overflow:hidden; margin-top:10px; background:#fff; }
+/* Détail */
+.d-code { font-family:monospace; font-size:10px; font-weight:800; background:#2563eb; color:#fff; padding:2px 8px; border-radius:4px; flex-shrink:0; }
+.d-title { font-size:13px; font-weight:700; color:#f1f5f9; }
+.d-body { display:flex; flex-direction:column; gap:14px; }
+.d-risk-banner { display:flex; align-items:center; gap:10px; padding:9px 12px; background:#fffbeb; border:1px solid #fde68a; border-radius:9px; }
+.d-risk-icon { font-size:18px; color:#d97706; }
+.d-risk-code { font-family:monospace; font-size:10px; font-weight:800; color:#4338ca; background:#ede9fe; padding:1px 5px; border-radius:3px; }
+.d-risk-lib { font-size:12px; font-weight:700; color:#0f172a; }
+.d-risk-ctx { font-size:9px; color:#64748b; margin-top:2px; }
+.d-eval-scores { display:flex; gap:4px; margin-left:auto; }
+.d-info-grid { display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px; }
+.d-sec { background:#f8fafc; border-radius:7px; padding:9px 11px; }
+.d-sec-title { font-size:9px; font-weight:700; color:#64748b; text-transform:uppercase; letter-spacing:.04em; margin-bottom:6px; border-bottom:1px solid #e2e8f0; padding-bottom:4px; }
+.d-row { display:flex; justify-content:space-between; padding:3px 0; font-size:10px; }
+.d-row span:first-child { color:#64748b; }
+.d-row span:last-child { font-weight:500; color:#0f172a; text-align:right; }
+.d-text-block { background:#f8fafc; border-radius:7px; padding:9px 12px; }
+.d-text-block p { font-size:11px; color:#1e293b; line-height:1.7; margin:5px 0 0; }
+.prewrap { white-space:pre-wrap; }
+.d-section { border:1px solid #e2e8f0; border-radius:9px; overflow:hidden; }
 .d-sec-hdr { display:flex; align-items:center; justify-content:space-between; padding:7px 12px; background:#f8fafc; border-bottom:1px solid #e2e8f0; font-size:10px; font-weight:700; color:#334155; }
 .d-empty { padding:10px 12px; font-size:10px; color:#94a3b8; text-align:center; }
+/* Tâches */
 .tasks-list { display:flex; flex-direction:column; }
 .task-item { display:flex; align-items:center; gap:8px; padding:7px 12px; border-bottom:1px solid #f1f5f9; }
 .task-item:hover { background:#fafbff; }
@@ -1911,9 +1595,6 @@ textarea.finp { resize:vertical; min-height:48px; }
 .task-title { font-size:11px; font-weight:600; color:#0f172a; }
 .task-meta { font-size:9px; color:#94a3b8; display:block; margin-top:1px; }
 .task-btns { display:flex; gap:3px; }
-.task-inline-form { background:#f8fafc; border-bottom:1px solid #e2e8f0; }
-.task-inline-form .fgrid { padding:10px 12px; grid-template-columns:1fr 1fr; }
-.task-inline-footer { display:flex; justify-content:flex-end; gap:8px; padding:8px 12px; border-top:1px solid #e2e8f0; }
 /* Commentaires */
 .cmt-input-row { display:flex; gap:7px; padding:9px 12px; border-bottom:1px solid #f1f5f9; }
 .cmt-input-row .finp { flex:1; }
@@ -1932,73 +1613,38 @@ textarea.finp { resize:vertical; min-height:48px; }
 .hist-user { font-weight:600; color:#0f172a; flex-shrink:0; }
 .hist-date { color:#94a3b8; flex-shrink:0; font-size:9px; }
 
-/* ═══ BOUTONS COMMUNS ═══ */
-.btn-cancel { display:flex; align-items:center; gap:4px; padding:7px 14px; border:1.5px solid #e2e8f0; border-radius:7px; background:#fff; color:#475569; font-size:11px; font-weight:600; cursor:pointer; }
-.btn-save { display:flex; align-items:center; gap:5px; padding:7px 16px; background:#2563eb; color:#fff; border:none; border-radius:7px; font-size:11px; font-weight:700; cursor:pointer; }
-.btn-save:hover:not(:disabled) { background:#1d4ed8; }
-.btn-save:disabled { opacity:.45; cursor:not-allowed; }
-.dec-hint { display:block; font-size:9px; margin-top:3px; }
-.dec-hint i { font-size:10px; margin-right:3px; }
-
 /* ═══ FLASH ═══ */
 .flash { position:fixed; bottom:18px; right:18px; z-index:9999; display:flex; align-items:center; gap:7px; padding:10px 16px; border-radius:10px; font-size:11px; font-weight:700; box-shadow:0 4px 16px rgba(0,0,0,.12); }
 .flash-ok  { background:#f0fdf4; border:1px solid #86efac; color:#15803d; }
 .flash-err { background:#fef2f2; border:1px solid #fca5a5; color:#dc2626; }
 .fl-enter-active,.fl-leave-active { transition:opacity .2s,transform .2s; }
 .fl-enter-from,.fl-leave-to { opacity:0; transform:translateX(20px); }
+.mf-enter-active { transition:opacity .18s,transform .18s; }
+.mf-leave-active { transition:opacity .14s,transform .14s; }
+.mf-enter-from,.mf-leave-to { opacity:0; transform:scale(.97); }
 /* Spin */
 @keyframes spin { to { transform:rotate(360deg); } }
 .spin { animation:spin .7s linear infinite; display:inline-block; }
 /* Scrollbars */
 ::-webkit-scrollbar { width:4px; height:4px; }
 ::-webkit-scrollbar-thumb { background:#cbd5e1; border-radius:2px; }
+.dec-hint { display:block; font-size:9px; margin-top:3px; }
+.dec-hint i { font-size:10px; margin-right:3px; }
 
 /* Responsive */
 @media(max-width:1024px) {
   .multi-fields { grid-template-columns:1fr 1fr; }
+  .d-info-grid { grid-template-columns:1fr 1fr; }
 }
 @media(max-width:768px) {
   .rg-hdr { flex-direction:column; align-items:flex-start; }
   .rg-hdr-right { margin-left:0; }
+  .d-info-grid { grid-template-columns:1fr; }
   .et-row { flex-direction:column; gap:10px; }
   .ets-line { display:none; }
-  .rf-extra-row { flex-direction:column; }
-  .rf-extra-fld, .rf-extra-fld--wide { min-width:0; width:100%; }
 }
 @media(max-width:640px) {
   .multi-fields { grid-template-columns:1fr; }
   .fgrid { grid-template-columns:1fr; }
 }
-/* ═══ BOUTONS ICÔNE SEULE (remplacent les anciens boutons texte "Ajouter"/"Multiples") ═══ */
-.btn-icon-only { padding:6px 9px !important; gap:0 !important; }
-.btn-add-action.btn-icon-only,
-.btn-add-sm.btn-icon-only { width:26px; height:26px; padding:0 !important; justify-content:center; }
-.btn-primary.btn-icon-only,
-.btn-secondary.btn-icon-only { width:32px; height:32px; padding:0 !important; justify-content:center; }
-
-/* ═══ GROUPES PAR PROCESSUS ═══ */
-.proc-group { display:flex; flex-direction:column; gap:10px; margin-bottom:4px; }
-.proc-hdr {
-  display:flex; align-items:center; gap:8px; padding:9px 16px; cursor:pointer;
-  background:linear-gradient(90deg,#eef2ff,#f8fafc); border:1px solid #c7d2fe; border-radius:10px;
-  position:relative; z-index:1;
-}
-.proc-hdr:hover { background:linear-gradient(90deg,#e0e7ff,#eef2ff); }
-.proc-toggle { font-size:13px; color:#6366f1; flex-shrink:0; }
-.proc-macro { font-size:10px; color:#818cf8; font-weight:600; white-space:nowrap; }
-.proc-name { font-size:12px; font-weight:800; color:#312e81; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-.proc-code { font-family:monospace; font-size:9px; font-weight:700; color:#4338ca; background:#e0e7ff; padding:1px 6px; border-radius:4px; flex-shrink:0; }
-.proc-count { margin-left:auto; font-size:9px; font-weight:700; color:#6366f1; background:#eef2ff; border:1px solid #c7d2fe; padding:2px 9px; border-radius:8px; flex-shrink:0; }
-.proc-body { display:flex; flex-direction:column; gap:10px; padding-left:14px; border-left:2px solid #e0e7ff; margin-left:8px; }
-
-/* ═══ CORRECTIFS ANTI-CHEVAUCHEMENT ═══ */
-/* Le tableau défile horizontalement plutôt que de faire chevaucher les colonnes */
-.actions-table-wrap { width:100%; overflow-x:auto; }
-.actions-table { min-width:920px; }
-/* Les panneaux inline et les cartes ne se superposent jamais : flux normal, jamais d'absolute/fixed sauf le flash */
-.risk-group, .reco-block, .inline-panel, .actions-section, .eval-timeline { position:relative; z-index:0; }
-.rg-hdr, .as-hdr { flex-wrap:wrap; row-gap:6px; }
-.rg-hdr-right { row-gap:6px; }
-.multi-fields { min-width:0; }
-.multi-item { flex-wrap:wrap; }
 </style>

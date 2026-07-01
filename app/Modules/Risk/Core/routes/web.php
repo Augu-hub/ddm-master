@@ -123,6 +123,14 @@ Route::prefix('evaluation')->name('evaluation.')->group(function () {
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
+// RECOMMANDATIONS (1 par risque, contient les plans d'action)
+// ═══════════════════════════════════════════════════════════════════════════
+// NOUVEAU — route top-level (comme /risks, /incidents…) pour matcher l'appel
+// fetch du front : POST /m/risk.core/recommendation
+Route::post('/recommendation', [RiskActionPlanController::class, 'saveRecommendation'])
+    ->name('recommendation.store');
+
+// ═══════════════════════════════════════════════════════════════════════════
 // PLAN D'ACTION ET SUIVI
 // ═══════════════════════════════════════════════════════════════════════════
 Route::prefix('action-plan')->name('action-plan.')->group(function () {
@@ -137,7 +145,7 @@ Route::prefix('action-plan')->name('action-plan.')->group(function () {
     Route::put('/{id}', [RiskActionPlanController::class, 'update'])->name('update')->whereNumber('id');
     Route::delete('/{id}', [RiskActionPlanController::class, 'destroy'])->name('destroy')->whereNumber('id');
 
-    // Tâches d'un plan
+    // Tâches / suivi d'un plan (c'est ce niveau qui porte la progression)
     Route::get('/{planId}/tasks', [RiskActionPlanController::class, 'getTasks'])->name('tasks')->whereNumber('planId');
     Route::post('/task', [RiskActionPlanController::class, 'storeTask'])->name('task.store');
     Route::put('/task/{id}', [RiskActionPlanController::class, 'updateTask'])->name('task.update')->whereNumber('id');

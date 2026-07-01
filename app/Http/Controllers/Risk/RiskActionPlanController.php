@@ -13,8 +13,19 @@ use Inertia\Response;
 /**
  * RiskActionPlanController — corrigé sur base du schéma SQL fructivia1 réel.
  *
- * Tables confirmées en base :
- *  - risk_action_plans       (id, tenant_id, code, risk_id, entity_id, title,
+ * Modèle de données (mis à jour) :
+ *  - risk_register           1 risque
+ *  - risk_recommendations    1 recommandation PAR risque (contrainte unique risk_id+tenant_id)
+ *  - risk_action_plans       N plans d'action PAR recommandation (recommendation_id)
+ *                            risk_id est conservé en dénormalisé pour compat des requêtes existantes
+ *  - risk_action_tasks       N tâches de suivi PAR plan d'action — c'est CE niveau qui porte
+ *                            la notion de progression : risk_action_plans.progress est
+ *                            recalculé automatiquement depuis ces tâches (jamais saisi à la main).
+ *
+ * Tables confirmées en base (voir fructivia.sql + migration_recommendations.sql) :
+ *  - risk_recommendations    (id, tenant_id, risk_id, content, created_by, updated_by,
+ *                             created_at, updated_at, deleted_at)
+ *  - risk_action_plans       (id, tenant_id, code, risk_id, recommendation_id, entity_id, title,
  *                             description, action_plan, priority, status,
  *                             assigned_to, target_date, start_date, completion_date,
  *                             progress, cost_estimate, actual_cost, notes,
@@ -42,43 +53,25 @@ use Inertia\Response;
  *                             mastery_level_id, periodicite, efficacite,
  *                             next_review_date, status, validated_at,
  *                             created_at, updated_at, deleted_at)
- *  - risk_impact_levels      (id, tenant_id, matrix_config_id, label, score,
- *                             description, criteria, color_code, sort_order, ...)
- *  - risk_frequency_levels   (id, tenant_id, matrix_config_id, label, score,
- *                             description, criteria, recurrence, color_code, ...)
- *  - risk_criticality_zones  (id, tenant_id, matrix_config_id, label,
- *                             min_score, max_score, color_code, sort_order, ...)
- *  - risk_matrix_configs     (id, tenant_id, name, matrix_size, is_active, ...)
- *  - risk_nomenclatures      (id, tenant_id, parent_id, appetite_id, code,
- *                             label, description, level, type_code, ...)
- *  - risk_appetite_levels    (id, tenant_id, code, label, score_min, score_max,
- *                             color, sort_order, is_active, ...)
- *  - risk_mastery_levels     (id, tenant_id, matrix_config_id, label,
- *                             min_score, max_score, color_code, sort_order, ...)
- *  - risk_decision_history   (id, tenant_id, risk_id, decision,
- *                             previous_decision, justification, decided_by, decided_at, ...)
- *  - entities                (id, name, description, level, parent_id, code_base, ...)
- *                            ATTENTION : pas de deleted_at sur cette table !
- *  - activities              (id, process_id, code, name, description, ...)
- *  - processes               (id, macro_process_id, code, name, ...)
- *  - macro_processes         (id, code, name, character, designation, kind, ...)
- *  - functions               (id, name, character, user_id, parent_id, ...)
- *  - function_assignments    (id, entity_id, function_id, user_id, is_risk_admin, ...)
- *  - users                   (id, name, email, phone, status, job_title, ...)
+ *  - risk_impact_levels, risk_frequency_levels, risk_criticality_zones,
+ *    risk_matrix_configs, risk_nomenclatures, risk_appetite_levels,
+ *    risk_mastery_levels, risk_decision_history, entities, activities,
+ *    processes, macro_processes, functions, function_assignments, users
  *
  * Routes attendues (routes/web.php) :
- *   GET    /m/risk.core/action-plan              → index
- *   GET    /m/risk.core/action-plan/dashboard    → dashboard
- *   POST   /m/risk.core/action-plan              → store
- *   PUT    /m/risk.core/action-plan/{id}         → update
- *   DELETE /m/risk.core/action-plan/{id}         → destroy
- *   GET    /m/risk.core/action-plan/{id}/tasks   → getTasks
- *   POST   /m/risk.core/action-plan/task         → storeTask
- *   PUT    /m/risk.core/action-plan/task/{id}    → updateTask
- *   DELETE /m/risk.core/action-plan/task/{id}    → deleteTask
+ *   GET    /m/risk.core/action-plan               → index
+ *   GET    /m/risk.core/action-plan/dashboard     → dashboard
+ *   POST   /m/risk.core/action-plan               → store
+ *   PUT    /m/risk.core/action-plan/{id}          → update
+ *   DELETE /m/risk.core/action-plan/{id}          → destroy
+ *   GET    /m/risk.core/action-plan/{id}/tasks    → getTasks
+ *   POST   /m/risk.core/action-plan/task          → storeTask
+ *   PUT    /m/risk.core/action-plan/task/{id}     → updateTask
+ *   DELETE /m/risk.core/action-plan/task/{id}     → deleteTask
  *   GET    /m/risk.core/action-plan/{id}/comments → getComments
- *   POST   /m/risk.core/action-plan/comment      → addComment
- *   GET    /m/risk.core/action-plan/{id}/history → getHistory
+ *   POST   /m/risk.core/action-plan/comment       → addComment
+ *   GET    /m/risk.core/action-plan/{id}/history  → getHistory
+ *   POST   /m/risk.core/recommendation            → saveRecommendation   (NOUVEAU)
  */
 class RiskActionPlanController extends Controller
 {
@@ -164,6 +157,30 @@ class RiskActionPlanController extends Controller
             ->first();
     }
 
+    /**
+     * Retourne l'id de la recommandation d'un risque, en la créant (vide) si elle
+     * n'existe pas encore. Garantit "1 risque = 1 recommandation, N plans d'action dedans".
+     */
+    private function getOrCreateRecommendation(int $riskId): int
+    {
+        $tid = $this->tid();
+
+        $existing = DB::table('risk_recommendations')
+            ->where('risk_id', $riskId)->where('tenant_id', $tid)->whereNull('deleted_at')
+            ->first();
+
+        if ($existing) return (int)$existing->id;
+
+        return (int)DB::table('risk_recommendations')->insertGetId([
+            'tenant_id'  => $tid,
+            'risk_id'    => $riskId,
+            'content'    => null,
+            'created_by' => auth()->id(),
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+    }
+
     // =========================================================================
     //  CHARGEMENT DES DONNÉES
     // =========================================================================
@@ -173,6 +190,8 @@ class RiskActionPlanController extends Controller
         $tid = $this->tid();
 
         if (!Schema::hasTable('risk_action_plans')) return [];
+
+        $hasReco = Schema::hasTable('risk_recommendations');
 
         $query = DB::table('risk_action_plans as ap')
             ->leftJoin('risk_register as r',             'r.id',   '=', 'ap.risk_id')
@@ -205,23 +224,34 @@ class RiskActionPlanController extends Controller
             ->where('ap.tenant_id', $tid)
             ->whereNull('ap.deleted_at');
 
+        if ($hasReco) {
+            $query->leftJoin('risk_recommendations as rec', 'rec.id', '=', 'ap.recommendation_id');
+        }
+
         if (!empty($filters['status']))    $query->where('ap.status',   $filters['status']);
         if (!empty($filters['priority']))  $query->where('ap.priority', $filters['priority']);
         if (!empty($filters['risk_id']))   $query->where('ap.risk_id',  (int)$filters['risk_id']);
         if (!empty($filters['entity_id'])) $query->where('ap.entity_id',(int)$filters['entity_id']);
 
+        $hasRecoCol = Schema::hasColumn('risk_action_plans', 'recommendation_id');
+
         return $query
             ->orderByRaw("FIELD(ap.priority,'critical','high','medium','low')")
             ->orderBy('ap.target_date')
-            ->select(
+            ->select([
                 // Plan
-                'ap.id', 'ap.code', 'ap.risk_id', 'ap.entity_id',
+                'ap.id', 'ap.code', 'ap.risk_id',
+                $hasRecoCol ? 'ap.recommendation_id' : DB::raw('NULL as recommendation_id'),
+                'ap.entity_id',
                 'ap.title', 'ap.description', 'ap.action_plan',
                 'ap.priority', 'ap.status', 'ap.assigned_to',
                 'ap.target_date', 'ap.start_date', 'ap.completion_date',
                 'ap.progress', 'ap.cost_estimate', 'ap.actual_cost',
                 'ap.notes', 'ap.is_auto_generated', 'ap.source_status',
                 'ap.created_by', 'ap.created_at', 'ap.updated_at',
+                // Recommandation
+                $hasReco ? 'rec.content as recommendation_content' : DB::raw('NULL as recommendation_content'),
+                $hasReco ? 'rec.updated_at as recommendation_updated_at' : DB::raw('NULL as recommendation_updated_at'),
                 // Risque
                 'r.code_risk', 'r.libelle as risk_libelle',
                 'r.causes', 'r.consequences', 'r.consequences_autres_processus',
@@ -278,7 +308,7 @@ class RiskActionPlanController extends Controller
                 DB::raw('IF(r.target_impact_level_id IS NOT NULL, 1, 0) as has_target'),
                 DB::raw('IF(r.decision IS NOT NULL, 1, 0) as has_decision'),
                 DB::raw('IF(r.risque_realise = 1, 1, 0) as is_realized')
-            )
+            ])
             ->get()
             ->map(fn($row) => (array)$row)
             ->toArray();
@@ -311,6 +341,24 @@ class RiskActionPlanController extends Controller
                 'nom.code as nomenclature_code', 'nom.label as nomenclature_label'
             )
             ->orderBy('r.id')
+            ->get()
+            ->map(fn($row) => (array)$row)
+            ->toArray();
+    }
+
+    /**
+     * Une recommandation par risque (id, risk_id, content, updated_at).
+     * Utilisée côté front pour afficher/éditer la recommandation même quand
+     * un risque n'a pas encore de plan d'action.
+     */
+    private function loadRecommendations(): array
+    {
+        $tid = $this->tid();
+        if (!Schema::hasTable('risk_recommendations')) return [];
+
+        return DB::table('risk_recommendations')
+            ->where('tenant_id', $tid)->whereNull('deleted_at')
+            ->select('id', 'risk_id', 'content', 'updated_at')
             ->get()
             ->map(fn($row) => (array)$row)
             ->toArray();
@@ -427,6 +475,7 @@ class RiskActionPlanController extends Controller
         return Inertia::render('dashboards/Risk/ActionPlan/Index', [
             'actionPlans'      => $this->loadActionPlans($filters),
             'allRisks'         => $this->loadAllRisks(),
+            'recommendations'  => $this->loadRecommendations(),
             'stats'            => $this->getStats(),
             'entities'         => $this->getEntities(),
             'users'            => $this->getUsers(),
@@ -449,7 +498,53 @@ class RiskActionPlanController extends Controller
     }
 
     // =========================================================================
-    //  CRUD — PLANS D'ACTION
+    //  RECOMMANDATION (1 par risque)
+    // =========================================================================
+
+    public function saveRecommendation(Request $request): JsonResponse
+    {
+        $tid = $this->tid();
+
+        if (!Schema::hasTable('risk_recommendations')) {
+            return response()->json(['success' => false, 'message' => "Table risk_recommendations inexistante — exécutez migration_recommendations.sql"], 500);
+        }
+
+        $v = $request->validate([
+            'risk_id' => 'required|integer|exists:risk_register,id',
+            'content' => 'nullable|string',
+        ]);
+
+        $existing = DB::table('risk_recommendations')
+            ->where('risk_id', $v['risk_id'])->where('tenant_id', $tid)->whereNull('deleted_at')
+            ->first();
+
+        if ($existing) {
+            DB::table('risk_recommendations')->where('id', $existing->id)->update([
+                'content'    => $v['content'],
+                'updated_by' => auth()->id(),
+                'updated_at' => now(),
+            ]);
+            $id = $existing->id;
+        } else {
+            $id = DB::table('risk_recommendations')->insertGetId([
+                'tenant_id'  => $tid,
+                'risk_id'    => $v['risk_id'],
+                'content'    => $v['content'],
+                'created_by' => auth()->id(),
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Recommandation enregistrée avec succès',
+            'id'      => $id,
+        ]);
+    }
+
+    // =========================================================================
+    //  CRUD — PLANS D'ACTION (rattachés à la recommandation du risque)
     // =========================================================================
 
     public function store(Request $request): JsonResponse
@@ -468,19 +563,30 @@ class RiskActionPlanController extends Controller
             'target_date'     => 'required|date',
             'start_date'      => 'nullable|date',
             'completion_date' => 'nullable|date',
-            'progress'        => 'nullable|integer|min:0|max:100',
             'cost_estimate'   => 'nullable|numeric|min:0',
             'actual_cost'     => 'nullable|numeric|min:0',
             'notes'           => 'nullable|string',
         ]);
+        // NB : 'progress' n'est volontairement pas accepté ici — la progression
+        // n'existe qu'au niveau du suivi (tâches), jamais saisie manuellement.
 
-        $id = DB::table('risk_action_plans')->insertGetId(array_merge($v, [
+        // Un risque = une recommandation. On la crée si elle n'existe pas encore,
+        // et tout nouveau plan d'action y est automatiquement rattaché.
+        // (Les deux vérifications Schema sont nécessaires tant que
+        // migration_recommendations.sql n'a pas été exécutée sur cette base.)
+        $extra = [
             'tenant_id'  => $tid,
             'code'       => $this->generateCode(),
             'created_by' => auth()->id(),
             'created_at' => now(),
             'updated_at' => now(),
-        ]));
+        ];
+
+        if (Schema::hasTable('risk_recommendations') && Schema::hasColumn('risk_action_plans', 'recommendation_id')) {
+            $extra['recommendation_id'] = $this->getOrCreateRecommendation((int)$v['risk_id']);
+        }
+
+        $id = DB::table('risk_action_plans')->insertGetId(array_merge($v, $extra));
 
         $this->logAction($id, 'created', "Plan d'action créé");
 
@@ -516,17 +622,14 @@ class RiskActionPlanController extends Controller
             'target_date'     => 'nullable|date',
             'start_date'      => 'nullable|date',
             'completion_date' => 'nullable|date',
-            'progress'        => 'nullable|integer|min:0|max:100',
             'cost_estimate'   => 'nullable|numeric|min:0',
             'actual_cost'     => 'nullable|numeric|min:0',
             'notes'           => 'nullable|string',
         ]);
+        // 'progress' toujours exclu du payload accepté : recalculé uniquement
+        // par updatePlanProgress() à partir des tâches de suivi.
 
         if (isset($v['status']) && $v['status'] === 'completed' && $plan->status !== 'completed') {
-            $v['completion_date'] = $v['completion_date'] ?? now()->toDateString();
-        }
-        if (isset($v['progress']) && $v['progress'] >= 100) {
-            $v['status']          = 'completed';
             $v['completion_date'] = $v['completion_date'] ?? now()->toDateString();
         }
 
@@ -572,7 +675,7 @@ class RiskActionPlanController extends Controller
     }
 
     // =========================================================================
-    //  TÂCHES
+    //  TÂCHES DE SUIVI — c'est ce niveau qui porte la progression
     // =========================================================================
 
     public function getTasks(int $planId): JsonResponse
@@ -615,10 +718,10 @@ class RiskActionPlanController extends Controller
             'updated_at' => now(),
         ]));
 
-        $this->logAction($v['plan_id'], 'task_added', "Tâche ajoutée : " . $v['title']);
+        $this->logAction($v['plan_id'], 'task_added', "Suivi ajouté : " . $v['title']);
         $this->updatePlanProgress($v['plan_id']);
 
-        return response()->json(['success' => true, 'message' => 'Tâche créée avec succès', 'id' => $id]);
+        return response()->json(['success' => true, 'message' => 'Suivi créé avec succès', 'id' => $id]);
     }
 
     public function updateTask(Request $request, int $id): JsonResponse
@@ -629,7 +732,7 @@ class RiskActionPlanController extends Controller
 
         $task = DB::table('risk_action_tasks')
             ->where('id', $id)->where('tenant_id', $tid)->whereNull('deleted_at')->first();
-        if (!$task) return response()->json(['success' => false, 'message' => 'Tâche introuvable'], 404);
+        if (!$task) return response()->json(['success' => false, 'message' => 'Suivi introuvable'], 404);
 
         $v = $request->validate([
             'title'           => 'sometimes|string|max:255',
@@ -649,9 +752,9 @@ class RiskActionPlanController extends Controller
 
         DB::table('risk_action_tasks')->where('id', $id)->update($v);
         $this->updatePlanProgress($task->plan_id);
-        $this->logAction($task->plan_id, 'task_updated', "Tâche mise à jour : " . ($v['title'] ?? $task->title));
+        $this->logAction($task->plan_id, 'task_updated', "Suivi mis à jour : " . ($v['title'] ?? $task->title));
 
-        return response()->json(['success' => true, 'message' => 'Tâche mise à jour avec succès']);
+        return response()->json(['success' => true, 'message' => 'Suivi mis à jour avec succès']);
     }
 
     public function deleteTask(int $id): JsonResponse
@@ -662,17 +765,22 @@ class RiskActionPlanController extends Controller
 
         $task = DB::table('risk_action_tasks')
             ->where('id', $id)->where('tenant_id', $tid)->whereNull('deleted_at')->first();
-        if (!$task) return response()->json(['success' => false, 'message' => 'Tâche introuvable'], 404);
+        if (!$task) return response()->json(['success' => false, 'message' => 'Suivi introuvable'], 404);
 
         DB::table('risk_action_tasks')->where('id', $id)
             ->update(['deleted_at' => now(), 'updated_at' => now()]);
 
         $this->updatePlanProgress($task->plan_id);
-        $this->logAction($task->plan_id, 'task_deleted', "Tâche supprimée : " . $task->title);
+        $this->logAction($task->plan_id, 'task_deleted', "Suivi supprimé : " . $task->title);
 
-        return response()->json(['success' => true, 'message' => 'Tâche supprimée avec succès']);
+        return response()->json(['success' => true, 'message' => 'Suivi supprimé avec succès']);
     }
 
+    /**
+     * La progression (risk_action_plans.progress) est TOUJOURS calculée ici,
+     * à partir des tâches de suivi terminées. Elle n'est jamais un champ
+     * saisissable dans le formulaire de plan d'action (voir store()/update()).
+     */
     private function updatePlanProgress(int $planId): void
     {
         $tid = $this->tid();
