@@ -918,7 +918,7 @@
             </b-col>
             <b-col cols="9">
               <label class="form-label mb-1">
-                <i class="ti ti-calendar me-1 text-info"></i>Date de référence
+                <i class="ti ti-calendar me-1 text-info"></i>Opération de référence
                 <small class="text-muted ms-1">(créées dans l'onglet Dates de référence)</small>
               </label>
               <b-form-select class="form-select-sm" v-model="form.date_reference_id"
