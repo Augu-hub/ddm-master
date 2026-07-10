@@ -8,14 +8,24 @@ use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 
 /**
- * ParametrageMarchesController — V3
+ * ParametrageMarchesController — V4
  *
- * Corrections V3 :
- *  - getModeOrganes() retourne les organes groupés par mode_passation_code
- *  - pmCellOrganes dans la vue = organes du mode PM déjà paramétrés (auto, pas de sélection)
- *  - storeDelai / updateDelai gèrent le tableau organes_codes via pm_delai_organes
- *  - storeDelaiOrgane / destroyDelaiOrgane : ajout/retrait organe sur un délai existant
- *  - allData() inclut delaiOrganes
+ * Corrections V4 (par rapport à V3) :
+ *  - AMI / DAO ne sont PAS des modes de passation : c'est un nouveau
+ *    champ "phase_option" sur pm_delais (valeurs : AMI, DAO, AMI+DAO),
+ *    indépendant des modes de passation existants.
+ *  - Un délai peut désormais être rattaché à PLUSIEURS modes de
+ *    passation existants (AOO, AOR, DRP, DC, SD, GAG, ACC...) via la
+ *    nouvelle table pivot pm_delai_modes. Le champ condition_mode
+ *    (ancien, mono-valeur) est conservé en base (legacy, recopie du
+ *    1er mode choisi) mais storeDelai/updateDelai écrivent désormais
+ *    dans pm_delai_modes.
+ *  - detecterModePassation() filtre désormais les délais applicables
+ *    via pm_delai_modes (repli sur condition_mode pour les lignes pas
+ *    encore migrées vers le pivot).
+ *  - allData() inclut delaiModes.
+ *  - Nouvelles routes/méthodes storeDelaiMode / destroyDelaiMode,
+ *    symétriques à storeDelaiOrgane / destroyDelaiOrgane.
  */
 class ParametrageMarchesController extends Controller
 {
@@ -57,6 +67,7 @@ class ParametrageMarchesController extends Controller
             'datesReference'  => $this->getDatesReference(),
             'delais'          => $this->getDelais(),
             'delaiOrganes'    => $this->getDelaiOrganes(),      // [{delai_id, organe_code}]
+            'delaiModes'      => $this->getDelaiModes(),        // [{delai_id, mode_passation_code}]
         ];
     }
 
@@ -118,10 +129,34 @@ class ParametrageMarchesController extends Controller
             $source   = 'seuil_general';
         }
 
+        // Délais applicables : on matche via le pivot pm_delai_modes.
+        // Repli sur l'ancien condition_mode pour les lignes qui n'ont
+        // encore aucune entrée dans le pivot (non migrées / génériques).
         $delaisApplicables = $db->table('pm_delais as d')
             ->join('pm_operations as o',           'd.operation_id',      '=', 'o.id')
             ->leftJoin('pm_dates_reference as dr',  'd.date_reference_id', '=', 'dr.id')
-            ->where(fn($q) => $q->whereNull('d.condition_mode')->orWhere('d.condition_mode', $modeCode))
+            ->where(function ($q) use ($db, $modeCode) {
+                $q->where(function ($q2) use ($modeCode) {
+                    // Cas 1 : le délai a des modes dans le pivot, et le
+                    // mode détecté en fait partie
+                    $q2->whereExists(function ($sub) use ($modeCode) {
+                        $sub->select(DB::raw(1))
+                            ->from('pm_delai_modes as dm')
+                            ->whereColumn('dm.delai_id', 'd.id')
+                            ->where('dm.mode_passation_code', $modeCode);
+                    });
+                })->orWhere(function ($q2) use ($modeCode) {
+                    // Cas 2 : le délai n'a AUCUNE entrée dans le pivot ->
+                    // on retombe sur l'ancien condition_mode (NULL = tous)
+                    $q2->whereNotExists(function ($sub) {
+                        $sub->select(DB::raw(1))
+                            ->from('pm_delai_modes as dm')
+                            ->whereColumn('dm.delai_id', 'd.id');
+                    })->where(function ($q3) use ($modeCode) {
+                        $q3->whereNull('d.condition_mode')->orWhere('d.condition_mode', $modeCode);
+                    });
+                });
+            })
             ->select('d.*', 'o.libelle as operation_libelle', 'dr.libelle as date_reference_libelle', 'dr.date_valeur')
             ->orderBy('d.sort')
             ->get();
@@ -231,6 +266,13 @@ class ParametrageMarchesController extends Controller
     private function getDelaiOrganes(): array
     {
         return $this->db()->table('pm_delai_organes')
+            ->orderBy('delai_id')->orderBy('sort')
+            ->get()->map(fn($r) => (array)$r)->toArray();
+    }
+
+    private function getDelaiModes(): array
+    {
+        return $this->db()->table('pm_delai_modes')
             ->orderBy('delai_id')->orderBy('sort')
             ->get()->map(fn($r) => (array)$r)->toArray();
     }
@@ -609,9 +651,6 @@ class ParametrageMarchesController extends Controller
 
     // ═══════════════════════════════════════════════════════════════════
     //  DATES DE RÉFÉRENCE
-    //  Libellé libre + date calendaire réelle (date_valeur)
-    //  Sélectionnées dans le formulaire délai via un select :
-    //  affiche : libellé + date formatée
     // ═══════════════════════════════════════════════════════════════════
 
     public function storeDateReference(Request $request)
@@ -652,7 +691,8 @@ class ParametrageMarchesController extends Controller
     }
 
     // ═══════════════════════════════════════════════════════════════════
-    //  DÉLAIS — plusieurs organes via pm_delai_organes
+    //  DÉLAIS — plusieurs organes (pm_delai_organes), plusieurs modes de
+    //  passation (pm_delai_modes) et option de phase AMI/DAO
     // ═══════════════════════════════════════════════════════════════════
 
     public function storeDelai(Request $request)
@@ -664,14 +704,25 @@ class ParametrageMarchesController extends Controller
             'delai_type'        => 'required|string|in:calendaire,ouvrable,sans-delai,non-defini',
             'mot_liaison'       => 'nullable|string|max:20',
             'date_reference_id' => 'nullable|integer|exists:tenant.pm_dates_reference,id',
-            'condition_mode'    => 'nullable|string|max:20',
+            // Statut/option du paramètre : AMI, DAO ou AMI+DAO. N'est PAS
+            // un mode de passation — c'est indépendant de modes_codes.
+            'phase_option'      => 'nullable|string|in:AMI,DAO,AMI+DAO',
             'note'              => 'nullable|string',
             'organes_codes'     => 'required|array|min:1',
             'organes_codes.*'   => 'required|string|max:20',
+            // Modes de passation multiples, choisis parmi ceux déjà
+            // existants (AOO, AOR, DRP, DC, SD, GAG, ACC...)
+            'modes_codes'       => 'nullable|array',
+            'modes_codes.*'     => 'string|max:20|exists:tenant.pm_modes_passation,code',
         ]);
 
-        $payload = collect($validated)->except('organes_codes')->toArray();
+        $payload = collect($validated)->except(['organes_codes', 'modes_codes'])->toArray();
         $payload['sort'] = $this->db()->table('pm_delais')->max('sort') + 1;
+
+        // condition_mode (legacy) : recopie du 1er mode choisi, pour
+        // compatibilité avec l'ancien code / anciens rapports
+        $modesCodes = $validated['modes_codes'] ?? [];
+        $payload['condition_mode'] = $modesCodes[0] ?? null;
 
         // Nullifier valeur/unité si sans-delai ou non-defini
         if (in_array($payload['delai_type'], ['sans-delai', 'non-defini'])) {
@@ -683,13 +734,23 @@ class ParametrageMarchesController extends Controller
 
         $id = $this->db()->table('pm_delais')->insertGetId($payload);
 
-        // Insérer les organes dans pm_delai_organes
+        // Organes
         $sort = 1;
         foreach ($validated['organes_codes'] as $oc) {
             $this->db()->table('pm_delai_organes')->insertOrIgnore([
                 'delai_id'    => $id,
                 'organe_code' => $oc,
                 'sort'        => $sort++,
+            ]);
+        }
+
+        // Modes de passation (pivot)
+        $sort = 1;
+        foreach ($modesCodes as $mc) {
+            $this->db()->table('pm_delai_modes')->insertOrIgnore([
+                'delai_id'            => $id,
+                'mode_passation_code' => $mc,
+                'sort'                => $sort++,
             ]);
         }
 
@@ -705,13 +766,18 @@ class ParametrageMarchesController extends Controller
             'delai_type'        => 'required|string|in:calendaire,ouvrable,sans-delai,non-defini',
             'mot_liaison'       => 'nullable|string|max:20',
             'date_reference_id' => 'nullable|integer|exists:tenant.pm_dates_reference,id',
-            'condition_mode'    => 'nullable|string|max:20',
+            'phase_option'      => 'nullable|string|in:AMI,DAO,AMI+DAO',
             'note'              => 'nullable|string',
             'organes_codes'     => 'required|array|min:1',
             'organes_codes.*'   => 'required|string|max:20',
+            'modes_codes'       => 'nullable|array',
+            'modes_codes.*'     => 'string|max:20|exists:tenant.pm_modes_passation,code',
         ]);
 
-        $payload = collect($validated)->except('organes_codes')->toArray();
+        $payload = collect($validated)->except(['organes_codes', 'modes_codes'])->toArray();
+
+        $modesCodes = $validated['modes_codes'] ?? [];
+        $payload['condition_mode'] = $modesCodes[0] ?? null;
 
         if (in_array($payload['delai_type'], ['sans-delai', 'non-defini'])) {
             $payload['delai_valeur'] = null;
@@ -733,12 +799,23 @@ class ParametrageMarchesController extends Controller
             ]);
         }
 
+        // Resynchroniser les modes de passation : supprimer tous + réinsérer
+        $this->db()->table('pm_delai_modes')->where('delai_id', $id)->delete();
+        $sort = 1;
+        foreach ($modesCodes as $mc) {
+            $this->db()->table('pm_delai_modes')->insertOrIgnore([
+                'delai_id'            => $id,
+                'mode_passation_code' => $mc,
+                'sort'                => $sort++,
+            ]);
+        }
+
         return response()->json(['success' => true]);
     }
 
     public function destroyDelai(int $id)
     {
-        // FK ON DELETE CASCADE supprime pm_delai_organes
+        // FK ON DELETE CASCADE supprime pm_delai_organes et pm_delai_modes
         $this->db()->table('pm_delais')->where('id', $id)->delete();
         return response()->json(['success' => true]);
     }
@@ -768,6 +845,36 @@ class ParametrageMarchesController extends Controller
         $this->db()->table('pm_delai_organes')
             ->where('delai_id',    $request->delai_id)
             ->where('organe_code', $request->organe_code)
+            ->delete();
+        return response()->json(['success' => true]);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    //  MODES DE PASSATION D'UN DÉLAI (ajout/retrait depuis le tableau,
+    //  même logique que pour les organes)
+    // ═══════════════════════════════════════════════════════════════════
+
+    public function storeDelaiMode(Request $request)
+    {
+        $data = $request->validate([
+            'delai_id'            => 'required|integer|exists:tenant.pm_delais,id',
+            'mode_passation_code' => 'required|string|max:20|exists:tenant.pm_modes_passation,code',
+        ]);
+        $data['sort'] = $this->db()->table('pm_delai_modes')
+            ->where('delai_id', $data['delai_id'])->max('sort') + 1;
+        $this->db()->table('pm_delai_modes')->insertOrIgnore($data);
+        return response()->json(['success' => true]);
+    }
+
+    public function destroyDelaiMode(Request $request)
+    {
+        $request->validate([
+            'delai_id'            => 'required|integer',
+            'mode_passation_code' => 'required|string',
+        ]);
+        $this->db()->table('pm_delai_modes')
+            ->where('delai_id',            $request->delai_id)
+            ->where('mode_passation_code', $request->mode_passation_code)
             ->delete();
         return response()->json(['success' => true]);
     }
@@ -842,7 +949,7 @@ class ParametrageMarchesController extends Controller
         $db = $this->db();
         $db->unprepared('SET FOREIGN_KEY_CHECKS=0');
         foreach ([
-            'pm_delai_organes', 'pm_delais',
+            'pm_delai_modes', 'pm_delai_organes', 'pm_delais',
             'pm_dates_reference', 'pm_operations',
             'pm_seuils_ac_organes', 'pm_seuils_ac',
             'pm_mode_organes', 'pm_seuils_generaux',

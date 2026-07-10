@@ -634,7 +634,7 @@
               <DataTable :value="delaisFormatted" size="small" class="pv-table flat">
                 <Column header="#" style="width:35px" bodyClass="text-center"><template #body="{data}"><small class="text-muted">{{ data.sort }}</small></template></Column>
                 <!-- PLUSIEURS ORGANES par délai -->
-                <Column header="Organe(s)" style="width:140px">
+                <Column header="Organe(s)" style="width:130px">
                   <template #body="{data}">
                     <div class="d-flex flex-wrap gap-1">
                       <span v-for="oc in getDelaiOrganes(data.id)" :key="oc"
@@ -649,10 +649,10 @@
                     </div>
                   </template>
                 </Column>
-                <Column header="Opération" style="width:260px">
+                <Column header="Opération" style="width:220px">
                   <template #body="{data}"><span style="font-size:.72rem">{{ data.operation_libelle }}</span></template>
                 </Column>
-                <Column header="Délai" style="width:110px" bodyClass="text-center">
+                <Column header="Délai" style="width:105px" bodyClass="text-center">
                   <template #body="{data}">
                     <span v-if="data.delai_type==='sans-delai'" class="text-muted fst-italic" style="font-size:.7rem">Sans délai</span>
                     <span v-else-if="data.delai_type==='non-defini'" class="text-muted" style="font-size:.7rem">Non défini</span>
@@ -674,10 +674,33 @@
                     </div>
                   </template>
                 </Column>
-                <Column header="Mode" style="width:65px" bodyClass="text-center">
+                <!-- PLUSIEURS MODES DE PASSATION par délai -->
+                <Column header="Mode(s)" style="width:130px">
                   <template #body="{data}">
-                    <Tag v-if="data.condition_mode" :value="data.condition_mode" :severity="modeSeverity(data.condition_mode)" style="font-size:.6rem"/>
-                    <span v-else class="text-muted" style="font-size:.6rem">Tous</span>
+                    <div class="d-flex flex-wrap gap-1">
+                      <span v-for="mc in getDelaiModes(data.id)" :key="mc"
+                            class="badge d-flex align-items-center gap-1" :class="modeBadgeClass(mc)"
+                            style="font-size:.6rem;cursor:pointer" @click="removeDelaiMode(data.id, mc)">
+                        {{ mc }} <i class="ti ti-x" style="font-size:.55rem"></i>
+                      </span>
+                      <span v-if="!getDelaiModes(data.id).length" class="text-muted" style="font-size:.62rem">Tous</span>
+                      <b-dropdown v-if="data.id" size="sm" variant="outline-info" no-caret toggle-class="py-0 px-1" boundary="viewport">
+                        <template #button-content><i class="ti ti-plus" style="font-size:.6rem"></i></template>
+                        <b-dropdown-item v-for="m in modesPassation.filter(mp=>!getDelaiModes(data.id).includes(mp.code))"
+                          :key="m.code" @click="addDelaiMode(data.id, m.code)" style="font-size:.75rem">
+                          {{ m.code }} — {{ m.libelle }}
+                        </b-dropdown-item>
+                      </b-dropdown>
+                    </div>
+                  </template>
+                </Column>
+                <!-- OPTION DE PHASE : AMI / DAO / AMI+DAO -->
+                <Column header="Phase" style="width:75px" bodyClass="text-center">
+                  <template #body="{data}">
+                    <span v-if="data.phase_option" class="badge" :class="phaseBadgeClass(data.phase_option)" style="font-size:.6rem">
+                      {{ data.phase_option }}
+                    </span>
+                    <span v-else class="text-muted" style="font-size:.62rem">—</span>
                   </template>
                 </Column>
                 <Column header="" style="width:55px" bodyClass="text-end">
@@ -708,6 +731,20 @@
               </div>
               <div class="d-flex justify-content-between align-items-center p-2 rounded" style="background:#fff3cd">
                 <span class="small fw-semibold">Non défini</span><b-badge bg="warning">{{ delaisNonDefini }}</b-badge>
+              </div>
+            </b-card-body>
+          </b-card>
+          <b-card no-body class="shadow-sm">
+            <b-card-header class="py-2 px-3"><h6 class="mb-0">Phase AMI/DAO</h6></b-card-header>
+            <b-card-body class="p-3">
+              <div class="d-flex justify-content-between align-items-center mb-2 p-2 rounded" style="background:#fdf2e9">
+                <span class="small fw-semibold">AMI</span><b-badge bg="warning">{{ delaisAMI }}</b-badge>
+              </div>
+              <div class="d-flex justify-content-between align-items-center mb-2 p-2 rounded" style="background:#eaf6ff">
+                <span class="small fw-semibold">DAO</span><b-badge bg="info">{{ delaisDAO }}</b-badge>
+              </div>
+              <div class="d-flex justify-content-between align-items-center p-2 rounded" style="background:#f1ecf9">
+                <span class="small fw-semibold">AMI+DAO</span><b-badge bg="dark">{{ delaisAMIDAO }}</b-badge>
               </div>
             </b-card-body>
           </b-card>
@@ -863,7 +900,7 @@
       </b-form>
     </b-modal>
 
-    <!-- Délai — association avec PLUSIEURS organes + date de référence choisie -->
+    <!-- Délai — association avec PLUSIEURS organes + PLUSIEURS modes + option de phase AMI/DAO -->
     <b-modal v-model="modal.delais" title="Délai réglementaire" hide-footer size="xl">
       <b-form @submit.prevent="submitDelai">
         <b-row class="g-2">
@@ -905,10 +942,36 @@
               :disabled="['sans-delai','non-defini'].includes(form.delai_type)"/>
           </b-col>
           <b-col cols="4">
-            <label class="form-label mb-1">Condition mode</label>
-            <b-form-select class="form-select-sm" v-model="form.condition_mode"
-              :options="[{value:'',text:'Tous modes'},...modesPassation.map(m=>({value:m.code,text:m.code+' — '+m.libelle}))]"/>
+            <label class="form-label mb-1">
+              <i class="ti ti-tag me-1 text-info"></i>Statut / Option
+              <small class="text-muted">(AMI, DAO — indépendant du/des mode(s) ci-dessous)</small>
+            </label>
+            <b-form-select class="form-select-sm" v-model="form.phase_option"
+              :options="[{value:'',text:'— Aucune —'},{value:'AMI',text:'AMI'},{value:'DAO',text:'DAO'},{value:'AMI+DAO',text:'AMI + DAO'}]"/>
           </b-col>
+
+          <!-- PLUSIEURS MODES DE PASSATION : sélection multiple inline, parmi ceux existants -->
+          <b-col cols="12">
+            <label class="form-label mb-1">
+              <i class="ti ti-arrows-shuffle me-1 text-info"></i>Mode(s) de passation
+              <small class="text-muted">(laisser vide = s'applique à tous les modes)</small>
+            </label>
+            <div class="d-flex flex-wrap gap-1 mb-1 p-2 rounded border" style="min-height:34px;background:#f8fbff">
+              <span v-for="mc in form.modes_codes" :key="mc"
+                    class="badge d-flex align-items-center gap-1" :class="modeBadgeClass(mc)" style="font-size:.72rem;padding:.3rem .5rem">
+                {{ mc }}
+                <i class="ti ti-x" style="cursor:pointer" @click="removeFormMode(mc)"></i>
+              </span>
+              <b-dropdown size="sm" variant="outline-info" no-caret toggle-class="py-0 px-2" boundary="viewport" v-if="modesPassation.filter(m=>!form.modes_codes.includes(m.code)).length">
+                <template #button-content><i class="ti ti-plus me-1" style="font-size:.7rem"></i><small style="font-size:.7rem">Ajouter mode</small></template>
+                <b-dropdown-item v-for="m in modesPassation.filter(mp=>!form.modes_codes.includes(mp.code))"
+                  :key="m.code" @click="form.modes_codes.push(m.code)" style="font-size:.75rem">
+                  <span class="badge me-1" :class="modeBadgeClass(m.code)" style="font-size:.62rem">{{ m.code }}</span>{{ m.libelle }}
+                </b-dropdown-item>
+              </b-dropdown>
+            </div>
+          </b-col>
+
           <!-- Mot liaison + Date de référence (choisie dans le select) -->
           <template v-if="!['sans-delai','non-defini'].includes(form.delai_type)">
             <b-col cols="3">
@@ -971,6 +1034,7 @@ const props = defineProps({
   datesReference:  { type: Array,  default: () => [] },
   delais:          { type: Array,  default: () => [] },
   delaiOrganes:    { type: Array,  default: () => [] }, // [{delai_id, organe_code}]
+  delaiModes:      { type: Array,  default: () => [] }, // [{delai_id, mode_passation_code}]
   activeTab:       { type: String, default: 'referentiels' },
 })
 
@@ -988,6 +1052,7 @@ const operations      = ref([...props.operations])
 const datesReference  = ref([...props.datesReference])
 const delais          = ref([...props.delais])
 const delaiOrganes    = ref([...props.delaiOrganes])
+const delaiModes      = ref([...props.delaiModes])
 
 const activeTab    = ref(props.activeTab)
 const activeAC     = ref('')
@@ -1048,8 +1113,11 @@ const form = reactive({
   operation_id: '',
   delai_valeur: null, delai_unite: 'jours calendaires', delai_type: 'calendaire',
   mot_liaison: 'à compter de', date_reference_id: '',
-  condition_mode: '', note: '',
+  // AMI / DAO ne sont PAS un mode de passation : c'est un statut séparé
+  phase_option: '',
+  note: '',
   organes_codes: [],  // PLUSIEURS organes pour un délai
+  modes_codes: [],    // PLUSIEURS modes de passation existants pour un délai
 })
 
 const modal = reactive({
@@ -1109,10 +1177,13 @@ const familleBadge   = c => ({ PM:'bg-primary', SP:'bg-info text-dark', PD:'bg-s
 const niveauSeverity = n => ({ national:'info', departemental:'warning', local:'success', entite:'secondary' }[n]||'secondary')
 const modeSeverity   = c => ({ SD:'success', DC:'info', DRP:'warning', AOO:'danger', AOR:'danger', GAG:'secondary', ACC:'secondary' }[c]||'secondary')
 const modeBadgeClass = c => ({ SD:'bg-success', DC:'bg-info text-dark', DRP:'bg-warning text-dark', AOO:'bg-danger', AOR:'bg-danger', GAG:'bg-secondary', ACC:'bg-secondary' }[c]||'bg-secondary')
+// Statut/option AMI-DAO (distinct des modes de passation)
+const phaseBadgeClass = p => ({ AMI:'bg-warning text-dark', DAO:'bg-info text-dark', 'AMI+DAO':'bg-dark' }[p]||'bg-light text-dark')
 
 const getModeOrganes  = code => modeOrganes.value.filter(mo=>mo.mode_passation_code===code).map(mo=>mo.organe_code)
 const getRuleOrganes  = id   => seuilsAcOrganes.value.filter(o=>o.seuil_ac_id===id).map(o=>o.organe_code)
 const getDelaiOrganes = id   => delaiOrganes.value.filter(o=>o.delai_id===id).map(o=>o.organe_code)
+const getDelaiModes   = id   => delaiModes.value.filter(o=>o.delai_id===id).map(o=>o.mode_passation_code)
 
 // Tableau croisé helpers
 const getCellRules   = (acCode, natCode, modeCode) => seuilsAC.value.filter(r => r.type_entite_code===acCode && r.nature_marche_code===natCode && r.mode_passation_code===modeCode)
@@ -1149,19 +1220,24 @@ const previewDelaiPhrase = computed(() => {
   const op      = operations.value.find(o=>o.id==form.operation_id)
   const dateRef = datesReference.value.find(d=>d.id==form.date_reference_id)
   if (!op) return ''
-  const orgs = form.organes_codes.join(' / ') || '?'
-  if (form.delai_type==='sans-delai') return `${orgs} — ${op.libelle} : Sans délai`
-  if (form.delai_type==='non-defini') return `${orgs} — ${op.libelle} : Délai non défini`
+  const orgs  = form.organes_codes.join(' / ') || '?'
+  const modes = form.modes_codes.length ? ` [${form.modes_codes.join('+')}]` : ''
+  const phase = form.phase_option ? ` (${form.phase_option})` : ''
+  if (form.delai_type==='sans-delai') return `${orgs} — ${op.libelle} : Sans délai${modes}${phase}`
+  if (form.delai_type==='non-defini') return `${orgs} — ${op.libelle} : Délai non défini${modes}${phase}`
   const duree    = form.delai_valeur ? `${form.delai_valeur} ${form.delai_unite}` : '…'
   const liaison  = form.mot_liaison  || '…'
   const dateLabel= dateRef ? dateRef.libelle + (dateRef.date_valeur ? ` (${formatDate(dateRef.date_valeur)})` : '') : '…'
-  return `${orgs} — ${duree} ${liaison} ${dateLabel}`
+  return `${orgs} — ${duree} ${liaison} ${dateLabel}${modes}${phase}`
 })
 
 const delaisCalendaires = computed(() => delais.value.filter(d=>d.delai_type==='calendaire').length)
 const delaisOuvrables   = computed(() => delais.value.filter(d=>d.delai_type==='ouvrable').length)
 const delaisSansDelai   = computed(() => delais.value.filter(d=>d.delai_type==='sans-delai').length)
 const delaisNonDefini   = computed(() => delais.value.filter(d=>d.delai_type==='non-defini').length)
+const delaisAMI         = computed(() => delais.value.filter(d=>d.phase_option==='AMI').length)
+const delaisDAO         = computed(() => delais.value.filter(d=>d.phase_option==='DAO').length)
+const delaisAMIDAO      = computed(() => delais.value.filter(d=>d.phase_option==='AMI+DAO').length)
 
 // ── CSRF ───────────────────────────────────────────────────────────────────
 const csrf = () => document.querySelector('meta[name="csrf-token"]')?.content ?? ''
@@ -1200,7 +1276,8 @@ function editItem(entity, data) {
   currentEditId.value = data.id
   resetForm()
   Object.keys(form).forEach(k => {
-    if (k === 'organes_codes') { form.organes_codes = [...(getDelaiOrganes(data.id) || [])] }
+    if (k === 'organes_codes')      { form.organes_codes = [...(getDelaiOrganes(data.id) || [])] }
+    else if (k === 'modes_codes')   { form.modes_codes   = [...(getDelaiModes(data.id) || [])] }
     else { form[k] = data[k] ?? (Array.isArray(form[k]) ? [] : (typeof form[k]==='number' ? null : '')) }
   })
   modal[entity] = true
@@ -1225,7 +1302,7 @@ async function submitForm(entity, url) {
   } catch(e) { console.error(e) }
 }
 
-// Submit délai spécial (plusieurs organes)
+// Submit délai spécial (plusieurs organes + plusieurs modes + option de phase)
 async function submitDelai() {
   if (!form.organes_codes.length) return
   const payload = {
@@ -1235,9 +1312,11 @@ async function submitDelai() {
     delai_type:        form.delai_type,
     mot_liaison:       form.mot_liaison    || null,
     date_reference_id: form.date_reference_id || null,
-    condition_mode:    form.condition_mode || null,
+    // AMI / DAO / AMI+DAO — statut indépendant des modes
+    phase_option:      form.phase_option   || null,
     note:              form.note           || null,
     organes_codes:     form.organes_codes,   // tableau → contrôleur crée N lignes dans pm_delai_organes
+    modes_codes:       form.modes_codes,     // tableau → contrôleur crée N lignes dans pm_delai_modes
   }
   try {
     if (currentEditId.value) {
@@ -1248,12 +1327,16 @@ async function submitDelai() {
         // Resync organes du délai
         delaiOrganes.value = delaiOrganes.value.filter(o=>o.delai_id!==currentEditId.value)
         form.organes_codes.forEach(oc => delaiOrganes.value.push({ delai_id:currentEditId.value, organe_code:oc }))
+        // Resync modes du délai
+        delaiModes.value = delaiModes.value.filter(m=>m.delai_id!==currentEditId.value)
+        form.modes_codes.forEach(mc => delaiModes.value.push({ delai_id:currentEditId.value, mode_passation_code:mc }))
       }
     } else {
       const res = await apiFetch('/m/audit.core/param-marches/delais', 'POST', payload)
       if (res.success) {
         delais.value.push({ id:res.id, ...payload })
         form.organes_codes.forEach(oc => delaiOrganes.value.push({ delai_id:res.id, organe_code:oc }))
+        form.modes_codes.forEach(mc => delaiModes.value.push({ delai_id:res.id, mode_passation_code:mc }))
       }
     }
     modal.delais = false
@@ -1269,6 +1352,11 @@ async function destroyItem(entity, id, url) {
       if (arr) { const idx=arr.findIndex(x=>x.id===id); if(idx!==-1) arr.splice(idx,1) }
       // Si seuil AC : fermer la vue PM si on supprime la règle active
       if (entity==='seuilsAC' && activePMCell.value) { /* reste ouvert, la règle disparaît de pmCellRules */ }
+      // Si délai : nettoyer les pivots locaux (le back cascade déjà en base)
+      if (entity==='delais') {
+        delaiOrganes.value = delaiOrganes.value.filter(o=>o.delai_id!==id)
+        delaiModes.value   = delaiModes.value.filter(m=>m.delai_id!==id)
+      }
     }
   } catch(e) { console.error(e) }
 }
@@ -1278,10 +1366,15 @@ const stateMap = {
   seuilsGeneraux, seuilsAC, operations, datesReference, delais
 }
 
-// ── Organes form délai ─────────────────────────────────────────────────────
+// ── Organes / Modes form délai ──────────────────────────────────────────────
 function removeFormOrgane(oc) {
   const idx = form.organes_codes.indexOf(oc)
   if (idx!==-1) form.organes_codes.splice(idx,1)
+}
+
+function removeFormMode(mc) {
+  const idx = form.modes_codes.indexOf(mc)
+  if (idx!==-1) form.modes_codes.splice(idx,1)
 }
 
 // ── Organes délais (ajout depuis le tableau) ───────────────────────────────
@@ -1295,6 +1388,20 @@ async function removeDelaiOrgane(delaiId, organeCode) {
   if (res.success) {
     const idx = delaiOrganes.value.findIndex(o=>o.delai_id===delaiId && o.organe_code===organeCode)
     if (idx!==-1) delaiOrganes.value.splice(idx,1)
+  }
+}
+
+// ── Modes de passation liés aux délais (ajout/retrait depuis le tableau) ───
+async function addDelaiMode(delaiId, modeCode) {
+  const res = await apiFetch('/m/audit.core/param-marches/delai-modes', 'POST', { delai_id:delaiId, mode_passation_code:modeCode })
+  if (res.success) delaiModes.value.push({ delai_id:delaiId, mode_passation_code:modeCode })
+}
+
+async function removeDelaiMode(delaiId, modeCode) {
+  const res = await apiFetch('/m/audit.core/param-marches/delai-modes', 'DELETE', { delai_id:delaiId, mode_passation_code:modeCode })
+  if (res.success) {
+    const idx = delaiModes.value.findIndex(m=>m.delai_id===delaiId && m.mode_passation_code===modeCode)
+    if (idx!==-1) delaiModes.value.splice(idx,1)
   }
 }
 
@@ -1394,6 +1501,7 @@ async function reloadAll() {
   datesReference.value  = res.datesReference  ?? []
   delais.value          = res.delais          ?? []
   delaiOrganes.value    = res.delaiOrganes    ?? []
+  delaiModes.value      = res.delaiModes      ?? []
 }
 
 async function seedData() {

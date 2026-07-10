@@ -4,7 +4,14 @@ use App\Http\Controllers\Admin\AuditTypeFormsController;
 use App\Http\Controllers\Auditor\AnalyseProceduresController;
 use App\Http\Controllers\Auditor\AnalyseRisquesController;
 use App\Http\Controllers\Auditor\FicheTestController;
+use App\Http\Controllers\Auditor\ParametrageAuditPerformanceController;
+
+use App\Http\Controllers\Auditor\ParametrageGrillesVerificationController as GVC;
+
+use App\Http\Controllers\Admin\ReferentielArmpController as RAC;
+
 use App\Http\Controllers\Auditor\ParametrageMarchesController;
+use App\Http\Controllers\Auditor\ParametragePiecesObligatoiresController;
 use App\Http\Controllers\Auditor\PlanActionController;
 use App\Http\Controllers\Auditor\PriseDeConnaissanceController;
 use App\Http\Controllers\Auditor\RapportAuditController;
@@ -74,6 +81,19 @@ Route::middleware(['web','auth','verified'])->group(function () {
     });
 
     /* ====== Admin ====== */
+
+
+
+/*
+|--------------------------------------------------------------------------
+| Référentiel ARMP national (ddmparam) — Super Admin uniquement
+|--------------------------------------------------------------------------
+| À coller dans routes/web.php, dans le même groupe que les routes
+| 'admin.*' existantes (Route::middleware(['web','auth','verified'])
+| ->prefix('admin')->name('admin.')), juste à côté du bloc
+| 'audit-type-forms' déjà présent.
+*/
+
     Route::prefix('admin')->name('admin.')->group(function () {
         // Services
         Route::get('/services',  [ServiceController::class, 'index'])->name('services.index');
@@ -153,10 +173,72 @@ Route::middleware(['web','auth','verified'])->group(function () {
         ->name('phase.delete');
  
 });
-    
+
+
+Route::prefix('referentiel-armp')->name('referentiel-armp.')->group(function () {
+
+    // ── Vue principale + rechargement complet ────────────────────────
+    Route::get('/',        [RAC::class, 'index'])->name('index');
+    Route::get('/api/all', [RAC::class, 'apiAll'])->name('api.all');
+
+    // ── Référentiels simples : {entity} ∈ types-entites, sources-financement,
+    //    natures-marche, modes-passation, organes, operations, dates-reference
+    Route::post  ('/{entity}',      [RAC::class, 'storeSimple'])
+        ->where('entity', '[a-z\-]+')->name('simple.store');
+    Route::put   ('/{entity}/{id}', [RAC::class, 'updateSimple'])
+        ->where(['entity' => '[a-z\-]+', 'id' => '[0-9]+'])->name('simple.update');
+    Route::delete('/{entity}/{id}', [RAC::class, 'destroySimple'])
+        ->where(['entity' => '[a-z\-]+', 'id' => '[0-9]+'])->name('simple.destroy');
+
+    // ── Seuils AC ──────────────────────────────────────────────────────
+    Route::post  ('seuils-ac',      [RAC::class, 'storeSeuilAC'])->name('seuils-ac.store');
+    Route::delete('seuils-ac/{id}', [RAC::class, 'destroySeuilAC'])->name('seuils-ac.destroy');
+
+    // ── Délais ─────────────────────────────────────────────────────────
+    Route::post  ('delais',      [RAC::class, 'storeDelai'])->name('delais.store');
+    Route::put   ('delais/{id}', [RAC::class, 'updateDelai'])->name('delais.update');
+    Route::delete('delais/{id}', [RAC::class, 'destroyDelai'])->name('delais.destroy');
+
+    // ── Grilles de vérification ────────────────────────────────────────
+    Route::post  ('grilles',      [RAC::class, 'storeGrille'])->name('grilles.store');
+    Route::put   ('grilles/{id}', [RAC::class, 'updateGrille'])->name('grilles.update');
+    Route::delete('grilles/{id}', [RAC::class, 'destroyGrille'])->name('grilles.destroy');
+    Route::post  ('grilles/{id}/ia-analyser', [RAC::class, 'iaAnalyserGrille'])->name('grilles.ia-analyser');
+
+    Route::post  ('grille-organes', [RAC::class, 'storeGrilleOrgane'])->name('grille-organes.store');
+    Route::delete('grille-organes', [RAC::class, 'destroyGrilleOrgane'])->name('grille-organes.destroy');
+
+    // ── Items (points de contrôle) ─────────────────────────────────────
+    Route::post  ('items',                        [RAC::class, 'storeItem'])->name('items.store');
+    Route::put   ('items/{id}',                   [RAC::class, 'updateItem'])->name('items.update');
+    Route::delete('items/{id}',                   [RAC::class, 'destroyItem'])->name('items.destroy');
+    Route::post  ('items/reorder',                [RAC::class, 'reorderItems'])->name('items.reorder');
+    Route::put   ('items/{id}/link-delai',        [RAC::class, 'linkItemDelai'])->name('items.link-delai');
+    Route::put   ('items/{id}/link-seuil',        [RAC::class, 'linkItemSeuil'])->name('items.link-seuil');
+    Route::get   ('items/{id}/liaisons',          [RAC::class, 'itemLiaisons'])->name('items.liaisons');
+    Route::post  ('items/{id}/link-delai-multi',  [RAC::class, 'linkItemDelaiMulti'])->name('items.link-delai-multi');
+    Route::delete('items/{id}/unlink-delai-multi',[RAC::class, 'unlinkItemDelaiMulti'])->name('items.unlink-delai-multi');
+    Route::post  ('items/{id}/link-operation',    [RAC::class, 'linkItemOperation'])->name('items.link-operation');
+    Route::delete('items/{id}/unlink-operation',  [RAC::class, 'unlinkItemOperation'])->name('items.unlink-operation');
+    Route::post  ('items/{id}/link-article',      [RAC::class, 'linkItemArticle'])->name('items.link-article');
+    Route::delete('items/{id}/unlink-article',    [RAC::class, 'unlinkItemArticle'])->name('items.unlink-article');
+    Route::post  ('items/{id}/ia-analyser',       [RAC::class, 'iaAnalyserItem'])->name('items.ia-analyser');
+
+    // ── Testeur d'affectation (couverture par nature+mode) ─────────────
+    Route::get('preview-affectation', [RAC::class, 'previewAffectation'])->name('preview-affectation');
+
+    // ── Synchronisation manuelle ────────────────────────────────────────
+    Route::post('sync/all',        [RAC::class, 'forceSyncAll'])->name('sync.all');
+    Route::post('sync/{tenantId}', [RAC::class, 'forceSyncTenant'])
+        ->whereNumber('tenantId')->name('sync.tenant');
+});
+
+
+
+
         });
 
-      
+
 
      
            
@@ -1561,7 +1643,149 @@ Route::prefix('param-marches')
     // DELETE body: { delai_id, organe_code }
     Route::post  ('/delai-organes', [ParametrageMarchesController::class, 'storeDelaiOrgane']) ->name('delai-organes.store');
     Route::delete('/delai-organes', [ParametrageMarchesController::class, 'destroyDelaiOrgane'])->name('delai-organes.destroy');
+
+    // ── MODES DE PASSATION LIÉS AUX DÉLAIS (pm_delai_modes) — NOUVEAU ─
+    // Permet d'associer PLUSIEURS modes de passation existants
+    // (AOO, AOR, DRP, DC, SD, GAG, ACC…) à un même délai.
+    // POST   body: { delai_id, mode_passation_code }
+    // DELETE body: { delai_id, mode_passation_code }
+    Route::post  ('/delai-modes', [ParametrageMarchesController::class, 'storeDelaiMode']) ->name('delai-modes.store');
+    Route::delete('/delai-modes', [ParametrageMarchesController::class, 'destroyDelaiMode'])->name('delai-modes.destroy');
 });
+
+
+
+Route::prefix('pieces-obligatoires')
+    ->name('audit.pieces-obligatoires.')
+    ->group(function () {
+
+    // ── Vue principale + API JSON globale ─────────────────────────────
+    Route::get('/',      [ParametragePiecesObligatoiresController::class, 'index']) ->name('index');
+    Route::get('/api/all', [ParametragePiecesObligatoiresController::class, 'apiAll'])->name('api.all');
+
+    // ── Seed / Reset ───────────────────────────────────────────────────
+    Route::post('/seed',  [ParametragePiecesObligatoiresController::class, 'seed']) ->name('seed');
+    Route::post('/reset', [ParametragePiecesObligatoiresController::class, 'reset'])->name('reset');
+
+    // ── CATÉGORIES (pm_pieces_categories) ──────────────────────────────
+    Route::post  ('/categories',      [ParametragePiecesObligatoiresController::class, 'storeCategorie'])  ->name('categories.store');
+    Route::put   ('/categories/{id}', [ParametragePiecesObligatoiresController::class, 'updateCategorie']) ->name('categories.update');
+    Route::delete('/categories/{id}', [ParametragePiecesObligatoiresController::class, 'destroyCategorie'])->name('categories.destroy');
+
+    // ── PIÈCES OBLIGATOIRES (pm_pieces_obligatoires) ───────────────────
+    Route::post  ('/pieces',      [ParametragePiecesObligatoiresController::class, 'storePiece'])  ->name('pieces.store');
+    Route::put   ('/pieces/{id}', [ParametragePiecesObligatoiresController::class, 'updatePiece']) ->name('pieces.update');
+    Route::delete('/pieces/{id}', [ParametragePiecesObligatoiresController::class, 'destroyPiece'])->name('pieces.destroy');
+    Route::post  ('/pieces/reorder', [ParametragePiecesObligatoiresController::class, 'reorderPieces'])->name('pieces.reorder');
+
+    // ── GRILLE D'APPRÉCIATION (pm_grille_appreciation_disponibilite) ───
+    Route::post  ('/grille-appreciation',      [ParametragePiecesObligatoiresController::class, 'storeGrilleAppreciation'])  ->name('grille-appreciation.store');
+    Route::put   ('/grille-appreciation/{id}', [ParametragePiecesObligatoiresController::class, 'updateGrilleAppreciation']) ->name('grille-appreciation.update');
+    Route::delete('/grille-appreciation/{id}', [ParametragePiecesObligatoiresController::class, 'destroyGrilleAppreciation'])->name('grille-appreciation.destroy');
+    // Résolution auto (appelée par le module mission)
+    Route::post  ('/grille-appreciation/resoudre', [ParametragePiecesObligatoiresController::class, 'resoudreAppreciation'])->name('grille-appreciation.resoudre');
+
+    // ── PARAMÈTRES D'AUDIT (pm_parametres_audit) ───────────────────────
+    Route::post  ('/parametres-audit',      [ParametragePiecesObligatoiresController::class, 'storeParametreAudit'])  ->name('parametres-audit.store');
+    Route::put   ('/parametres-audit/{id}', [ParametragePiecesObligatoiresController::class, 'updateParametreAudit']) ->name('parametres-audit.update');
+    Route::delete('/parametres-audit/{id}', [ParametragePiecesObligatoiresController::class, 'destroyParametreAudit'])->name('parametres-audit.destroy');
+});
+
+
+
+/*
+|--------------------------------------------------------------------------
+| Routes du module "Grilles de vérification" (audit.core)
+|--------------------------------------------------------------------------
+| A inclure dans le groupe de routes existant du module audit.core, sous
+| le même middleware / préfixe que le reste de ParametrageMarches
+| (adapter le prefix et le middleware au reste de tes routes existantes,
+| ex: Route::middleware(['auth','tenant'])->prefix('m/audit.core')->group(...)).
+*/
+
+Route::prefix('grilles-verification')->group(function () {
+
+    // Vue principale + rechargement complet
+    Route::get('/', [GVC::class, 'index'])->name('grilles-verification.index');
+    Route::get('/api/all', [GVC::class, 'apiAll'])->name('grilles-verification.api-all');
+
+    // Grilles
+    Route::post('/grilles', [GVC::class, 'storeGrille'])->name('grilles-verification.grilles.store');
+    Route::put('/grilles/{id}', [GVC::class, 'updateGrille'])->name('grilles-verification.grilles.update');
+    Route::delete('/grilles/{id}', [GVC::class, 'destroyGrille'])->name('grilles-verification.grilles.destroy');
+
+    // Organes <-> Grille
+    Route::post('/grille-organes', [GVC::class, 'storeGrilleOrgane'])->name('grilles-verification.grille-organes.store');
+    Route::delete('/grille-organes', [GVC::class, 'destroyGrilleOrgane'])->name('grilles-verification.grille-organes.destroy');
+
+    // Items (points de contrôle)
+    Route::post('/items', [GVC::class, 'storeItem'])->name('grilles-verification.items.store');
+    Route::put('/items/{id}', [GVC::class, 'updateItem'])->name('grilles-verification.items.update');
+    Route::delete('/items/{id}', [GVC::class, 'destroyItem'])->name('grilles-verification.items.destroy');
+    Route::post('/items/reorder', [GVC::class, 'reorderItems'])->name('grilles-verification.items.reorder');
+
+    // Liaisons item <-> délai / seuil (legacy 1-1)
+    Route::put('/items/{id}/link-delai', [GVC::class, 'linkItemDelai'])->name('grilles-verification.items.link-delai');
+    Route::put('/items/{id}/link-seuil', [GVC::class, 'linkItemSeuil'])->name('grilles-verification.items.link-seuil');
+
+    // Liaisons M2M item <-> délais multiples
+    Route::post('/items/{id}/link-delai-multi', [GVC::class, 'linkItemDelaiMulti'])->name('grilles-verification.items.link-delai-multi');
+    Route::delete('/items/{id}/unlink-delai-multi', [GVC::class, 'unlinkItemDelaiMulti'])->name('grilles-verification.items.unlink-delai-multi');
+
+    // Liaisons M2M item <-> opérations
+    Route::post('/items/{id}/link-operation', [GVC::class, 'linkItemOperation'])->name('grilles-verification.items.link-operation');
+    Route::delete('/items/{id}/unlink-operation', [GVC::class, 'unlinkItemOperation'])->name('grilles-verification.items.unlink-operation');
+
+    // Liaisons M2M item <-> articles de loi
+    Route::post('/items/{id}/link-article', [GVC::class, 'linkItemArticle'])->name('grilles-verification.items.link-article');
+    Route::delete('/items/{id}/unlink-article', [GVC::class, 'unlinkItemArticle'])->name('grilles-verification.items.unlink-article');
+    Route::get('/items/{id}/liaisons', [GVC::class, 'itemLiaisons'])->name('grilles-verification.items.liaisons');
+
+    // Analyse IA (Mistral)
+    Route::post('/items/{id}/ia-analyser', [GVC::class, 'iaAnalyserItem'])->name('grilles-verification.items.ia-analyser');
+    Route::post('/grilles/{grilleId}/ia-analyser', [GVC::class, 'iaAnalyserGrille'])->name('grilles-verification.grilles.ia-analyser');
+
+    // Résolution automatique pour une mission d'audit (appelé par le module mission)
+    Route::post('/resolve-for-marche', [GVC::class, 'resolveForMarche'])->name('grilles-verification.resolve-for-marche');
+
+    // Seed / Reset
+    Route::post('/seed', [GVC::class, 'seed'])->name('grilles-verification.seed');
+    Route::post('/reset', [GVC::class, 'reset'])->name('grilles-verification.reset');
+});
+Route::prefix('param-perf')
+    ->name('param-perf.')
+    ->group(function () {
+ 
+        // Vue principale (Inertia) + endpoint JSON pour reload complet
+        Route::get('/', [ParametrageAuditPerformanceController::class, 'index'])
+            ->name('index');
+ 
+        Route::get('/api/all', [ParametrageAuditPerformanceController::class, 'apiAll'])
+            ->name('api.all');
+ 
+        // Seed / Reset — routes STATIQUES déclarées AVANT le wildcard
+        // /{entity} ci-dessous, sinon Laravel matcherait POST /seed comme
+        // un appel à store('seed').
+        Route::post('/seed', [ParametrageAuditPerformanceController::class, 'seed'])
+            ->name('seed');
+ 
+        Route::post('/reset', [ParametrageAuditPerformanceController::class, 'reset'])
+            ->name('reset');
+ 
+        // CRUD générique sur les 13 référentiels ap_* — {entity} accepte
+        // les slugs à tirets (ex: niveaux-risque, facteurs-selection-theme)
+        Route::post('/{entity}', [ParametrageAuditPerformanceController::class, 'store'])
+            ->where('entity', '[a-z\-]+')
+            ->name('store');
+ 
+        Route::put('/{entity}/{id}', [ParametrageAuditPerformanceController::class, 'update'])
+            ->where(['entity' => '[a-z\-]+', 'id' => '[0-9]+'])
+            ->name('update');
+ 
+        Route::delete('/{entity}/{id}', [ParametrageAuditPerformanceController::class, 'destroy'])
+            ->where(['entity' => '[a-z\-]+', 'id' => '[0-9]+'])
+            ->name('destroy');
+    });
 
 });
 
