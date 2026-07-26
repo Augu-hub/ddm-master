@@ -2,41 +2,38 @@
 
 namespace App\Http\Middleware;
 
-use Closure;
 use App\Services\Audit\PhaseSyncService;
-use Illuminate\Support\Facades\Cache;
+use Closure;
 use Illuminate\Support\Facades\Log;
 
+/**
+ * Provision automatique des phases d'une mission depuis ddmparam.
+ *
+ * CORRECTIONS : import DB manquant (fatal à la première exécution) et appel
+ * de l'ancien PhaseSyncService ancien-schéma. Délègue désormais à
+ * PhaseSyncService::ensureMissionAssignments() (nouveau schéma, idempotent,
+ * cache 5 min intégré au service).
+ *
+ * Alias : 'sync.phases' (bootstrap/app.php) — applicable à toute route
+ * portant un mission_id (param de route, query ou body). L'appel est aussi
+ * fait directement par BuildsMissionMenu / AuditorMissionsController, ce
+ * middleware reste utile pour les routes hors de ces chemins.
+ */
 class SyncMissionPhases
 {
     public function handle($request, Closure $next)
     {
-        // Ne synchroniser que pour les routes d'audit avec mission_id
         $missionId = $request->route('mission_id')
+            ?? $request->route('missionId')
             ?? $request->query('mission_id')
             ?? $request->input('mission_id');
 
-        if ($missionId) {
+        if ($missionId && is_numeric($missionId)) {
             try {
-                // Récupérer le mission_type_id de la mission
-                $missionTypeId = DB::table('mission_programmation as mp')
-                    ->leftJoin('missions as m', 'mp.mission_id', '=', 'm.id')
-                    ->where('mp.id', $missionId)
-                    ->value('m.mission_type_id');
-
-                if ($missionTypeId) {
-                    // Cache pour éviter de synchroniser à chaque requête
-                    $cacheKey = "phase_sync_{$missionTypeId}";
-                    $lastSync = Cache::get($cacheKey);
-
-                    if (!$lastSync || $lastSync < now()->subMinutes(5)->timestamp) {
-                        PhaseSyncService::syncForMissionType($missionTypeId);
-                        Cache::put($cacheKey, now()->timestamp, 300); // 5 minutes
-                    }
-                }
-            } catch (\Exception $e) {
-                Log::error('[SyncMiddleware] ' . $e->getMessage());
-                // Ne pas bloquer la requête
+                PhaseSyncService::ensureMissionAssignments((int) $missionId);
+            } catch (\Throwable $e) {
+                Log::error('[SyncMissionPhases] ' . $e->getMessage());
+                // Ne jamais bloquer la requête
             }
         }
 

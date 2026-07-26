@@ -18,7 +18,11 @@ class Processus extends Model
     protected $table = 'processes';
 
 
-    protected $fillable = ['macro_process_id','code','name'];
+    protected $fillable = ['macro_process_id','code','name','has_objectives'];
+
+    protected $casts = [
+        'has_objectives' => 'boolean',
+    ];
 
     public function macro(): BelongsTo
     {
@@ -34,6 +38,11 @@ class Processus extends Model
 {
     return $this->hasMany(Activite::class, 'process_id');
 }
+
+    public function objectifs(): HasMany
+    {
+        return $this->hasMany(Objectif::class, 'process_id');
+    }
 
 
     public static function macroPrefix(MacroProcessus $macro): string

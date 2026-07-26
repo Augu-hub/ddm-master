@@ -14,7 +14,7 @@ class MistralMPAAssistant
     public function __construct()
     {
         $this->apiKey = config('services.mistral.api_key');
-        
+
         if (!$this->apiKey) {
             Log::error('🚨 MISTRAL_API_KEY NOT CONFIGURED');
         } else {
@@ -22,10 +22,6 @@ class MistralMPAAssistant
         }
     }
 
-    /**
-     * 🎯 GÉNÉRER SUGGESTIONS PROCESSUS
-     * En fonction du macro (Direction / Réalisation / Support)
-     */
     public function suggestProcessus(array $payload): array
     {
         try {
@@ -53,7 +49,6 @@ class MistralMPAAssistant
                       "- Adaptés au macro: Direction=pilotage/gouvernance, Réalisation=cœur métier, Support=soutien";
 
             $result = $this->callMistral($prompt, "PROCESSUS_SUGGEST");
-            
             Log::info('🎯 Processus suggestions result: ' . json_encode($result));
             return $result;
 
@@ -64,8 +59,7 @@ class MistralMPAAssistant
     }
 
     /**
-     * 📋 GÉNÉRER SUGGESTIONS DONNÉES (INPUT/OUTPUT/RESOURCES)
-     * En fonction du processus
+     * 📋 Données pour un processus MODE SIMPLE
      */
     public function suggestProcessusData(array $payload): array
     {
@@ -94,7 +88,6 @@ class MistralMPAAssistant
                       "- Max 5 par catégorie, concis et spécifiques";
 
             $result = $this->callMistral($prompt, "DATA_SUGGEST");
-            
             Log::info('📋 Data suggestions result: ' . json_encode($result));
             return $result;
 
@@ -105,8 +98,157 @@ class MistralMPAAssistant
     }
 
     /**
-     * 🎨 GÉNÉRER SUGGESTIONS ACTIVITÉS
-     * En fonction du processus
+     * 🎯 Suggestions d'OBJECTIFS pour un processus "programme"
+     */
+    public function suggestObjectifs(array $payload): array
+    {
+        try {
+            $processusName = $payload['processus_name'] ?? '';
+            $macroKind = $payload['macro_kind'] ?? '';
+
+            if (!$processusName) {
+                Log::warning('⚠️ Missing processus_name');
+                return [];
+            }
+
+            $prompt = "Tu es consultant senior en gestion de programmes et pilotage de la performance " .
+                      "(référentiels PMI/Standard for Program Management, BPMN, ISO 9001).\n\n" .
+                      "CONTEXTE\n" .
+                      "Le processus suivant est un PROGRAMME (Macro-processus: $macroKind) : \"$processusName\".\n" .
+                      "Un programme regroupe plusieurs AXES/VOLETS majeurs, chacun porteur d'un OBJECTIF distinct. " .
+                      "Chaque objectif sera ensuite décliné, indépendamment des autres, en ses propres données " .
+                      "d'entrée, données de sortie, ressources et activités.\n\n" .
+                      "TÂCHE\n" .
+                      " chaque phrase complète commançant par un verbe d'action".
+                      "Identifie 3 à 5 objectifs qui, ENSEMBLE, couvrent l'intégralité du périmètre de ce " .
+                      "programme, sans chevauchement entre eux (chaque objectif doit couvrir un axe distinct, " .
+                      "pas une déclinaison d'un autre objectif de la liste).\n\n" .
+
+                      "RÈGLES DE FORMULATION (format SMART)\n" .
+                      "- Chaque objectif est un RÉSULTAT MESURABLE à atteindre, jamais une action ou une étape " .
+                      "  (interdit: verbes d'action seuls comme \"Collecter\", \"Organiser\" ; " .
+                      "  attendu: un état cible, ex. \"Taux de conformité des dossiers ≥ 95%\")\n" .
+                      "- Le nom fait 25 à 40 mots, sans jargon interne, compréhensible par un non-spécialiste\n" .
+                      "- Si un indicateur chiffré ou un seuil est pertinent, l'inclure directement dans le nom\n" .
+                      "- La description () précise le périmètre exact de l'objectif et ce " .
+                      "  qui le distingue des autres objectifs de la liste\n" .
+                      "- Aucun objectif générique réutilisable pour n'importe quel programme : chaque objectif " .
+                      "  doit contenir au moins un élément spécifique au programme \"$processusName\"\n\n" .
+                      "EXEMPLE DE QUALITÉ ATTENDUE (programme fictif \"Modernisation du parc informatique\")\n" .
+                      "{\n" .
+                      "  \"objectifs\": [\n" .
+                      "    {\"name\": \"100% des postes migrés vers le nouveau matériel\", " .
+                      "\"description\": \"Couvre le remplacement physique de tous les postes de travail obsolètes sur l'ensemble des sites.\"},\n" .
+                      "    {\"name\": \"Temps d'arrêt utilisateur réduit de 50%\", " .
+                      "\"description\": \"Couvre la fiabilité et la continuité de service pendant et après la migration technique.\"},\n" .
+                      "    {\"name\": \"Taux d'adoption des nouveaux outils supérieur à 90%\", " .
+                      "\"description\": \"Couvre l'accompagnement au changement et la formation des utilisateurs finaux.\"}\n" .
+                      "  ]\n" .
+                      "}\n\n" .
+                      "FORMAT DE RÉPONSE\n" .
+                      "Réponds UNIQUEMENT en JSON valide, sans texte autour, au format:\n" .
+                      "{\n" .
+                      "  \"objectifs\": [\n" .
+                      "    {\"name\": \"...\", \"description\": \"...\"}\n" .
+                      "  ]\n" .
+                      "}";
+
+            $result = $this->callMistral($prompt, "OBJECTIFS_SUGGEST");
+            Log::info('🎯 Objectifs suggestions result: ' . json_encode($result));
+            return $result;
+
+        } catch (\Exception $e) {
+            Log::error('❌ Objectifs Suggestions: ' . $e->getMessage());
+            return [];
+        }
+    }
+
+    /**
+     * 📋 Données d'entrée/sortie/ressources POUR UN OBJECTIF (mode programme)
+     */
+    public function suggestObjectifData(array $payload): array
+    {
+        try {
+            $objectifName = $payload['objectif_name'] ?? '';
+            $processusName = $payload['processus_name'] ?? '';
+            $macroKind = $payload['macro_kind'] ?? '';
+
+            if (!$objectifName || !$processusName) {
+                Log::warning('⚠️ Missing objectif_name or processus_name');
+                return [];
+            }
+
+            $prompt = "Tu es expert en modélisation de processus métier. " .
+                      "Processus (programme): \"$processusName\" (Macro: $macroKind).\n" .
+                      "Objectif: \"$objectifName\".\n\n" .
+                      "Génère les données d'entrée, de sortie et les ressources nécessaires SPÉCIFIQUEMENT " .
+                      "pour atteindre CET objectif (pas pour le processus en général).\n\n" .
+                      "Réponds UNIQUEMENT en JSON valide au format:\n" .
+                      "{\n" .
+                      "  \"inputs\": [\"Donnée 1\", \"Donnée 2\", ...],\n" .
+                      "  \"outputs\": [\"Résultat 1\", \"Résultat 2\", ...],\n" .
+                      "  \"resources\": [\"Ressource 1\", \"Ressource 2\", ...]\n" .
+                      "}\n\n" .
+                      "IMPORTANT:\n" .
+                      "- Les entrées sont les données AVANT d'atteindre l'objectif\n" .
+                      "- Les sorties sont les résultats APRÈS atteinte de l'objectif\n" .
+                      "- Les ressources sont outils/systèmes/personnel nécessaires à CET objectif\n" .
+                      "- Max 5 par catégorie, concis et spécifiques à l'objectif";
+
+            $result = $this->callMistral($prompt, "OBJECTIF_DATA_SUGGEST");
+            Log::info('📋 Objectif data suggestions result: ' . json_encode($result));
+            return $result;
+
+        } catch (\Exception $e) {
+            Log::error('❌ Objectif Data Suggestions: ' . $e->getMessage());
+            return [];
+        }
+    }
+
+    /**
+     * 🎨 Activités POUR UN OBJECTIF (mode programme)
+     */
+    public function suggestActivitesForObjectif(array $payload): array
+    {
+        try {
+            $objectifName = $payload['objectif_name'] ?? '';
+            $processusName = $payload['processus_name'] ?? '';
+            $macroKind = $payload['macro_kind'] ?? '';
+
+            if (!$objectifName || !$processusName) {
+                Log::warning('⚠️ Missing objectif_name or processus_name');
+                return [];
+            }
+
+            $prompt = "Tu es expert en décomposition d'objectifs en activités opérationnelles (BPMN/ISO9001). " .
+                      "Processus: \"$processusName\" (Macro: $macroKind).\n" .
+                      "Objectif: \"$objectifName\".\n\n" .
+                      "Génère 4-6 activités concrètes qui permettent d'atteindre CET objectif précis.\n\n" .
+                      "Réponds UNIQUEMENT en JSON valide au format:\n" .
+                      "{\n" .
+                      "  \"activites\": [\n" .
+                      "    {\"name\": \"Activité 1\", \"description\": \"Description courte\"},\n" .
+                      "    ...\n" .
+                      "  ]\n" .
+                      "}\n\n" .
+                      "IMPORTANT:\n" .
+                      "- Les activités doivent contribuer directement à l'objectif, pas au processus en général\n" .
+                      "- Noms clairs et en verbe (Valider, Approuver, Enregistrer, etc.)\n" .
+                      "- Descriptions brèves (1 phrase)\n" .
+                      "- Ordre logique d'exécution";
+
+            $result = $this->callMistral($prompt, "ACTIVITES_OBJECTIF_SUGGEST");
+            Log::info('🎨 Activites (objectif) suggestions result: ' . json_encode($result));
+            return $result;
+
+        } catch (\Exception $e) {
+            Log::error('❌ Activites (objectif) Suggestions: ' . $e->getMessage());
+            return [];
+        }
+    }
+
+    /**
+     * 🎨 Activités mode simple — inchangé
      */
     public function suggestActivites(array $payload): array
     {
@@ -137,7 +279,6 @@ class MistralMPAAssistant
                       "- Spécifiques au processus";
 
             $result = $this->callMistral($prompt, "ACTIVITES_SUGGEST");
-            
             Log::info('🎨 Activites suggestions result: ' . json_encode($result));
             return $result;
 
@@ -147,9 +288,6 @@ class MistralMPAAssistant
         }
     }
 
-    /**
-     * 🔌 APPEL MISTRAL API
-     */
     protected function callMistral(string $prompt, string $context = ''): array
     {
         try {
@@ -199,7 +337,7 @@ class MistralMPAAssistant
             Log::info("📝 Raw response: " . substr($content, 0, 200));
 
             $parsed = $this->parseJSON($content);
-            
+
             if ($parsed === null) {
                 Log::warning('⚠️ Failed to parse JSON: ' . substr($content, 0, 200));
                 return [];
@@ -213,21 +351,16 @@ class MistralMPAAssistant
         }
     }
 
-    /**
-     * 🔍 Parser JSON avec retry intelligent
-     */
     protected function parseJSON(string $text): ?array
     {
         $text = trim($text);
 
-        // Essai 1: JSON brut
         $json = json_decode($text, true);
         if (is_array($json) && count($json) > 0) {
             Log::info('✅ JSON parsed (raw)');
             return $json;
         }
 
-        // Essai 2: JSON avec markdown backticks
         if (preg_match('/```(?:json)?\s*(.*?)\s*```/s', $text, $m)) {
             $json = json_decode($m[1], true);
             if (is_array($json) && count($json) > 0) {
@@ -236,7 +369,6 @@ class MistralMPAAssistant
             }
         }
 
-        // Essai 3: Extraire JSON entre { }
         if (preg_match('/\{.*\}/s', $text, $m)) {
             $json = json_decode($m[0], true);
             if (is_array($json) && count($json) > 0) {
@@ -245,7 +377,6 @@ class MistralMPAAssistant
             }
         }
 
-        // Essai 4: Chercher tableau JSON [ ]
         if (preg_match('/\[.*\]/s', $text, $m)) {
             $json = json_decode($m[0], true);
             if (is_array($json) && count($json) > 0) {
@@ -258,9 +389,6 @@ class MistralMPAAssistant
         return null;
     }
 
-    /**
-     * 🔒 SÉCURITÉ
-     */
     public static function validatePayloadSafety(array $payload): bool
     {
         $forbidden = ['user_id', 'entity_id', 'database', 'password', 'token', 'secret'];

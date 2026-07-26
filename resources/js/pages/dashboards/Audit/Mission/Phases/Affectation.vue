@@ -1,241 +1,292 @@
 <template>
   <VerticalLayout>
-    <Head title="Affectation des Phases" />
+    <Head title="Affectation des phases" />
 
-    <div class="paf-shell">
+    <div class="pa-app">
 
       <!-- ══════════════════════════════════════════════════════════
-           BARRE SUPÉRIEURE — stepper + mission + actions
+           EN-TÊTE — étapes + résumé mission + actions
       ══════════════════════════════════════════════════════════ -->
-      <div class="paf-bar">
-        <div class="paf-steps">
-          <button
-            v-for="(lbl, i) in steps" :key="i"
-            class="step-pill"
-            :class="{ active: step === i+1, done: step > i+1 }"
-            @click="tryGoStep(i+1)"
-          >
-            <span class="sp-num">
-              <i v-if="step > i+1" class="ti ti-check"></i>
-              <span v-else>{{ i+1 }}</span>
-            </span>
-            <span class="sp-lbl">{{ lbl }}</span>
-          </button>
+      <header class="pa-header">
+        <ol class="pa-steps">
+          <li v-for="(lbl, i) in steps" :key="i">
+            <button
+              type="button"
+              class="pa-step"
+              :class="{ 'is-done': step > i + 1, 'is-active': step === i + 1 }"
+              :disabled="i + 1 > step && !(i + 1 === 2 && selectedMission) "
+              @click="tryGoStep(i + 1)"
+            >
+              <span class="pa-step-mark">
+                <i v-if="step > i + 1" class="ti ti-check"></i>
+                <span v-else>{{ i + 1 }}</span>
+              </span>
+              <span class="pa-step-label">{{ lbl }}</span>
+            </button>
+            <span v-if="i < steps.length - 1" class="pa-step-sep"></span>
+          </li>
+        </ol>
+
+        <div v-if="step >= 2 && localMission?.id" class="pa-mission-chip">
+          <span class="pa-dot" :style="{ background: localMission.audit_color ?? '#64748B' }"></span>
+          <code class="pa-mission-code">{{ localMission.code_mission }}</code>
+          <span class="pa-mission-title">{{ localMission.libelle }}</span>
+          <span v-if="localMission.audit_type_label" class="pa-badge pa-badge--neutral">{{ localMission.audit_type_label }}</span>
+          <span v-if="step === 3" class="pa-mission-meta"><i class="ti ti-list-check"></i>{{ checkedPhaseIds.size }} phase(s)</span>
         </div>
 
-        <div v-if="step >= 2 && localMission?.id" class="paf-mission-info">
-          <span class="mi-color-dot" :style="{ background: localMission.audit_color ?? '#64748B' }"></span>
-          <code class="mi-code">{{ localMission.code_mission }}</code>
-          <span class="mi-lib">{{ localMission.libelle }}</span>
-          <span class="mi-badge" v-if="localMission.audit_type_label">{{ localMission.audit_type_label }}</span>
-          <span v-if="step === 3" class="mi-count"><i class="ti ti-list-check"></i> {{ checkedPhaseIds.size }} phase(s)</span>
-        </div>
+        <div class="pa-header-actions">
+          <span v-if="loadingData" class="pa-loading-tag"><span class="pa-spinner"></span>Chargement…</span>
 
-        <div class="paf-bar-right">
-          <span v-if="loadingData" class="loading-pill"><span class="spin"></span> Chargement…</span>
-          <button v-if="step >= 2" class="act act-ghost" @click="step = Math.max(1, step-1)">
+          <button v-if="step >= 2" type="button" class="pa-btn pa-btn--icon" title="Étape précédente" @click="step = Math.max(1, step - 1)">
             <i class="ti ti-arrow-left"></i>
           </button>
 
-          <!-- ── BOUTON SYNC DDMPARAM — visible étape 2 ── -->
-          <template v-if="step === 2 && localMission?.mission_type_id">
-            <button
-              class="act act-ddm"
-              :disabled="syncing"
-              :title="`Synchroniser libellés depuis ddmparam [${localMission.audit_type_code ?? '…'}]`"
-              @click="syncPhasesFromDdm"
-            >
-              <span v-if="syncing" class="spin spin-ddm"></span>
-              <i v-else class="ti ti-database-import"></i>
-              {{ syncing ? 'Sync…' : 'Sync DDMParam' }}
-            </button>
-          </template>
+          <button
+            v-if="step === 2 && localMission?.mission_type_id"
+            type="button"
+            class="pa-btn pa-btn--ddm"
+            :disabled="syncing"
+            :title="`Resynchroniser les libellés depuis ddmparam [${localMission.audit_type_code ?? '…'}]`"
+            @click="syncPhasesFromDdm"
+          >
+            <span v-if="syncing" class="pa-spinner pa-spinner--light"></span>
+            <i v-else class="ti ti-database-cog"></i>
+            {{ syncing ? 'Synchronisation…' : 'Resynchroniser' }}
+          </button>
 
-          <template v-if="step === 2">
-            <button class="act act-primary" :disabled="!checkedPhaseIds.size" @click="goStep3">
-              Affecter <i class="ti ti-arrow-right"></i>
-            </button>
-          </template>
+          <button v-if="step === 2" type="button" class="pa-btn pa-btn--primary" :disabled="!checkedPhaseIds.size" @click="goStep3">
+            Configurer l'affectation <i class="ti ti-arrow-right"></i>
+          </button>
+
           <template v-if="step === 3">
-            <span v-if="dirty.size" class="dirty-badge">
-              <span class="db-dot"></span>{{ dirty.size }} modif.
+            <span v-if="dirty.size" class="pa-badge pa-badge--warning">
+              <span class="pa-badge-dot"></span>{{ dirty.size }} modification(s) non enregistrée(s)
             </span>
-            <button class="act act-save" :disabled="saving || !dirty.size" @click="saveAll">
-              <span v-if="saving" class="spin"></span>
+            <button type="button" class="pa-btn pa-btn--success" :disabled="saving || !dirty.size" @click="saveAll">
+              <span v-if="saving" class="pa-spinner pa-spinner--light"></span>
               <i v-else class="ti ti-device-floppy"></i>
-              {{ saving ? 'Sauvegarde…' : 'Sauvegarder' }}
+              {{ saving ? 'Enregistrement…' : 'Enregistrer' }}
             </button>
           </template>
         </div>
-      </div>
+      </header>
 
-      <!-- ── PANNEAU RÉSULTAT SYNC (apparaît après sync) ── -->
-      <Transition name="tf">
-        <div v-if="showSyncResult && syncResult" class="sync-panel" :class="syncResult.success ? 'sp-ok' : 'sp-err'">
-          <div class="sp-head">
+      <!-- ── Résultat de la synchro ddmparam ── -->
+      <Transition name="pa-fade">
+        <div v-if="showSyncResult && syncResult" class="pa-sync-panel" :class="syncResult.success ? 'is-ok' : 'is-error'">
+          <div class="pa-sync-head">
             <i :class="'ti ' + (syncResult.success ? 'ti-circle-check' : 'ti-circle-x')"></i>
-            <span class="sp-msg">{{ syncResult.message || syncResult.error }}</span>
-            <div class="sp-stats" v-if="syncResult.success">
-              <span v-if="syncResult.updated" class="sp-stat up"><i class="ti ti-refresh"></i> {{ syncResult.updated }} mis à jour</span>
-              <span v-if="syncResult.created" class="sp-stat cr"><i class="ti ti-plus"></i> {{ syncResult.created }} créé(s)</span>
-              <span v-if="syncResult.skipped" class="sp-stat sk"><i class="ti ti-minus"></i> {{ syncResult.skipped }} inchangé(s)</span>
+            <span class="pa-sync-msg">{{ syncResult.message || syncResult.error }}</span>
+            <div v-if="syncResult.success" class="pa-sync-stats">
+              <span v-if="syncResult.updated" class="pa-chip pa-chip--info"><i class="ti ti-refresh"></i>{{ syncResult.updated }} mis à jour</span>
+              <span v-if="syncResult.created" class="pa-chip pa-chip--success"><i class="ti ti-plus"></i>{{ syncResult.created }} créé(s)</span>
+              <span v-if="syncResult.skipped" class="pa-chip pa-chip--neutral"><i class="ti ti-minus"></i>{{ syncResult.skipped }} inchangé(s)</span>
             </div>
-            <button class="sp-close" @click="showSyncResult = false">✕</button>
+            <button type="button" class="pa-icon-btn" @click="showSyncResult = false"><i class="ti ti-x"></i></button>
           </div>
-          <div v-if="syncResult.changes?.length" class="sp-body">
-            <div v-for="ch in syncResult.changes" :key="ch.code" class="sp-change">
-              <code class="sp-code">{{ ch.code }}</code>
-              <span class="sp-act" :class="ch.action === 'created' ? 'sa-cr' : 'sa-up'">
-                {{ ch.action === 'created' ? '+ créé' : '↻ màj' }}
+          <ul v-if="syncResult.changes?.length" class="pa-sync-list">
+            <li v-for="ch in syncResult.changes" :key="ch.code">
+              <code class="pa-sync-code">{{ ch.code }}</code>
+              <span class="pa-chip" :class="ch.action === 'created' ? 'pa-chip--success' : 'pa-chip--info'">
+                {{ ch.action === 'created' ? 'créé' : 'mis à jour' }}
               </span>
-              <span v-if="ch.action === 'created'" class="sp-lbl">{{ ch.label }}</span>
+              <span v-if="ch.action === 'created'" class="pa-sync-label">{{ ch.label }}</span>
               <template v-if="ch.fields?.length">
-                <span v-for="f in ch.fields" :key="f.field" class="sp-field">
-                  <span class="sp-fname">{{ f.field }}</span>
-                  <s class="sp-old">{{ f.old || '—' }}</s>
-                  <span class="sp-arrow">→</span>
-                  <strong class="sp-new">{{ f.new }}</strong>
+                <span v-for="f in ch.fields" :key="f.field" class="pa-sync-diff">
+                  <em>{{ f.field }}</em>
+                  <s>{{ f.old || '—' }}</s>
+                  <i class="ti ti-arrow-right"></i>
+                  <strong>{{ f.new }}</strong>
                 </span>
               </template>
-            </div>
-          </div>
+            </li>
+          </ul>
         </div>
       </Transition>
 
-      <!-- ════ ÉTAPE 1 — Liste des missions ════ -->
-      <div v-if="step === 1" class="paf-content">
-        <div class="s1-toolbar">
-          <span class="tb-title"><i class="ti ti-clipboard-list"></i> Missions <em>{{ filteredMissions.length }}</em></span>
-          <div class="tb-search"><i class="ti ti-search"></i><input v-model="search" placeholder="Code, libellé, entité…" /></div>
-          <div class="tb-pills">
-            <button v-for="s in statusFilters" :key="s.v" class="pill" :class="{ active: fStatus === s.v }" @click="fStatus = s.v">{{ s.l }}</button>
+      <!-- ══════════════════════════════════════════════════════════
+           ÉTAPE 1 — Choisir une mission
+      ══════════════════════════════════════════════════════════ -->
+      <section v-if="step === 1" class="pa-body">
+        <div class="pa-toolbar">
+          <h2 class="pa-toolbar-title"><i class="ti ti-clipboard-list"></i>Missions <span class="pa-toolbar-count">{{ filteredMissions.length }}</span></h2>
+          <div class="pa-search">
+            <i class="ti ti-search"></i>
+            <input v-model="search" type="text" placeholder="Rechercher par code, libellé, entité…" />
+          </div>
+          <div class="pa-filter-group">
+            <button v-for="s in statusFilters" :key="s.v" type="button" class="pa-filter" :class="{ 'is-active': fStatus === s.v }" @click="fStatus = s.v">{{ s.l }}</button>
           </div>
         </div>
-        <div class="s1-table-wrap">
-          <table class="g-table">
-            <thead><tr><th>Code</th><th>Libellé</th><th>Type</th><th>Période</th><th>Entités</th><th>Avancement</th><th>Statut</th><th></th></tr></thead>
-            <tbody>
-              <tr v-for="m in filteredMissions" :key="m.id" :class="{ sel: selectedMission?.id === m.id }" @click="pickMission(m)">
-                <td><code class="mono blue">{{ m.code_mission }}</code></td>
-                <td class="ell max240">{{ m.libelle }}</td>
-                <td>
-                  <span class="chip cb" v-if="m.type_label || m.audit_type_label">{{ m.type_label || m.audit_type_label }}</span>
-                  <span v-else class="muted">—</span>
-                </td>
-                <td class="mono muted small">{{ fmt(m.date_debut) }} → {{ fmt(m.date_fin) }}</td>
-                <td class="ell max160 small muted">{{ m.entities_list || '—' }}</td>
-                <td>
-                  <div class="prog-bar-wrap" v-if="m.total_aff > 0" :title="`${m.completed_aff}/${m.total_aff}`">
-                    <div class="prog-bar"><div class="prog-fill" :style="{ width: m.pct_aff + '%' }"></div></div>
-                    <span class="prog-pct">{{ m.pct_aff }}%</span>
-                  </div>
-                  <span v-else class="muted small">—</span>
-                </td>
-                <td><span class="chip" :class="stChip(m.status)">{{ stLbl(m.status) }}</span></td>
-                <td><a :href="pageUrl(m.id)" class="row-btn" title="Charger" @click.stop><i class="ti ti-arrow-right"></i></a></td>
+
+        <div class="pa-table-scroll">
+          <table class="pa-table">
+            <thead>
+              <tr>
+                <th>Code</th><th>Libellé</th><th>Type</th><th>Période</th><th>Entités</th><th>Avancement</th><th>Statut</th><th class="pa-th-action"></th>
               </tr>
-              <tr v-if="!filteredMissions.length"><td colspan="8" class="empty-row"><i class="ti ti-search"></i> Aucune mission</td></tr>
+            </thead>
+            <tbody>
+              <tr v-for="m in filteredMissions" :key="m.id" class="pa-row" :class="{ 'is-selected': selectedMission?.id === m.id }" @click="pickMission(m)">
+                <td><code class="pa-code-tag">{{ m.code_mission }}</code></td>
+                <td class="pa-ellipsis pa-w-260">{{ m.libelle }}</td>
+                <td>
+                  <span v-if="m.type_label || m.audit_type_label" class="pa-badge pa-badge--neutral">{{ m.type_label || m.audit_type_label }}</span>
+                  <span v-else class="pa-muted">—</span>
+                </td>
+                <td class="pa-mono pa-muted pa-small">{{ fmt(m.date_debut) }} → {{ fmt(m.date_fin) }}</td>
+                <td class="pa-ellipsis pa-w-180 pa-small pa-muted">{{ m.entities_list || '—' }}</td>
+                <td>
+                  <div v-if="m.total_aff > 0" class="pa-progress" :title="`${m.completed_aff}/${m.total_aff}`">
+                    <div class="pa-progress-track"><div class="pa-progress-fill" :style="{ width: m.pct_aff + '%' }"></div></div>
+                    <span class="pa-progress-pct">{{ m.pct_aff }}%</span>
+                  </div>
+                  <span v-else class="pa-muted pa-small">—</span>
+                </td>
+                <td><span class="pa-badge" :class="stChip(m.status)">{{ stLbl(m.status) }}</span></td>
+                <td class="pa-th-action">
+                  <a :href="pageUrl(m.id)" class="pa-row-link" title="Ouvrir cette mission" @click.stop><i class="ti ti-arrow-right"></i></a>
+                </td>
+              </tr>
+              <tr v-if="!filteredMissions.length">
+                <td colspan="8" class="pa-empty-row"><i class="ti ti-search-off"></i>Aucune mission ne correspond à votre recherche</td>
+              </tr>
             </tbody>
           </table>
         </div>
-        <div v-if="selectedMission" class="s1-footer">
-          <span class="sf-info"><i class="ti ti-check-circle green"></i><strong>{{ selectedMission.code_mission }}</strong> — {{ selectedMission.libelle }}</span>
-          <a :href="pageUrl(selectedMission.id)" class="act act-primary">Charger cette mission <i class="ti ti-arrow-right"></i></a>
-        </div>
-      </div>
 
-      <!-- ════ ÉTAPE 2 — Sélection des phases ════ -->
-      <div v-if="step === 2" class="paf-content s2-layout">
-        <div class="s2-side">
-          <div class="side-block">
-            <label class="side-label">Mission</label>
-            <code class="side-code">{{ localMission.code_mission }}</code>
-            <div class="side-lib">{{ localMission.libelle }}</div>
-            <div class="side-period muted small">{{ fmt(localMission.date_debut) }} → {{ fmt(localMission.date_fin) }}</div>
+        <div v-if="selectedMission" class="pa-confirm-bar">
+          <span class="pa-confirm-info"><i class="ti ti-circle-check pa-text-success"></i><strong>{{ selectedMission.code_mission }}</strong>&nbsp;— {{ selectedMission.libelle }}</span>
+          <a :href="pageUrl(selectedMission.id)" class="pa-btn pa-btn--primary">Ouvrir cette mission <i class="ti ti-arrow-right"></i></a>
+        </div>
+      </section>
+
+      <!-- ══════════════════════════════════════════════════════════
+           ÉTAPE 2 — Choisir les phases
+      ══════════════════════════════════════════════════════════ -->
+      <section v-if="step === 2" class="pa-body pa-body--split">
+        <aside class="pa-sidebar">
+          <div class="pa-side-block">
+            <span class="pa-side-label">Mission</span>
+            <code class="pa-side-code">{{ localMission.code_mission }}</code>
+            <p class="pa-side-title">{{ localMission.libelle }}</p>
+            <p class="pa-side-sub">{{ fmt(localMission.date_debut) }} → {{ fmt(localMission.date_fin) }}</p>
           </div>
-          <div class="side-block" v-if="localMission.audit_type_label">
-            <label class="side-label">Type d'audit</label>
-            <div class="side-type-badge" :style="{ background: localMission.audit_color ?? '#64748B' }">
-              <i :class="localMission.audit_icon ?? 'ti ti-folder'"></i>
-              {{ localMission.audit_type_label }}
+
+          <div v-if="localMission.audit_type_label" class="pa-side-block">
+            <span class="pa-side-label">Type d'audit</span>
+            <div class="pa-audit-badge" :style="{ background: localMission.audit_color ?? '#64748B' }">
+              <i :class="localMission.audit_icon ?? 'ti ti-folder'"></i>{{ localMission.audit_type_label }}
             </div>
           </div>
-          <div class="side-block" v-if="formsList.length > 0">
-            <label class="side-label">Formulaires chargés <span class="badge-count">{{ formsList.length }}</span></label>
-            <div class="forms-mini-list">
-              <div v-for="f in formsList.slice(0, 8)" :key="f.code" class="form-mini-item" :class="{ 'fmi-child': f.level > 1 }">
-                <i :class="f.icon || 'ti ti-file'" class="fmi-icon"></i>
-                <span class="fmi-code">{{ f.code }}</span>
-                <span class="fmi-label">{{ f.label }}</span>
-              </div>
-              <div v-if="formsList.length > 8" class="form-mini-more">+{{ formsList.length - 8 }} autres…</div>
-            </div>
-            <div class="forms-source-badge"><i class="ti ti-database"></i> Source : {{ formsSource }}</div>
-          </div>
-          <div class="side-block" v-else-if="!loadingData">
-            <label class="side-label">Formulaires</label>
-            <div class="no-forms-hint"><i class="ti ti-alert-triangle amber"></i> Aucun formulaire trouvé.</div>
-          </div>
-          <div class="side-block">
-            <label class="side-label">Phases sélectionnées</label>
-            <div class="side-counter"><span class="sc-n">{{ checkedPhaseIds.size }}</span><span class="sc-t">/ {{ totalPhases }}</span></div>
-            <div class="sc-bar"><div class="sc-fill" :style="'width:' + pct + '%'"></div></div>
-          </div>
-          <div class="side-btns">
-            <button class="act act-ghost sm" @click="checkAllPhases"><i class="ti ti-checks"></i> Tout</button>
-            <button class="act act-ghost sm" @click="uncheckAllPhases"><i class="ti ti-x"></i> Réinitialiser</button>
-          </div>
-          <div class="side-submit">
-            <button class="act act-primary full" :disabled="!checkedPhaseIds.size" @click="goStep3">
-              Configurer l'affectation <i class="ti ti-arrow-right"></i>
-            </button>
-          </div>
-        </div>
 
-        <div class="s2-groups-wrap">
-          <div v-if="loadingData" class="loading-phases"><span class="spin"></span> Chargement des phases…</div>
-          <div v-else-if="!localPhases.length" class="empty-phases">
-            <i class="ti ti-list-off"></i>
-            <p>Aucune phase disponible.</p>
-            <button class="act act-ddm sm" @click="syncPhasesFromDdm" :disabled="syncing">
-              <i class="ti ti-database-import"></i> Importer depuis DDMParam
+          <div v-if="formsList.length" class="pa-side-block">
+            <span class="pa-side-label">Formulaires disponibles <span class="pa-count-pill">{{ formsList.length }}</span></span>
+            <ul class="pa-forms-preview">
+              <li v-for="f in formsList.slice(0, 8)" :key="f.code" :class="{ 'is-child': f.level > 1 }">
+                <i :class="f.icon || 'ti ti-file'"></i>
+                <code>{{ f.code }}</code>
+                <span>{{ f.label }}</span>
+              </li>
+            </ul>
+            <p v-if="formsList.length > 8" class="pa-side-more">+ {{ formsList.length - 8 }} autre(s)</p>
+            <p class="pa-side-source"><i class="ti ti-database"></i>Source : {{ formsSource }}</p>
+          </div>
+          <div v-else-if="!loadingData" class="pa-side-block">
+            <span class="pa-side-label">Formulaires</span>
+            <p class="pa-hint pa-hint--warning"><i class="ti ti-alert-triangle"></i>Aucun formulaire trouvé pour ce type de mission.</p>
+          </div>
+
+          <div class="pa-side-block">
+            <span class="pa-side-label">Phases sélectionnées</span>
+            <div class="pa-counter"><span class="pa-counter-n">{{ checkedPhaseIds.size }}</span><span class="pa-counter-t">/ {{ totalPhases }}</span></div>
+            <div class="pa-track"><div class="pa-track-fill" :style="{ width: pct + '%' }"></div></div>
+          </div>
+
+          <div class="pa-side-actions">
+            <button type="button" class="pa-btn pa-btn--ghost pa-btn--sm" @click="checkAllPhases"><i class="ti ti-checks"></i>Tout cocher</button>
+            <button type="button" class="pa-btn pa-btn--ghost pa-btn--sm" @click="uncheckAllPhases"><i class="ti ti-x"></i>Réinitialiser</button>
+          </div>
+
+          <button type="button" class="pa-btn pa-btn--primary pa-btn--block" :disabled="!checkedPhaseIds.size" @click="goStep3">
+            Configurer l'affectation <i class="ti ti-arrow-right"></i>
+          </button>
+        </aside>
+
+        <div class="pa-phase-panel">
+          <div v-if="loadingData" class="pa-panel-state"><span class="pa-spinner"></span>Chargement des phases…</div>
+
+          <div v-else-if="!localPhases.length" class="pa-panel-state pa-panel-state--empty">
+            <i class="ti ti-list-search"></i>
+            <p>Aucune phase disponible pour ce type de mission.</p>
+            <button type="button" class="pa-btn pa-btn--ddm pa-btn--sm" :disabled="syncing" @click="syncPhasesFromDdm">
+              <i class="ti ti-database-cog"></i>Importer depuis ddmparam
             </button>
           </div>
+
           <template v-else>
-            <div class="phases-search-bar">
+            <div class="pa-search pa-search--phases">
               <i class="ti ti-search"></i>
-              <input v-model="phaseSearch" placeholder="Filtrer les phases…" class="phase-search-input" />
+              <input v-model="phaseSearch" type="text" placeholder="Filtrer les phases…" />
             </div>
-            <div class="s2-groups">
-              <div v-for="group in filteredPhaseGroups" :key="group.phase_type" class="pg-card">
-                <div class="pg-head" :style="'border-left: 3px solid ' + ptColor(group.phase_type)" @click="toggleGrp(group.phase_type)">
-                  <input type="checkbox" :checked="grpAllChk(group)" :indeterminate.prop="grpPartialChk(group)" @change="toggleGroupCheck(group, $event.target.checked)" @click.stop />
-                  <span class="pg-icon">{{ ptIcon(group.phase_type) }}</span>
-                  <span class="pg-name" :style="'color:' + ptColor(group.phase_type)">{{ ptLabel(group.phase_type) }}</span>
-                  <span class="pg-cnt">{{ cntChkInGrp(group) }}/{{ cntGrp(group) }}</span>
-                  <i :class="'ti ti-chevron-' + (openGroups.has(group.phase_type) ? 'up' : 'down') + ' pg-arr'"></i>
-                </div>
-                <div v-if="openGroups.has(group.phase_type)" class="pg-body">
+
+            <div class="pa-phase-groups">
+              <!--
+                CORRECTION : clé/couleur/icône basées sur phase_num (numérique,
+                stable, 1..5, vient de ddmparam). Le libellé affiché
+                (group.label) vient directement de
+                ddmparam.audit_type_forms.phase_label côté backend — plus de
+                ptLabel() figé ici.
+              -->
+              <div v-for="group in filteredPhaseGroups" :key="group.phase_num" class="pa-phase-group" :style="{ '--pt-color': ptColor(group.phase_num) }">
+                <button type="button" class="pa-phase-group-head" @click="toggleGrp(group.phase_num)">
+                  <input
+                    type="checkbox" class="pa-checkbox"
+                    :checked="grpAllChk(group)" :indeterminate.prop="grpPartialChk(group)"
+                    @change="toggleGroupCheck(group, $event.target.checked)" @click.stop
+                  />
+                  <i :class="ptIcon(group.phase_num)" class="pa-phase-group-icon"></i>
+                  <span class="pa-phase-group-name">{{ group.label }}</span>
+                  <span class="pa-phase-group-count">{{ cntChkInGrp(group) }} / {{ cntGrp(group) }}</span>
+                  <i class="ti pa-phase-group-chevron" :class="openGroups.has(group.phase_num) ? 'ti-chevron-up' : 'ti-chevron-down'"></i>
+                </button>
+
+                <div v-if="openGroups.has(group.phase_num)" class="pa-phase-group-body">
                   <template v-for="p in group.phases" :key="p.id">
-                    <label class="ph-row ph-parent" :class="{ mandatory: p.is_mandatory }">
-                      <input type="checkbox" :checked="checkedPhaseIds.has(p.id)" :disabled="p.is_mandatory" @change="togglePhaseCheck(p, $event.target.checked)" />
-                      <code class="ph-code">{{ p.code_full || p.code }}</code>
-                      <span class="ph-name">{{ p.label }}</span>
-                      <span v-if="p.form_code && forms[p.form_code]" class="ph-form-badge" :title="forms[p.form_code].label">
-                        <i :class="forms[p.form_code].icon || 'ti ti-file'"></i> {{ p.form_code }}
+                    <label class="pa-phase-row" :class="{ 'is-mandatory': p.is_mandatory, 'is-unprovisioned': !isProvisioned(p) }">
+                      <input
+                        type="checkbox" class="pa-checkbox"
+                        :checked="checkedPhaseIds.has(p.id)" :disabled="p.is_mandatory || !isProvisioned(p)"
+                        @change="togglePhaseCheck(p, $event.target.checked)"
+                      />
+                      <code class="pa-phase-code">{{ p.code_full || p.code }}</code>
+                      <span class="pa-phase-name">{{ p.label }}</span>
+                      <span v-if="p.form_code && forms[p.form_code]" class="pa-form-tag" :title="forms[p.form_code].label">
+                        <i :class="forms[p.form_code].icon || 'ti ti-file'"></i>{{ p.form_code }}
                       </span>
-                      <span v-if="p.children?.length" class="chip cv">{{ p.children.length }}</span>
-                      <span v-if="p.is_mandatory" class="chip ca">Oblig.</span>
+                      <span v-if="p.children?.length" class="pa-badge pa-badge--violet">{{ p.children.length }} sous-phase(s)</span>
+                      <span v-if="!isProvisioned(p)" class="pa-badge pa-badge--warning" title="Pas encore créée côté tenant — lancez une resynchronisation">Non provisionnée</span>
+                      <span v-else-if="p.is_mandatory" class="pa-badge pa-badge--neutral">Obligatoire</span>
                     </label>
-                    <label v-for="c in (p.children || [])" :key="c.id" class="ph-row ph-child" :class="{ mandatory: c.is_mandatory }">
-                      <span class="conn">└</span>
-                      <input type="checkbox" :checked="checkedPhaseIds.has(c.id)" :disabled="c.is_mandatory" @change="togglePhaseCheck(c, $event.target.checked)" />
-                      <code class="ph-code">{{ c.code_full || c.code }}</code>
-                      <span class="ph-name">{{ c.label }}</span>
-                      <span v-if="c.form_code && forms[c.form_code]" class="ph-form-badge" :title="forms[c.form_code].label">
-                        <i :class="forms[c.form_code].icon || 'ti ti-file'"></i> {{ c.form_code }}
+                    <label
+                      v-for="c in (p.children || [])" :key="c.id"
+                      class="pa-phase-row pa-phase-row--child"
+                      :class="{ 'is-mandatory': c.is_mandatory, 'is-unprovisioned': !isProvisioned(c) }"
+                    >
+                      <span class="pa-connector">└</span>
+                      <input
+                        type="checkbox" class="pa-checkbox"
+                        :checked="checkedPhaseIds.has(c.id)" :disabled="c.is_mandatory || !isProvisioned(c)"
+                        @change="togglePhaseCheck(c, $event.target.checked)"
+                      />
+                      <code class="pa-phase-code">{{ c.code_full || c.code }}</code>
+                      <span class="pa-phase-name">{{ c.label }}</span>
+                      <span v-if="c.form_code && forms[c.form_code]" class="pa-form-tag" :title="forms[c.form_code].label">
+                        <i :class="forms[c.form_code].icon || 'ti ti-file'"></i>{{ c.form_code }}
                       </span>
-                      <span v-if="c.is_mandatory" class="chip ca">Oblig.</span>
+                      <span v-if="!isProvisioned(c)" class="pa-badge pa-badge--warning">Non provisionnée</span>
+                      <span v-else-if="c.is_mandatory" class="pa-badge pa-badge--neutral">Obligatoire</span>
                     </label>
                   </template>
                 </div>
@@ -243,181 +294,213 @@
             </div>
           </template>
         </div>
-      </div>
+      </section>
 
-      <!-- ════ ÉTAPE 3 — Tableau d'affectation ════ -->
-      <div v-if="step === 3" class="paf-content s3-layout">
-        <div class="ent-tabs">
-          <button v-for="e in localEntities" :key="e.id" class="et" :class="{ active: activeEntityId === e.id, dirty: entityHasDirty(e.id) }" @click="selectEntity(e.id)">
-            <span class="et-dot" :class="entityHasDirty(e.id) ? 'd-amber' : entityProgress(e.id) > 0 ? 'd-green' : 'd-gray'"></span>
-            <span class="et-name">{{ e.name }}</span>
-            <span class="et-sub">{{ fmt(e.date_debut) }} – {{ fmt(e.date_fin) }}</span>
-            <span v-if="entityProgress(e.id) > 0" class="et-pct">{{ entityProgress(e.id) }}%</span>
+      <!-- ══════════════════════════════════════════════════════════
+           ÉTAPE 3 — Affectation détaillée
+      ══════════════════════════════════════════════════════════ -->
+      <section v-if="step === 3" class="pa-body pa-body--assign">
+        <nav class="pa-entity-tabs">
+          <button
+            v-for="e in localEntities" :key="e.id" type="button"
+            class="pa-entity-tab" :class="{ 'is-active': activeEntityId === e.id, 'is-dirty': entityHasDirty(e.id) }"
+            @click="selectEntity(e.id)"
+          >
+            <span class="pa-entity-dot" :class="entityHasDirty(e.id) ? 'is-amber' : entityProgress(e.id) > 0 ? 'is-green' : 'is-gray'"></span>
+            <span class="pa-entity-name">{{ e.name }}</span>
+            <span class="pa-entity-range">{{ fmt(e.date_debut) }} – {{ fmt(e.date_fin) }}</span>
+            <span v-if="entityProgress(e.id) > 0" class="pa-entity-pct">{{ entityProgress(e.id) }}%</span>
           </button>
-        </div>
+        </nav>
 
         <template v-if="activeEntityId">
-          <div class="ent-bar">
-            <i class="ti ti-building blue"></i>
-            <strong class="small">{{ activeEntity?.name }}</strong>
-            <span class="muted small">{{ fmt(activeEntity?.date_debut) }} → {{ fmt(activeEntity?.date_fin) }}</span>
-            <span v-if="activeEntity?.date_debut && activeEntity?.date_fin" class="chip cb small">{{ dateDiffDays(activeEntity.date_debut, activeEntity.date_fin) }}j</span>
-            <span v-if="entityDateErrors(activeEntityId).length" class="err-pill"><i class="ti ti-alert-triangle"></i> {{ entityDateErrors(activeEntityId).length }} erreur(s)</span>
-            <span v-if="warnings.length" class="warn-pill" @click="showWarnings = !showWarnings"><i class="ti ti-info-circle"></i> {{ warnings.length }} avertissement(s)</span>
-            <div class="ent-bar-right">
-              <button class="act act-ghost sm" @click="cascadeEntity(activeEntityId)" title="Cascade dates"><i class="ti ti-sort-ascending"></i> Cascade</button>
-              <button class="act act-ghost sm" @click="selectAllAuds(activeEntityId)" title="Tous auditeurs"><i class="ti ti-user-check"></i> Auditeurs</button>
-              <button class="act act-danger-ghost sm" @click="clearEntity(activeEntityId)" title="Réinitialiser"><i class="ti ti-eraser"></i></button>
+          <div class="pa-entity-bar">
+            <i class="ti ti-building pa-text-primary"></i>
+            <strong class="pa-small">{{ activeEntity?.name }}</strong>
+            <span class="pa-muted pa-small">{{ fmt(activeEntity?.date_debut) }} → {{ fmt(activeEntity?.date_fin) }}</span>
+            <span v-if="activeEntity?.date_debut && activeEntity?.date_fin" class="pa-badge pa-badge--neutral pa-small">{{ dateDiffDays(activeEntity.date_debut, activeEntity.date_fin) }} j</span>
+            <span v-if="entityDateErrors(activeEntityId).length" class="pa-badge pa-badge--danger"><i class="ti ti-alert-triangle"></i>{{ entityDateErrors(activeEntityId).length }} erreur(s)</span>
+            <button v-if="warnings.length" type="button" class="pa-badge pa-badge--warning pa-badge--clickable" @click="showWarnings = !showWarnings"><i class="ti ti-info-circle"></i>{{ warnings.length }} avertissement(s)</button>
+
+            <div class="pa-entity-bar-actions">
+              <button type="button" class="pa-btn pa-btn--ghost pa-btn--sm" title="Aligner les dates en cascade" @click="cascadeEntity(activeEntityId)"><i class="ti ti-sort-ascending"></i>Cascade</button>
+              <button type="button" class="pa-btn pa-btn--ghost pa-btn--sm" title="Assigner tous les auditeurs" @click="selectAllAuds(activeEntityId)"><i class="ti ti-user-check"></i>Auditeurs</button>
+              <button type="button" class="pa-btn pa-btn--danger-ghost pa-btn--sm" title="Réinitialiser l'entité" @click="clearEntity(activeEntityId)"><i class="ti ti-eraser"></i></button>
             </div>
           </div>
 
-          <div v-if="showWarnings && warnings.length" class="warnings-panel">
-            <div class="wp-head"><i class="ti ti-info-circle"></i> Avertissements <button @click="showWarnings = false" class="wp-close">✕</button></div>
-            <ul class="wp-list"><li v-for="(w, i) in warnings" :key="i">{{ w }}</li></ul>
+          <div v-if="showWarnings && warnings.length" class="pa-warnings">
+            <div class="pa-warnings-head">
+              <i class="ti ti-info-circle"></i>Avertissements
+              <button type="button" class="pa-icon-btn" @click="showWarnings = false"><i class="ti ti-x"></i></button>
+            </div>
+            <ul><li v-for="(w, i) in warnings" :key="i">{{ w }}</li></ul>
           </div>
 
-          <div class="aff-wrap">
-            <table class="aff-tbl">
+          <div class="pa-assign-scroll">
+            <table class="pa-assign-table">
               <thead>
                 <tr>
-                  <th class="col-grip"></th>
-                  <th class="col-code">Code</th>
-                  <th class="col-lbl">Phase</th>
-                  <th class="col-form">Formulaire</th>
-                  <th class="col-aff"><i class="ti ti-toggle-right"></i></th>
-                  <th class="col-status">Statut</th>
-                  <th class="col-date">Début<small>≥ début préc.</small></th>
-                  <th class="col-date">Fin<small>≥ début phase</small></th>
-                  <th class="col-days"><i class="ti ti-clock"></i><small>J</small></th>
-                  <th v-for="aud in entityAuds(activeEntityId)" :key="'th' + aud.auditeur_id" class="col-aud">
-                    <div class="aud-hd" :title="aud.full_name">
-                      <div class="aud-av" :class="rCls(aud.role_code || aud.role)">{{ initials(aud.full_name) }}</div>
-                      <span class="aud-rc" :class="rCls(aud.role_code || aud.role)">{{ aud.role_code || aud.role }}</span>
+                  <th class="pa-col-grip"></th>
+                  <th class="pa-col-code pa-th-left">Code</th>
+                  <th class="pa-col-label pa-th-left">Phase</th>
+                  <th class="pa-col-form">Formulaire</th>
+                  <th class="pa-col-toggle"><i class="ti ti-toggle-right"></i></th>
+                  <th class="pa-col-status">Statut</th>
+                  <th class="pa-col-date pa-th-left">Début<small>≥ début précédent</small></th>
+                  <th class="pa-col-date pa-th-left">Fin<small>≥ date de début</small></th>
+                  <th class="pa-col-days"><i class="ti ti-clock"></i><small>Jours</small></th>
+                  <th v-for="aud in entityAuds(activeEntityId)" :key="'th' + aud.auditeur_id" class="pa-col-aud">
+                    <div class="pa-aud-head" :title="aud.full_name">
+                      <span class="pa-aud-avatar" :class="rCls(aud.role_code || aud.role)">{{ initials(aud.full_name) }}</span>
+                      <span class="pa-aud-role" :class="rCls(aud.role_code || aud.role)">{{ aud.role_code || aud.role }}</span>
                     </div>
                   </th>
-                  <th class="col-note"><i class="ti ti-notes"></i></th>
+                  <th class="pa-col-note"><i class="ti ti-notes"></i></th>
                 </tr>
               </thead>
               <tbody>
-                <template v-for="grp in checkedByGroup" :key="'g' + grp.phase_type">
-                  <tr class="tr-sep">
+                <template v-for="grp in checkedByGroup" :key="'g' + grp.phase_num">
+                  <tr class="pa-row-sep">
                     <td :colspan="10 + entityAuds(activeEntityId).length">
-                      <span class="sep-icon">{{ ptIcon(grp.phase_type) }}</span>
-                      <b :style="'color:' + ptColor(grp.phase_type)">{{ ptLabel(grp.phase_type) }}</b>
-                      <span class="sep-cnt muted small">— {{ grp.phases.filter(p => !p.hasSelectedChildren).length }} phase(s)</span>
+                      <i :class="ptIcon(grp.phase_num)" :style="{ color: ptColor(grp.phase_num) }"></i>
+                      <b :style="{ color: ptColor(grp.phase_num) }">{{ grp.label }}</b>
+                      <span class="pa-muted pa-small">— {{ grp.phases.filter(p => !p.hasSelectedChildren).length }} phase(s)</span>
                     </td>
                   </tr>
                   <template v-for="ph in grp.phases" :key="'p' + ph.id">
-                    <tr v-if="ph.hasSelectedChildren" class="tr-locked">
-                      <td><i class="ti ti-lock lock-ic"></i></td>
-                      <td><code class="mono" :style="'color:' + ptColor(grp.phase_type)">{{ ph.code_full || ph.code }}</code></td>
-                      <td :colspan="8 + entityAuds(activeEntityId).length" class="locked-lbl">{{ ph.label }}<span class="locked-hint">— via sous-phases</span></td>
+                    <tr v-if="ph.hasSelectedChildren" class="pa-row-locked">
+                      <td><i class="ti ti-lock pa-lock-icon"></i></td>
+                      <td><code class="pa-mono" :style="{ color: ptColor(grp.phase_num) }">{{ ph.code_full || ph.code }}</code></td>
+                      <td :colspan="8 + entityAuds(activeEntityId).length" class="pa-locked-label">{{ ph.label }}<span class="pa-locked-hint">géré via ses sous-phases</span></td>
                     </tr>
-                    <tr v-else class="tr-ph"
-                      :class="{ 'tr-on': isCfgChk(ph.id, activeEntityId), 'tr-sub': ph.level > 1, 'tr-dov': dragOverId === ph.id, 'tr-drag': draggingId === ph.id, 'tr-warn': hasStartErr(ph.id, activeEntityId) }"
+                    <tr
+                      v-else class="pa-row-phase"
+                      :class="{
+                        'is-active': isCfgChk(ph.id, activeEntityId),
+                        'is-child': ph.level > 1,
+                        'is-dragover': dragOverId === ph.id,
+                        'is-dragging': draggingId === ph.id,
+                        'has-warning': hasStartErr(ph.id, activeEntityId),
+                      }"
                       :draggable="ph.level > 1"
                       @dragstart="onDragStart($event, ph, grp)" @dragover.prevent="onDragOver($event, ph)" @dragleave="onDragLeave" @drop="onDrop($event, ph, grp)"
                     >
-                      <td class="td-grip"><i v-if="ph.level > 1" class="ti ti-grip-vertical grip-ic"></i></td>
-                      <td class="td-code"><span v-if="ph.level > 1" class="sub-conn">└</span><code class="mono" :style="'color:' + ptColor(grp.phase_type)">{{ ph.code_full || ph.code }}</code></td>
-                      <td class="td-lbl">
-                        <span class="ph-lbl-txt">{{ ph.label }}</span>
-                        <span v-if="prevStart(ph.id, activeEntityId)" class="prev-hint"><i class="ti ti-corner-down-right"></i>≥ {{ fmt(prevStart(ph.id, activeEntityId)) }}</span>
+                      <td class="pa-td-grip"><i v-if="ph.level > 1" class="ti ti-grip-vertical pa-grip-icon"></i></td>
+                      <td class="pa-td-code"><span v-if="ph.level > 1" class="pa-connector">└</span><code class="pa-mono" :style="{ color: ptColor(grp.phase_num) }">{{ ph.code_full || ph.code }}</code></td>
+                      <td class="pa-td-label">
+                        <span class="pa-phase-label-text">{{ ph.label }}</span>
+                        <span v-if="prevStart(ph.id, activeEntityId)" class="pa-prev-hint"><i class="ti ti-corner-down-right"></i>≥ {{ fmt(prevStart(ph.id, activeEntityId)) }}</span>
                       </td>
-                      <td class="td-form">
+                      <td class="pa-td-form">
                         <template v-if="ph.form_code && forms[ph.form_code]">
-                          <a v-if="forms[ph.form_code].url_path && isCfgChk(ph.id, activeEntityId)" :href="buildFormUrl(forms[ph.form_code].url_path, localMission.id)" target="_blank" class="form-link" :title="forms[ph.form_code].label">
+                          <a
+                            v-if="forms[ph.form_code].url_path && isCfgChk(ph.id, activeEntityId)"
+                            :href="buildFormUrl(forms[ph.form_code].url_path, localMission.id)" target="_blank"
+                            class="pa-form-link" :title="forms[ph.form_code].label"
+                          >
                             <i :class="forms[ph.form_code].icon || 'ti ti-file'"></i><span>{{ ph.form_code }}</span>
                           </a>
-                          <span v-else class="form-tag" :title="forms[ph.form_code].label">
-                            <i :class="forms[ph.form_code].icon || 'ti ti-file'"></i> {{ ph.form_code }}
+                          <span v-else class="pa-form-tag" :title="forms[ph.form_code].label">
+                            <i :class="forms[ph.form_code].icon || 'ti ti-file'"></i>{{ ph.form_code }}
                           </span>
                         </template>
-                        <span v-else class="muted small">—</span>
+                        <span v-else class="pa-muted pa-small">—</span>
                       </td>
-                      <td class="td-aff">
-                        <label class="tog">
+                      <td class="pa-td-toggle">
+                        <label class="pa-toggle">
                           <input type="checkbox" :checked="isCfgChk(ph.id, activeEntityId)" :disabled="ph.is_mandatory" @change="toggleEntCheck(ph.id, activeEntityId, $event.target.checked)" />
-                          <span class="tog-track"></span>
+                          <span class="pa-toggle-track"></span>
                         </label>
                       </td>
-                      <td class="td-status">
-                        <select class="status-sel" :value="getCfg(ph.id, activeEntityId).status || 'pending'" :disabled="!isCfgChk(ph.id, activeEntityId)" @change="setCfg(ph.id, activeEntityId, { status: $event.target.value })">
+                      <td class="pa-td-status">
+                        <select
+                          class="pa-select" :value="getCfg(ph.id, activeEntityId).status || 'pending'"
+                          :disabled="!isCfgChk(ph.id, activeEntityId)" @change="setCfg(ph.id, activeEntityId, { status: $event.target.value })"
+                        >
                           <option value="pending">En attente</option>
                           <option value="in_progress">En cours</option>
                           <option value="completed">Terminé</option>
                           <option value="skipped">Ignoré</option>
                         </select>
                       </td>
-                      <td class="td-date" :class="{ 'td-err': hasStartErr(ph.id, activeEntityId) }">
-                        <input type="date" class="di" :class="{ 'di-on': isCfgChk(ph.id, activeEntityId), 'di-err': hasStartErr(ph.id, activeEntityId) }"
+                      <td class="pa-td-date" :class="{ 'has-error': hasStartErr(ph.id, activeEntityId) }">
+                        <input
+                          type="date" class="pa-date-input" :class="{ 'is-active': isCfgChk(ph.id, activeEntityId), 'has-error': hasStartErr(ph.id, activeEntityId) }"
                           :value="getCfg(ph.id, activeEntityId).planned_start" :min="minStart(ph.id, activeEntityId)" :max="activeEntity?.date_fin"
-                          :disabled="!isCfgChk(ph.id, activeEntityId)" @change="onStartChange(ph.id, activeEntityId, $event.target.value)" />
+                          :disabled="!isCfgChk(ph.id, activeEntityId)" @change="onStartChange(ph.id, activeEntityId, $event.target.value)"
+                        />
                       </td>
-                      <td class="td-date">
-                        <input type="date" class="di" :class="{ 'di-on': isCfgChk(ph.id, activeEntityId) }"
+                      <td class="pa-td-date">
+                        <input
+                          type="date" class="pa-date-input" :class="{ 'is-active': isCfgChk(ph.id, activeEntityId) }"
                           :value="getCfg(ph.id, activeEntityId).planned_end"
                           :min="getCfg(ph.id, activeEntityId).planned_start || minStart(ph.id, activeEntityId)" :max="activeEntity?.date_fin"
-                          :disabled="!isCfgChk(ph.id, activeEntityId)" @change="onEndChange(ph.id, activeEntityId, $event.target.value)" />
+                          :disabled="!isCfgChk(ph.id, activeEntityId)" @change="onEndChange(ph.id, activeEntityId, $event.target.value)"
+                        />
                       </td>
-                      <td class="td-days">
-                        <span v-if="getCfg(ph.id, activeEntityId).planned_start && getCfg(ph.id, activeEntityId).planned_end" class="days-badge" :class="phaseDays(ph.id, activeEntityId) > 0 ? 'db-ok' : 'db-err'">{{ phaseDays(ph.id, activeEntityId) }}j</span>
-                        <span v-else class="days-empty">—</span>
+                      <td class="pa-td-days">
+                        <span v-if="getCfg(ph.id, activeEntityId).planned_start && getCfg(ph.id, activeEntityId).planned_end" class="pa-days-badge" :class="phaseDays(ph.id, activeEntityId) > 0 ? 'is-ok' : 'is-error'">{{ phaseDays(ph.id, activeEntityId) }} j</span>
+                        <span v-else class="pa-muted">—</span>
                       </td>
-                      <td v-for="aud in entityAuds(activeEntityId)" :key="'a' + aud.auditeur_id" class="td-aud" :class="{ 'td-aud-on': isAudChk(ph.id, activeEntityId, aud.auditeur_id) }">
-                        <label class="aud-tog" :title="aud.full_name">
+                      <td v-for="aud in entityAuds(activeEntityId)" :key="'a' + aud.auditeur_id" class="pa-td-aud" :class="{ 'is-active': isAudChk(ph.id, activeEntityId, aud.auditeur_id) }">
+                        <label class="pa-aud-toggle" :title="aud.full_name">
                           <input type="checkbox" :checked="isAudChk(ph.id, activeEntityId, aud.auditeur_id)" :disabled="!isCfgChk(ph.id, activeEntityId)" @change="toggleAud(ph.id, activeEntityId, aud.auditeur_id, $event.target.checked)" />
-                          <span class="aud-face" :class="isAudChk(ph.id, activeEntityId, aud.auditeur_id) ? 'af-on ' + rCls(aud.role_code || aud.role) : 'af-off'">
+                          <span class="pa-aud-face" :class="isAudChk(ph.id, activeEntityId, aud.auditeur_id) ? 'is-on ' + rCls(aud.role_code || aud.role) : 'is-off'">
                             <i v-if="isAudChk(ph.id, activeEntityId, aud.auditeur_id)" class="ti ti-check"></i>
                           </span>
                         </label>
                       </td>
-                      <td class="td-note">
-                        <button class="note-btn" :class="{ 'nb-fill': getCfg(ph.id, activeEntityId).notes }" :disabled="!isCfgChk(ph.id, activeEntityId)" @click="openNote(ph.id, activeEntityId)">
+                      <td class="pa-td-note">
+                        <button type="button" class="pa-note-btn" :class="{ 'has-note': getCfg(ph.id, activeEntityId).notes }" :disabled="!isCfgChk(ph.id, activeEntityId)" @click="openNote(ph.id, activeEntityId)">
                           <i class="ti ti-notes"></i>
                         </button>
                       </td>
                     </tr>
                   </template>
                 </template>
+
                 <tr v-if="!checkedByGroup.length">
-                  <td :colspan="10 + entityAuds(activeEntityId).length" class="empty-row">Aucune phase sélectionnée — retournez à l'étape 2</td>
+                  <td :colspan="10 + entityAuds(activeEntityId).length" class="pa-empty-row">Aucune phase sélectionnée — revenez à l'étape « Phases »</td>
                 </tr>
-                <tr v-if="checkedByGroup.length && activeEntityId" class="tr-total">
-                  <td colspan="7"><span class="total-lbl"><i class="ti ti-sum"></i> TOTAL</span></td>
-                  <td class="td-date total-dates" colspan="2"><span class="total-range">{{ fmt(totalStartDate(activeEntityId)) }} → {{ fmt(totalEndDate(activeEntityId)) }}</span></td>
-                  <td class="td-days total-days-cell"><span class="days-badge db-total">{{ totalJours(activeEntityId) }}j</span></td>
-                  <td :colspan="entityAuds(activeEntityId).length + 1" class="total-hint muted small">union des intervalles</td>
+                <tr v-if="checkedByGroup.length && activeEntityId" class="pa-row-total">
+                  <td colspan="7"><span class="pa-total-label"><i class="ti ti-sum"></i>Total</span></td>
+                  <td class="pa-td-date pa-total-dates" colspan="2"><span class="pa-total-range">{{ fmt(totalStartDate(activeEntityId)) }} → {{ fmt(totalEndDate(activeEntityId)) }}</span></td>
+                  <td class="pa-td-days pa-total-days"><span class="pa-days-badge is-total">{{ totalJours(activeEntityId) }} j</span></td>
+                  <td :colspan="entityAuds(activeEntityId).length + 1" class="pa-total-hint">union des intervalles sélectionnés</td>
                 </tr>
               </tbody>
             </table>
           </div>
         </template>
-        <div v-else class="no-ent"><i class="ti ti-building"></i> Choisissez une entité ci-dessus</div>
-      </div>
+        <div v-else class="pa-panel-state"><i class="ti ti-building"></i>Choisissez une entité ci-dessus pour commencer</div>
+      </section>
 
-    </div><!-- /paf-shell -->
+    </div>
 
-    <!-- ── TOAST ── -->
+    <!-- ── Notifications ── -->
     <Teleport to="body">
-      <Transition name="tf">
-        <div v-if="toast.show" class="paf-toast" :class="'toast-' + toast.type">
+      <Transition name="pa-fade">
+        <div v-if="toast.show" class="pa-toast" :class="'is-' + toast.type">
           <i :class="'ti ' + (toast.type === 'success' ? 'ti-circle-check' : toast.type === 'warning' ? 'ti-alert-triangle' : 'ti-circle-x')"></i>
-          {{ toast.message }}
-          <button @click="toast.show = false">✕</button>
+          <span>{{ toast.message }}</span>
+          <button type="button" @click="toast.show = false"><i class="ti ti-x"></i></button>
         </div>
       </Transition>
     </Teleport>
 
-    <!-- ── MODAL NOTE ── -->
+    <!-- ── Modale de note ── -->
     <Teleport to="body">
-      <div v-if="noteModal.show" class="modal-bg" @click.self="closeNote">
-        <div class="modal-box">
-          <div class="modal-hd"><i class="ti ti-notes"></i> Note de phase<button @click="closeNote" class="modal-close">✕</button></div>
-          <textarea v-model="noteModal.draft" class="modal-ta" rows="5" placeholder="Saisir une note…"></textarea>
-          <div class="modal-ft">
-            <button class="act act-ghost sm" @click="closeNote">Annuler</button>
-            <button class="act act-primary sm" @click="saveNote"><i class="ti ti-check"></i> OK</button>
+      <div v-if="noteModal.show" class="pa-modal-bg" @click.self="closeNote">
+        <div class="pa-modal">
+          <div class="pa-modal-head">
+            <i class="ti ti-notes"></i>Note de phase
+            <button type="button" class="pa-icon-btn" @click="closeNote"><i class="ti ti-x"></i></button>
+          </div>
+          <textarea v-model="noteModal.draft" class="pa-modal-textarea" rows="5" placeholder="Saisir une note pour cette phase…"></textarea>
+          <div class="pa-modal-foot">
+            <button type="button" class="pa-btn pa-btn--ghost pa-btn--sm" @click="closeNote">Annuler</button>
+            <button type="button" class="pa-btn pa-btn--primary pa-btn--sm" @click="saveNote"><i class="ti ti-check"></i>Valider</button>
           </div>
         </div>
       </div>
@@ -427,7 +510,7 @@
 </template>
 
 <script setup lang="ts">
-import { Head, router } from '@inertiajs/vue3'
+import { Head } from '@inertiajs/vue3'
 import VerticalLayout from '@/layouts/VerticalLayout.vue'
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 
@@ -450,18 +533,18 @@ function normAud(o: any): Record<string, any[]> {
 }
 
 const steps = ['Mission', 'Phases', 'Affectation']
-const _hasAssignments = Object.keys(props.assignments || {}).length > 0
-const step = ref(props.mission ? (_hasAssignments ? 3 : 2) : 1)
+const hasInitialAssignments = Object.keys(props.assignments || {}).length > 0
+const step = ref(props.mission ? (hasInitialAssignments ? 3 : 2) : 1)
 
-const search      = ref('')
-const fStatus     = ref('')
-const phaseSearch = ref('')
-const loadingData = ref(false)
+const search       = ref('')
+const fStatus      = ref('')
+const phaseSearch  = ref('')
+const loadingData  = ref(false)
 const showWarnings = ref(false)
-const warnings    = ref<string[]>([])
+const warnings     = ref<string[]>([])
 
 const statusFilters = [
-  { v: '', l: 'Tous' }, { v: 'planifiee', l: 'Planifiée' },
+  { v: '', l: 'Toutes' }, { v: 'planifiee', l: 'Planifiée' },
   { v: 'en_cours', l: 'En cours' }, { v: 'terminee', l: 'Terminée' },
 ]
 
@@ -475,17 +558,18 @@ const formsSource     = ref<string>('Session / ddmparam')
 
 const checkedPhaseIds = ref(new Set<number>())
 const entCfg: Record<number, Record<number, any>> = reactive({})
-const dirty         = ref(new Set<string>())
-const openGroups    = ref(new Set<string>((props.phases as any[]).map((g: any) => g.phase_type)))
-const saving        = ref(false)
-const toast         = ref({ show: false, type: 'success', message: '' })
+const dirty          = ref(new Set<string>())
+// Clé numérique (phase_num, 1..5) — plus une string figée.
+const openGroups     = ref(new Set<number>((props.phases as any[]).map((g: any) => g.phase_num)))
+const saving         = ref(false)
+const toast          = ref({ show: false, type: 'success', message: '' })
 const activeEntityId = ref<number | null>((props.entities as any[])[0]?.id ?? null)
-const draggingId    = ref<number | null>(null)
-const draggingPhase = ref<any>(null)
-const dragOverId    = ref<number | null>(null)
-const noteModal     = ref({ show: false, phaseId: null as number | null, entityId: null as number | null, draft: '' })
+const draggingId     = ref<number | null>(null)
+const draggingPhase  = ref<any>(null)
+const dragOverId     = ref<number | null>(null)
+const noteModal      = ref({ show: false, phaseId: null as number | null, entityId: null as number | null, draft: '' })
 
-// ── DDMParam Sync state ──────────────────────────────────────────────────────
+// ── Synchronisation ddmparam ─────────────────────────────────────────────
 const syncing        = ref(false)
 const syncResult     = ref<null | {
   success: boolean; updated: number; created: number; skipped: number;
@@ -493,54 +577,115 @@ const syncResult     = ref<null | {
 }>(null)
 const showSyncResult = ref(false)
 
-// ── COMPUTED ────────────────────────────────────────────────────────────────
+function emptyCfg() {
+  return { checked: false, status: 'pending', planned_start: null, planned_end: null, notes: null, auditeurs: [] }
+}
+
+// Une phase renvoyée par ddmparam mais pas encore provisionnée côté tenant
+// (pas de ligne mission_phases correspondante) porte `provisioned: false`
+// (cf. MissionPhaseAffectationController::getPhasesForType). Comme l'id est
+// désormais toujours l'id réel de ddmparam.audit_type_forms (jamais un id
+// négatif "virtuel"), on se fie explicitement à ce flag plutôt qu'au signe de l'id.
+function isProvisioned(p: any) { return p.provisioned !== false }
+
+// ── Données dérivées ──────────────────────────────────────────────────────
 const filteredMissions = computed(() => {
   const q = search.value.trim().toLowerCase()
   return (props.allMissions as any[]).filter(m => {
-    const mq = !q || [m.code_mission, m.libelle, m.entities_list].some((s: any) => String(s || '').toLowerCase().includes(q))
-    return mq && (!fStatus.value || m.status === fStatus.value)
+    const matchesSearch = !q || [m.code_mission, m.libelle, m.entities_list].some((s: any) => String(s || '').toLowerCase().includes(q))
+    return matchesSearch && (!fStatus.value || m.status === fStatus.value)
   })
 })
-const totalPhases = computed(() => { let n = 0; for (const g of localPhases.value) for (const p of g.phases) { n++; n += p.children?.length || 0 }; return n })
+
+const totalPhases = computed(() => {
+  let n = 0
+  for (const g of localPhases.value) for (const p of g.phases) { n++; n += p.children?.length || 0 }
+  return n
+})
 const pct = computed(() => totalPhases.value ? Math.round(checkedPhaseIds.value.size / totalPhases.value * 100) : 0)
 const activeEntity = computed(() => localEntities.value.find(e => e.id === activeEntityId.value) || null)
-const formsList = computed(() => Object.values(forms.value).sort((a: any, b: any) => { if (a.phase_num !== b.phase_num) return a.phase_num - b.phase_num; if (a.level !== b.level) return a.level - b.level; return a.sort_order - b.sort_order }))
+
+const formsList = computed(() => Object.values(forms.value).sort((a: any, b: any) => {
+  if (a.phase_num !== b.phase_num) return a.phase_num - b.phase_num
+  if (a.level !== b.level) return a.level - b.level
+  return (a.sort_order || 0) - (b.sort_order || 0)
+}))
+
 const filteredPhaseGroups = computed(() => {
   const q = phaseSearch.value.trim().toLowerCase()
   if (!q) return localPhases.value
-  return localPhases.value.map(g => ({ ...g, phases: g.phases.map((p: any) => ({ ...p, children: (p.children || []).filter((c: any) => c.label.toLowerCase().includes(q) || (c.code_full || c.code).toLowerCase().includes(q)) })).filter((p: any) => p.label.toLowerCase().includes(q) || (p.code_full || p.code).toLowerCase().includes(q) || p.children.length > 0) })).filter(g => g.phases.length > 0)
+  return localPhases.value
+    .map(g => ({
+      ...g,
+      phases: g.phases
+        .map((p: any) => ({ ...p, children: (p.children || []).filter((c: any) => c.label.toLowerCase().includes(q) || (c.code_full || c.code).toLowerCase().includes(q)) }))
+        .filter((p: any) => p.label.toLowerCase().includes(q) || (p.code_full || p.code).toLowerCase().includes(q) || p.children.length > 0),
+    }))
+    .filter(g => g.phases.length > 0)
 })
+
 const checkedByGroup = computed(() => {
   const out: any[] = []
   for (const g of localPhases.value) {
     const rows: any[] = []
     for (const p of g.phases) {
       const kids = (p.children || []).filter((c: any) => checkedPhaseIds.value.has(c.id))
-      if (kids.length) { rows.push({ ...p, hasSelectedChildren: true, level: p.level || 1, _parentId: null }); kids.forEach((c: any) => rows.push({ ...c, hasSelectedChildren: false, level: 2, _parentId: p.id })) }
-      else if (checkedPhaseIds.value.has(p.id)) rows.push({ ...p, hasSelectedChildren: false, level: p.level || 1, _parentId: null })
+      if (kids.length) {
+        rows.push({ ...p, hasSelectedChildren: true, level: p.level || 1, _parentId: null })
+        kids.forEach((c: any) => rows.push({ ...c, hasSelectedChildren: false, level: 2, _parentId: p.id }))
+      } else if (checkedPhaseIds.value.has(p.id)) {
+        rows.push({ ...p, hasSelectedChildren: false, level: p.level || 1, _parentId: null })
+      }
     }
-    if (rows.length) out.push({ phase_type: g.phase_type, phases: rows })
+    // phase_num (clé stable) + label (libellé dynamique venant de ddmparam,
+    // déjà résolu côté backend) — plus de phase_type string ici.
+    if (rows.length) out.push({ phase_num: g.phase_num, label: g.label, phases: rows })
   }
   return out
 })
 const allChkPhases = computed(() => checkedByGroup.value.flatMap(g => g.phases.filter((p: any) => !p.hasSelectedChildren)))
 
-// ── INIT assignments ─────────────────────────────────────────────────────────
+// ── Initialisation des affectations existantes ───────────────────────────
 function initPh(id: number) { if (!entCfg[id]) entCfg[id] = {} }
 
 for (const [k, v] of Object.entries(props.assignments || {})) {
   const [p, e] = (k as string).split('_').map(Number)
   if (!p || !e) continue
-  checkedPhaseIds.value.add(p); initPh(p)
+  checkedPhaseIds.value.add(p)
+  initPh(p)
   const vv = v as any
-  const audIds = Array.isArray(vv.auditeur_ids) ? vv.auditeur_ids.map(Number) : (Array.isArray(vv.auditeurs) ? vv.auditeurs.map((a: any) => Number(a.auditeur_id ?? a)) : [])
+  const audIds = Array.isArray(vv.auditeur_ids)
+    ? vv.auditeur_ids.map(Number)
+    : (Array.isArray(vv.auditeurs) ? vv.auditeurs.map((a: any) => Number(a.auditeur_id ?? a)) : [])
   entCfg[p][e] = { checked: true, status: vv.status || 'pending', planned_start: vv.planned_start || null, planned_end: vv.planned_end || null, notes: vv.notes || null, auditeurs: audIds }
 }
 
+/** Force le rattachement (et la config par entité) de toutes les phases obligatoires. */
+function applyMandatoryPhases() {
+  for (const g of localPhases.value) {
+    for (const p of g.phases) {
+      forceOne(p)
+      for (const c of (p.children || [])) forceOne(c)
+    }
+  }
+  function forceOne(ph: any) {
+    if (!ph.is_mandatory || !isProvisioned(ph)) return
+    const s = new Set(checkedPhaseIds.value); s.add(ph.id); checkedPhaseIds.value = s
+    initPh(ph.id)
+    for (const e of localEntities.value) {
+      if (!entCfg[ph.id][e.id]) entCfg[ph.id][e.id] = { ...emptyCfg(), checked: true }
+      else entCfg[ph.id][e.id].checked = true
+    }
+  }
+}
+
 onMounted(() => {
-  forceMandatory()
+  applyMandatoryPhases()
   if (step.value === 3) {
-    for (const id of checkedPhaseIds.value) { initPh(id); for (const e of localEntities.value) { if (!entCfg[id][e.id]) entCfg[id][e.id] = { checked: false, status: 'pending', planned_start: null, planned_end: null, notes: null, auditeurs: [] } } }
+    for (const id of checkedPhaseIds.value) {
+      initPh(id)
+      for (const e of localEntities.value) if (!entCfg[id][e.id]) entCfg[id][e.id] = emptyCfg()
+    }
     if (!activeEntityId.value && localEntities.value.length) activeEntityId.value = localEntities.value[0].id
   }
   if (Object.keys(forms.value).length > 0) {
@@ -549,343 +694,807 @@ onMounted(() => {
   }
 })
 
-// ── WATCHERS ─────────────────────────────────────────────────────────────────
-watch(() => props.entities, v => { localEntities.value = [...(v as any[])]; if (!activeEntityId.value && (v as any[]).length) activeEntityId.value = (v as any[])[0].id }, { deep: true })
+// ── Observateurs ──────────────────────────────────────────────────────────
+watch(() => props.entities, v => {
+  localEntities.value = [...(v as any[])]
+  if (!activeEntityId.value && (v as any[]).length) activeEntityId.value = (v as any[])[0].id
+}, { deep: true })
 watch(() => props.auditeurs, v => { localAuds.value = normAud(v) }, { deep: true })
-watch(() => props.phases, v => { localPhases.value = [...(v as any[])]; openGroups.value = new Set((v as any[]).map((g: any) => g.phase_type)) }, { deep: true })
+watch(() => props.phases, v => {
+  localPhases.value = [...(v as any[])]
+  openGroups.value = new Set((v as any[]).map((g: any) => g.phase_num))
+}, { deep: true })
 watch(() => props.mission, v => { localMission.value = v ? { ...v } : {}; if (v) step.value = 2 })
 watch(() => props.forms, v => { forms.value = (v as any) || {} }, { deep: true })
 
-// ── NAVIGATION ────────────────────────────────────────────────────────────────
-function tryGoStep(n: number) { if (n < step.value) { step.value = n; return }; if (n === 2 && !selectedMission.value) return; if (n === 3 && !checkedPhaseIds.value.size) return; if (n === 3) goStep3(); else step.value = n }
+// ── Navigation ────────────────────────────────────────────────────────────
+function tryGoStep(n: number) {
+  if (n < step.value) { step.value = n; return }
+  if (n === 2 && !selectedMission.value) return
+  if (n === 3 && !checkedPhaseIds.value.size) return
+  if (n === 3) goStep3(); else step.value = n
+}
 function pickMission(m: any) { selectedMission.value = m }
 function pageUrl(id: number) { return window.location.pathname.split('?')[0] + '?mission_id=' + id }
 function goStep3() {
-  for (const id of checkedPhaseIds.value) { initPh(id); for (const e of localEntities.value) { if (!entCfg[id][e.id]) entCfg[id][e.id] = { checked: false, status: 'pending', planned_start: null, planned_end: null, notes: null, auditeurs: [] } } }
-  forceMandatory()
+  for (const id of checkedPhaseIds.value) {
+    initPh(id)
+    for (const e of localEntities.value) if (!entCfg[id][e.id]) entCfg[id][e.id] = emptyCfg()
+  }
+  applyMandatoryPhases()
   if (!activeEntityId.value && localEntities.value.length) activeEntityId.value = localEntities.value[0].id
   step.value = 3
 }
 function selectEntity(eid: number) { activeEntityId.value = eid }
 
-// ── PHASES SELECTION ─────────────────────────────────────────────────────────
-function togglePhaseCheck(p: any, checked: boolean) { if (p.is_mandatory) return; const s = new Set(checkedPhaseIds.value); if (checked) { s.add(p.id); initPh(p.id) } else s.delete(p.id); checkedPhaseIds.value = s }
-function toggleGroupCheck(g: any, checked: boolean) { const s = new Set(checkedPhaseIds.value); for (const p of g.phases) { if (!p.is_mandatory || checked) { if (checked) { s.add(p.id); initPh(p.id) } else s.delete(p.id) }; for (const c of (p.children || [])) { if (!c.is_mandatory || checked) { if (checked) { s.add(c.id); initPh(c.id) } else s.delete(c.id) } } }; checkedPhaseIds.value = s }
-function checkAllPhases() { const s = new Set<number>(); for (const g of localPhases.value) for (const p of g.phases) { s.add(p.id); initPh(p.id); for (const c of (p.children || [])) { s.add(c.id); initPh(c.id) } }; checkedPhaseIds.value = s }
-function uncheckAllPhases() { const s = new Set<number>(); for (const g of localPhases.value) for (const p of g.phases) { if (p.is_mandatory) s.add(p.id); for (const c of (p.children || [])) if (c.is_mandatory) s.add(c.id) }; checkedPhaseIds.value = s }
-function toggleGrp(pt: string) { const s = new Set(openGroups.value); s.has(pt) ? s.delete(pt) : s.add(pt); openGroups.value = s }
+// ── Sélection des phases (étape 2) ───────────────────────────────────────
+function togglePhaseCheck(p: any, checked: boolean) {
+  if (p.is_mandatory || !isProvisioned(p)) return
+  const s = new Set(checkedPhaseIds.value)
+  if (checked) { s.add(p.id); initPh(p.id) } else s.delete(p.id)
+  checkedPhaseIds.value = s
+}
+function toggleGroupCheck(g: any, checked: boolean) {
+  const s = new Set(checkedPhaseIds.value)
+  const apply = (ph: any) => {
+    if (!isProvisioned(ph)) return
+    if (!ph.is_mandatory || checked) { if (checked) { s.add(ph.id); initPh(ph.id) } else s.delete(ph.id) }
+  }
+  for (const p of g.phases) { apply(p); for (const c of (p.children || [])) apply(c) }
+  checkedPhaseIds.value = s
+}
+function checkAllPhases() {
+  const s = new Set<number>()
+  for (const g of localPhases.value) for (const p of g.phases) {
+    if (isProvisioned(p)) { s.add(p.id); initPh(p.id) }
+    for (const c of (p.children || [])) if (isProvisioned(c)) { s.add(c.id); initPh(c.id) }
+  }
+  checkedPhaseIds.value = s
+}
+function uncheckAllPhases() {
+  const s = new Set<number>()
+  for (const g of localPhases.value) for (const p of g.phases) {
+    if (p.is_mandatory && isProvisioned(p)) s.add(p.id)
+    for (const c of (p.children || [])) if (c.is_mandatory && isProvisioned(c)) s.add(c.id)
+  }
+  checkedPhaseIds.value = s
+}
+function toggleGrp(pnum: number) {
+  const s = new Set(openGroups.value)
+  s.has(pnum) ? s.delete(pnum) : s.add(pnum)
+  openGroups.value = s
+}
 function grpAllChk(g: any) { return g.phases.every((p: any) => checkedPhaseIds.value.has(p.id) && (p.children || []).every((c: any) => checkedPhaseIds.value.has(c.id))) }
 function grpPartialChk(g: any) { return !grpAllChk(g) && g.phases.some((p: any) => checkedPhaseIds.value.has(p.id) || (p.children || []).some((c: any) => checkedPhaseIds.value.has(c.id))) }
-function cntChkInGrp(g: any) { let n = 0; for (const p of g.phases) { if (checkedPhaseIds.value.has(p.id)) n++; for (const c of (p.children || [])) if (checkedPhaseIds.value.has(c.id)) n++ }; return n }
+function cntChkInGrp(g: any) {
+  let n = 0
+  for (const p of g.phases) { if (checkedPhaseIds.value.has(p.id)) n++; for (const c of (p.children || [])) if (checkedPhaseIds.value.has(c.id)) n++ }
+  return n
+}
 function cntGrp(g: any) { let n = 0; for (const p of g.phases) { n++; n += p.children?.length || 0 }; return n }
-function forceMandatory() {
-  for (const g of localPhases.value) for (const p of g.phases) {
-    const force = (ph: any) => {
-      if (!ph.is_mandatory) return
-      const s = new Set(checkedPhaseIds.value); s.add(ph.id); checkedPhaseIds.value = s; initPh(ph.id)
-      for (const e of localEntities.value) { if (!entCfg[ph.id][e.id]) entCfg[ph.id][e.id] = { checked: true, status: 'pending', planned_start: null, planned_end: null, notes: null, auditeurs: [] }; else entCfg[ph.id][e.id].checked = true }
-    }
-    force(p); for (const c of (p.children || [])) force(c)
-  }
+
+// ── Configuration par entité (étape 3) ───────────────────────────────────
+function getCfg(pid: number, eid: number) { return entCfg[pid]?.[eid] || emptyCfg() }
+function setCfg(pid: number, eid: number, patch: any) {
+  initPh(pid)
+  if (!entCfg[pid][eid]) entCfg[pid][eid] = emptyCfg()
+  Object.assign(entCfg[pid][eid], patch)
+  const d = new Set(dirty.value); d.add(`${pid}_${eid}`); dirty.value = d
+}
+function isCfgChk(pid: number, eid: number) { return !!getCfg(pid, eid).checked }
+function toggleEntCheck(pid: number, eid: number, checked: boolean) {
+  if (allChkPhases.value.find((p: any) => p.id === pid)?.is_mandatory) return
+  setCfg(pid, eid, { checked })
 }
 
-// ── CONFIG ENTITÉ ─────────────────────────────────────────────────────────────
-function getCfg(pid: number, eid: number) { return entCfg[pid]?.[eid] || { checked: false, status: 'pending', planned_start: null, planned_end: null, notes: null, auditeurs: [] } }
-function setCfg(pid: number, eid: number, patch: any) { initPh(pid); if (!entCfg[pid][eid]) entCfg[pid][eid] = { checked: false, status: 'pending', planned_start: null, planned_end: null, notes: null, auditeurs: [] }; Object.assign(entCfg[pid][eid], patch); const d = new Set(dirty.value); d.add(`${pid}_${eid}`); dirty.value = d }
-function isCfgChk(pid: number, eid: number) { return !!getCfg(pid, eid).checked }
-function toggleEntCheck(pid: number, eid: number, checked: boolean) { if (allChkPhases.value.find((p: any) => p.id === pid)?.is_mandatory) return; setCfg(pid, eid, { checked }) }
-
-// ── AUDITEURS ─────────────────────────────────────────────────────────────────
-function entityAuds(eid: number | null) { if (!eid) return []; const list = localAuds.value[String(eid)] || []; const ord: Record<string, number> = { DM: 1, CM: 2, AS: 3, AJ: 4 }; return [...list].sort((a: any, b: any) => (ord[a.role_code ?? a.role] ?? 9) - (ord[b.role_code ?? b.role] ?? 9)) }
+// ── Auditeurs ─────────────────────────────────────────────────────────────
+const ROLE_ORDER: Record<string, number> = { DM: 1, CM: 2, AS: 3, AJ: 4 }
+function entityAuds(eid: number | null) {
+  if (!eid) return []
+  const list = localAuds.value[String(eid)] || []
+  return [...list].sort((a: any, b: any) => (ROLE_ORDER[a.role_code ?? a.role] ?? 9) - (ROLE_ORDER[b.role_code ?? b.role] ?? 9))
+}
 function isAudChk(pid: number, eid: number, audId: number) { return (getCfg(pid, eid).auditeurs || []).includes(Number(audId)) }
-function toggleAud(pid: number, eid: number, audId: number, checked: boolean) { const list = [...(getCfg(pid, eid).auditeurs || [])].map(Number); const id = Number(audId), idx = list.indexOf(id); if (checked && idx === -1) list.push(id); if (!checked && idx !== -1) list.splice(idx, 1); setCfg(pid, eid, { auditeurs: list }) }
-function selectAllAuds(eid: number) { const auds = entityAuds(eid).map((a: any) => Number(a.auditeur_id)); if (!auds.length) return; for (const ph of allChkPhases.value) { if (isCfgChk(ph.id, eid)) setCfg(ph.id, eid, { auditeurs: [...auds] }) }; showToast('Tous les auditeurs assignés.', 'success') }
+function toggleAud(pid: number, eid: number, audId: number, checked: boolean) {
+  const list = [...(getCfg(pid, eid).auditeurs || [])].map(Number)
+  const id = Number(audId), idx = list.indexOf(id)
+  if (checked && idx === -1) list.push(id)
+  if (!checked && idx !== -1) list.splice(idx, 1)
+  setCfg(pid, eid, { auditeurs: list })
+}
+function selectAllAuds(eid: number) {
+  const auds = entityAuds(eid).map((a: any) => Number(a.auditeur_id))
+  if (!auds.length) return
+  for (const ph of allChkPhases.value) if (isCfgChk(ph.id, eid)) setCfg(ph.id, eid, { auditeurs: [...auds] })
+  showToast('Tous les auditeurs ont été assignés.', 'success')
+}
 
-// ── DATES ─────────────────────────────────────────────────────────────────────
-function prevStart(pid: number, eid: number): string | null { const phases = allChkPhases.value; const idx = phases.findIndex((p: any) => p.id === pid); for (let i = idx - 1; i >= 0; i--) { const c = getCfg(phases[i].id, eid); if (c.checked && c.planned_start) return c.planned_start }; return null }
-function minStart(pid: number, eid: number): string | null { const entityMin = activeEntity.value?.date_debut || null; const prev = prevStart(pid, eid); if (!entityMin && !prev) return null; if (!entityMin) return prev; if (!prev) return entityMin; return prev >= entityMin ? prev : entityMin }
+// ── Dates ─────────────────────────────────────────────────────────────────
+function prevStart(pid: number, eid: number): string | null {
+  const phases = allChkPhases.value
+  const idx = phases.findIndex((p: any) => p.id === pid)
+  for (let i = idx - 1; i >= 0; i--) { const c = getCfg(phases[i].id, eid); if (c.checked && c.planned_start) return c.planned_start }
+  return null
+}
+function minStart(pid: number, eid: number): string | null {
+  const entityMin = activeEntity.value?.date_debut || null
+  const prev = prevStart(pid, eid)
+  if (!entityMin && !prev) return null
+  if (!entityMin) return prev
+  if (!prev) return entityMin
+  return prev >= entityMin ? prev : entityMin
+}
 function onStartChange(pid: number, eid: number, value: string) {
-  const floor = minStart(pid, eid); const validated = (floor && value && value < floor) ? floor : (value || null)
-  const patch: any = { planned_start: validated }; const cfg = getCfg(pid, eid)
+  const floor = minStart(pid, eid)
+  const validated = (floor && value && value < floor) ? floor : (value || null)
+  const patch: any = { planned_start: validated }
+  const cfg = getCfg(pid, eid)
   if (cfg.planned_end && validated && cfg.planned_end < validated) patch.planned_end = null
   setCfg(pid, eid, patch)
-  const phases = allChkPhases.value; const idx = phases.findIndex((p: any) => p.id === pid); if (idx === -1 || !validated) return
+
+  const phases = allChkPhases.value
+  const idx = phases.findIndex((p: any) => p.id === pid)
+  if (idx === -1 || !validated) return
   let prevS = validated
-  for (let i = idx + 1; i < phases.length; i++) { const nc = getCfg(phases[i].id, eid); if (!nc.checked) continue; if (nc.planned_start && nc.planned_start >= prevS) break; if (nc.planned_start) { const np: any = { planned_start: prevS }; if (nc.planned_end && nc.planned_end < prevS) np.planned_end = null; setCfg(phases[i].id, eid, np) }; prevS = getCfg(phases[i].id, eid).planned_start || prevS }
+  for (let i = idx + 1; i < phases.length; i++) {
+    const nc = getCfg(phases[i].id, eid)
+    if (!nc.checked) continue
+    if (nc.planned_start && nc.planned_start >= prevS) break
+    if (nc.planned_start) {
+      const np: any = { planned_start: prevS }
+      if (nc.planned_end && nc.planned_end < prevS) np.planned_end = null
+      setCfg(phases[i].id, eid, np)
+    }
+    prevS = getCfg(phases[i].id, eid).planned_start || prevS
+  }
 }
 function onEndChange(pid: number, eid: number, value: string) { setCfg(pid, eid, { planned_end: value || null }) }
-function phaseDays(pid: number, eid: number): number { const c = getCfg(pid, eid); if (!c.planned_start || !c.planned_end) return 0; const diff = Math.round((new Date(c.planned_end).getTime() - new Date(c.planned_start).getTime()) / 86400000) + 1; return diff > 0 ? diff : 0 }
-function totalJours(eid: number): number { const intervals: { s: string, e: string }[] = []; for (const ph of allChkPhases.value) { const c = getCfg(ph.id, eid); if (!c.checked || !c.planned_start || !c.planned_end || c.planned_end < c.planned_start) continue; intervals.push({ s: c.planned_start, e: c.planned_end }) }; if (!intervals.length) return 0; intervals.sort((a, b) => a.s < b.s ? -1 : 1); const merged: { s: string, e: string }[] = [{ ...intervals[0] }]; for (let i = 1; i < intervals.length; i++) { const cur = intervals[i], last = merged[merged.length - 1]; if (cur.s <= last.e) { if (cur.e > last.e) last.e = cur.e } else merged.push({ ...cur }) }; let total = 0; for (const seg of merged) total += Math.round((new Date(seg.e).getTime() - new Date(seg.s).getTime()) / 86400000) + 1; return total }
-function totalStartDate(eid: number): string | null { let min: string | null = null; for (const ph of allChkPhases.value) { const c = getCfg(ph.id, eid); if (!c.checked || !c.planned_start) continue; if (!min || c.planned_start < min) min = c.planned_start }; return min }
-function totalEndDate(eid: number): string | null { let max: string | null = null; for (const ph of allChkPhases.value) { const c = getCfg(ph.id, eid); if (!c.checked || !c.planned_end) continue; if (!max || c.planned_end > max) max = c.planned_end }; return max }
-function entityDateErrors(eid: number | null) { if (!eid) return []; const entity = localEntities.value.find(e => e.id === eid); const errs: any[] = []; let prevS: string | null = null; for (const ph of allChkPhases.value) { const c = getCfg(ph.id, eid); if (!c.checked) continue; if (prevS && c.planned_start && c.planned_start < prevS) errs.push({ key: `${ph.id}_${eid}_start`, msg: `"${ph.label}" : début < début précédent` }); if (c.planned_start && c.planned_end && c.planned_end < c.planned_start) errs.push({ key: `${ph.id}_${eid}_end`, msg: `"${ph.label}" : fin < début` }); if (c.planned_end && entity?.date_fin && c.planned_end > entity.date_fin) errs.push({ key: `${ph.id}_${eid}_over`, msg: `"${ph.label}" : dépasse la période` }); if (c.planned_start) prevS = c.planned_start }; return errs }
+function phaseDays(pid: number, eid: number): number {
+  const c = getCfg(pid, eid)
+  if (!c.planned_start || !c.planned_end) return 0
+  const diff = Math.round((new Date(c.planned_end).getTime() - new Date(c.planned_start).getTime()) / 86400000) + 1
+  return diff > 0 ? diff : 0
+}
+function totalJours(eid: number): number {
+  const intervals: { s: string, e: string }[] = []
+  for (const ph of allChkPhases.value) {
+    const c = getCfg(ph.id, eid)
+    if (!c.checked || !c.planned_start || !c.planned_end || c.planned_end < c.planned_start) continue
+    intervals.push({ s: c.planned_start, e: c.planned_end })
+  }
+  if (!intervals.length) return 0
+  intervals.sort((a, b) => a.s < b.s ? -1 : 1)
+  const merged: { s: string, e: string }[] = [{ ...intervals[0] }]
+  for (let i = 1; i < intervals.length; i++) {
+    const cur = intervals[i], last = merged[merged.length - 1]
+    if (cur.s <= last.e) { if (cur.e > last.e) last.e = cur.e } else merged.push({ ...cur })
+  }
+  let total = 0
+  for (const seg of merged) total += Math.round((new Date(seg.e).getTime() - new Date(seg.s).getTime()) / 86400000) + 1
+  return total
+}
+function totalStartDate(eid: number): string | null {
+  let min: string | null = null
+  for (const ph of allChkPhases.value) { const c = getCfg(ph.id, eid); if (c.checked && c.planned_start && (!min || c.planned_start < min)) min = c.planned_start }
+  return min
+}
+function totalEndDate(eid: number): string | null {
+  let max: string | null = null
+  for (const ph of allChkPhases.value) { const c = getCfg(ph.id, eid); if (c.checked && c.planned_end && (!max || c.planned_end > max)) max = c.planned_end }
+  return max
+}
+function entityDateErrors(eid: number | null) {
+  if (!eid) return []
+  const entity = localEntities.value.find(e => e.id === eid)
+  const errs: any[] = []
+  let prevS: string | null = null
+  for (const ph of allChkPhases.value) {
+    const c = getCfg(ph.id, eid)
+    if (!c.checked) continue
+    if (prevS && c.planned_start && c.planned_start < prevS) errs.push({ key: `${ph.id}_${eid}_start`, msg: `« ${ph.label} » : début antérieur à la phase précédente` })
+    if (c.planned_start && c.planned_end && c.planned_end < c.planned_start) errs.push({ key: `${ph.id}_${eid}_end`, msg: `« ${ph.label} » : fin antérieure au début` })
+    if (c.planned_end && entity?.date_fin && c.planned_end > entity.date_fin) errs.push({ key: `${ph.id}_${eid}_over`, msg: `« ${ph.label} » : dépasse la période de la mission` })
+    if (c.planned_start) prevS = c.planned_start
+  }
+  return errs
+}
 function hasStartErr(pid: number, eid: number) { return entityDateErrors(eid).some(e => e.key === `${pid}_${eid}_start`) }
-function entityProgress(eid: number) { const a = allChkPhases.value; if (!a.length) return 0; return Math.round(a.filter((p: any) => getCfg(p.id, eid).checked).length / a.length * 100) }
+function entityProgress(eid: number) {
+  const a = allChkPhases.value
+  if (!a.length) return 0
+  return Math.round(a.filter((p: any) => getCfg(p.id, eid).checked).length / a.length * 100)
+}
 function entityHasDirty(eid: number) { return [...dirty.value].some(k => k.endsWith('_' + eid)) }
-function cascadeEntity(eid: number) { const entity = localEntities.value.find(e => e.id === eid); let prevS: string | null = entity?.date_debut || null; for (const ph of allChkPhases.value) { const c = getCfg(ph.id, eid); if (!c.checked) continue; if (prevS && (!c.planned_start || c.planned_start < prevS)) { const np: any = { planned_start: prevS }; if (c.planned_end && c.planned_end < prevS) np.planned_end = null; setCfg(ph.id, eid, np) }; prevS = getCfg(ph.id, eid).planned_start || prevS }; showToast('Dates alignées (cascade).', 'success') }
-function clearEntity(eid: number) { for (const ph of allChkPhases.value) if (getCfg(ph.id, eid).checked) setCfg(ph.id, eid, { planned_start: null, planned_end: null, auditeurs: [], notes: null, status: 'pending' }); showToast('Entité réinitialisée.', 'warning') }
-function buildFormUrl(urlPath: string, missionId: number): string { if (!urlPath) return '#'; const sep = urlPath.includes('?') ? '&' : '?'; return urlPath + sep + 'mission_id=' + missionId }
+function cascadeEntity(eid: number) {
+  const entity = localEntities.value.find(e => e.id === eid)
+  let prevS: string | null = entity?.date_debut || null
+  for (const ph of allChkPhases.value) {
+    const c = getCfg(ph.id, eid)
+    if (!c.checked) continue
+    if (prevS && (!c.planned_start || c.planned_start < prevS)) {
+      const np: any = { planned_start: prevS }
+      if (c.planned_end && c.planned_end < prevS) np.planned_end = null
+      setCfg(ph.id, eid, np)
+    }
+    prevS = getCfg(ph.id, eid).planned_start || prevS
+  }
+  showToast('Dates alignées en cascade.', 'success')
+}
+function clearEntity(eid: number) {
+  for (const ph of allChkPhases.value) if (getCfg(ph.id, eid).checked) setCfg(ph.id, eid, { planned_start: null, planned_end: null, auditeurs: [], notes: null, status: 'pending' })
+  showToast('Entité réinitialisée.', 'warning')
+}
+function buildFormUrl(urlPath: string, missionId: number): string {
+  if (!urlPath) return '#'
+  const sep = urlPath.includes('?') ? '&' : '?'
+  return urlPath + sep + 'mission_id=' + missionId
+}
 
-// ── DRAG & DROP ───────────────────────────────────────────────────────────────
-function canDrop(t: any) { if (!draggingPhase.value) return false; return draggingPhase.value.level > 1 && t.level > 1 && draggingPhase.value._parentId === t._parentId }
-function onDragStart(e: DragEvent, ph: any, _g: any) { if (ph.level <= 1) { e.preventDefault(); return }; draggingId.value = ph.id; draggingPhase.value = ph; e.dataTransfer!.effectAllowed = 'move'; e.dataTransfer!.setData('text/plain', String(ph.id)) }
-function onDragOver(e: DragEvent, t: any) { if (!canDrop(t)) { dragOverId.value = null; return }; e.preventDefault(); dragOverId.value = t.id }
+// ── Réordonnancement des sous-phases (glisser-déposer) ───────────────────
+function canDrop(t: any) { return !!draggingPhase.value && draggingPhase.value.level > 1 && t.level > 1 && draggingPhase.value._parentId === t._parentId }
+function onDragStart(e: DragEvent, ph: any, _g: any) {
+  if (ph.level <= 1) { e.preventDefault(); return }
+  draggingId.value = ph.id; draggingPhase.value = ph
+  e.dataTransfer!.effectAllowed = 'move'
+  e.dataTransfer!.setData('text/plain', String(ph.id))
+}
+function onDragOver(e: DragEvent, t: any) {
+  if (!canDrop(t)) { dragOverId.value = null; return }
+  e.preventDefault(); dragOverId.value = t.id
+}
 function onDragLeave() { dragOverId.value = null }
 function onDrop(e: DragEvent, t: any, g: any) {
   e.preventDefault(); dragOverId.value = null
   if (!canDrop(t)) { draggingId.value = null; draggingPhase.value = null; return }
-  const dragId = draggingId.value!, parentId = draggingPhase.value._parentId; draggingId.value = null; draggingPhase.value = null
-  const gi = localPhases.value.findIndex((gr: any) => gr.phase_type === g.phase_type); if (gi === -1) return
-  const np = JSON.parse(JSON.stringify(localPhases.value)); const parent = np[gi].phases.find((p: any) => p.id === parentId); if (!parent?.children) return
-  const fi = parent.children.findIndex((c: any) => c.id === dragId); const ti = parent.children.findIndex((c: any) => c.id === t.id); if (fi === -1 || ti === -1) return
-  const [m] = parent.children.splice(fi, 1); parent.children.splice(ti, 0, m); localPhases.value = np; showToast('Ordre mis à jour.', 'success')
+  const dragId = draggingId.value!, parentId = draggingPhase.value._parentId
+  draggingId.value = null; draggingPhase.value = null
+
+  const gi = localPhases.value.findIndex((gr: any) => gr.phase_num === g.phase_num)
+  if (gi === -1) return
+  const np = JSON.parse(JSON.stringify(localPhases.value))
+  const parent = np[gi].phases.find((p: any) => p.id === parentId)
+  if (!parent?.children) return
+  const fi = parent.children.findIndex((c: any) => c.id === dragId)
+  const ti = parent.children.findIndex((c: any) => c.id === t.id)
+  if (fi === -1 || ti === -1) return
+  const [moved] = parent.children.splice(fi, 1)
+  parent.children.splice(ti, 0, moved)
+  localPhases.value = np
+  showToast('Ordre mis à jour pour cette session.', 'success')
 }
 
-// ── NOTES ─────────────────────────────────────────────────────────────────────
+// ── Notes ─────────────────────────────────────────────────────────────────
 function openNote(pid: number, eid: number) { noteModal.value = { show: true, phaseId: pid, entityId: eid, draft: getCfg(pid, eid).notes || '' } }
 function closeNote() { noteModal.value.show = false }
-function saveNote() { const { phaseId, entityId, draft } = noteModal.value; if (phaseId && entityId) setCfg(phaseId, entityId, { notes: draft || null }); closeNote() }
-
-// ── SAUVEGARDE ────────────────────────────────────────────────────────────────
-async function saveAll() {
-  if (saving.value || !dirty.value.size) return; saving.value = true; warnings.value = []
-  const payload = []
-  for (const k of dirty.value) {
-    const [pid, eid] = k.split('_').map(Number); const c = getCfg(pid, eid)
-    const phase = allChkPhases.value.find((p: any) => p.id === pid) as any
-    const formCode = phase?.form_code || null; const formUrl = formCode && forms.value[formCode] ? forms.value[formCode].url_path : null
-    payload.push({ phase_id: pid, entity_id: eid, checked: c.checked, status: c.status || 'pending', planned_start: c.planned_start || null, planned_end: c.planned_end || null, notes: c.notes || null, auditeur_ids: c.auditeurs || [], form_url: formUrl })
-  }
-  try {
-    const csrf = (document.querySelector('meta[name="csrf-token"]') as HTMLMetaElement)?.content || ''
-    const res = await fetch(saveUrl(localMission.value.id), { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrf, 'Accept': 'application/json' }, body: JSON.stringify({ assignments: payload }) })
-    const json = await res.json()
-    if (!res.ok) { showToast('Erreur : ' + (json?.error || json?.message || 'Erreur serveur'), 'error'); return }
-    dirty.value = new Set()
-    if (json.warnings?.length) { warnings.value = json.warnings; showWarnings.value = true; showToast(`${json.upserted} sauvegardé(s) — ${json.warnings.length} avertissement(s).`, 'warning') }
-    else showToast(`${json.upserted} affectation(s) sauvegardée(s), ${json.deleted} supprimée(s).`, 'success')
-  } catch (e: any) { showToast('Erreur réseau : ' + e.message, 'error') }
-  finally { saving.value = false }
+function saveNote() {
+  const { phaseId, entityId, draft } = noteModal.value
+  if (phaseId && entityId) setCfg(phaseId, entityId, { notes: draft || null })
+  closeNote()
 }
 
-// ── SYNC DDMPARAM ─────────────────────────────────────────────────────────────
+// ── Sauvegarde ────────────────────────────────────────────────────────────
+async function saveAll() {
+  if (saving.value || !dirty.value.size) return
+  saving.value = true
+  warnings.value = []
+
+  const payload = []
+  for (const k of dirty.value) {
+    const [pid, eid] = k.split('_').map(Number)
+    const c = getCfg(pid, eid)
+    const phase = allChkPhases.value.find((p: any) => p.id === pid) as any
+    const formCode = phase?.form_code || null
+    const formUrl = formCode && forms.value[formCode] ? forms.value[formCode].url_path : null
+    payload.push({
+      phase_id: pid, entity_id: eid, checked: c.checked, status: c.status || 'pending',
+      planned_start: c.planned_start || null, planned_end: c.planned_end || null,
+      notes: c.notes || null, auditeur_ids: c.auditeurs || [], form_url: formUrl,
+    })
+  }
+
+  try {
+    const csrf = (document.querySelector('meta[name="csrf-token"]') as HTMLMetaElement)?.content || ''
+    const res = await fetch(saveUrl(localMission.value.id), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrf, 'Accept': 'application/json' },
+      body: JSON.stringify({ assignments: payload }),
+    })
+    const json = await res.json()
+    if (!res.ok) { showToast('Erreur : ' + (json?.error || json?.message || 'Erreur serveur'), 'error'); return }
+
+    dirty.value = new Set()
+    if (json.warnings?.length) {
+      warnings.value = json.warnings; showWarnings.value = true
+      showToast(`${json.upserted} sauvegardé(s) — ${json.warnings.length} avertissement(s).`, 'warning')
+    } else {
+      showToast(`${json.upserted} affectation(s) sauvegardée(s), ${json.deleted} supprimée(s).`, 'success')
+    }
+  } catch (e: any) {
+    showToast('Erreur réseau : ' + e.message, 'error')
+  } finally {
+    saving.value = false
+  }
+}
+
+// ── Synchronisation ddmparam ─────────────────────────────────────────────
 async function syncPhasesFromDdm() {
   if (!localMission.value?.mission_type_id) { showToast('Aucun type de mission associé.', 'warning'); return }
   syncing.value = true; syncResult.value = null
   try {
     const csrf = (document.querySelector('meta[name="csrf-token"]') as HTMLMetaElement)?.content || ''
-    const res  = await fetch(`/m/audit.core/api/mission-phases/sync-labels/${localMission.value.mission_type_id}`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrf, 'Accept': 'application/json' } })
+    const res  = await fetch(`/m/audit.core/api/mission-phases/sync-labels/${localMission.value.mission_type_id}`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrf, 'Accept': 'application/json' },
+    })
     const json = await res.json()
-    syncResult.value   = json; showSyncResult.value = true
+    syncResult.value = json; showSyncResult.value = true
     if (json.success) {
       showToast(json.message, (json.updated > 0 || json.created > 0) ? 'success' : 'warning')
       if (json.updated > 0 || json.created > 0) await reloadPhases()
-    } else { showToast(json.error || json.message || 'Erreur sync', 'error') }
-  } catch (e: any) { showToast('Erreur réseau : ' + e.message, 'error') }
-  finally { syncing.value = false }
+    } else {
+      showToast(json.error || json.message || 'Erreur lors de la synchronisation', 'error')
+    }
+  } catch (e: any) {
+    showToast('Erreur réseau : ' + e.message, 'error')
+  } finally {
+    syncing.value = false
+  }
 }
 
 async function reloadPhases() {
-  if (!localMission.value?.mission_type_id) return; loadingData.value = true
+  if (!localMission.value?.mission_type_id) return
+  loadingData.value = true
   try {
     const csrf = (document.querySelector('meta[name="csrf-token"]') as HTMLMetaElement)?.content || ''
     const res  = await fetch(`/m/audit.core/api/mission-phases/by-type/${localMission.value.mission_type_id}`, { headers: { 'Accept': 'application/json', 'X-CSRF-TOKEN': csrf } })
     const json = await res.json()
-    if (json.success && json.phases) { localPhases.value = json.phases; openGroups.value = new Set(json.phases.map((g: any) => g.phase_type)); showToast('Phases rechargées.', 'success') }
-    else window.location.reload()
-  } catch { window.location.reload() }
-  finally { loadingData.value = false }
+    if (json.success && json.phases) {
+      localPhases.value = json.phases
+      openGroups.value = new Set(json.phases.map((g: any) => g.phase_num))
+      showToast('Phases rechargées.', 'success')
+    } else {
+      window.location.reload()
+    }
+  } catch {
+    window.location.reload()
+  } finally {
+    loadingData.value = false
+  }
 }
 
-// ── HELPERS UI ────────────────────────────────────────────────────────────────
-let _tt: ReturnType<typeof setTimeout>
-function showToast(msg: string, type = 'success') { toast.value = { show: true, type, message: msg }; clearTimeout(_tt); _tt = setTimeout(() => { toast.value.show = false }, 5000) }
+// ── Utilitaires d'affichage ───────────────────────────────────────────────
+let toastTimer: ReturnType<typeof setTimeout>
+function showToast(message: string, type = 'success') {
+  toast.value = { show: true, type, message }
+  clearTimeout(toastTimer)
+  toastTimer = setTimeout(() => { toast.value.show = false }, 5000)
+}
 function fmt(d?: string) { if (!d) return '—'; try { const [y, m, dd] = d.split('-'); return `${dd}/${m}/${y}` } catch { return d } }
 function dateDiffDays(a: string, b: string) { return Math.round((new Date(b).getTime() - new Date(a).getTime()) / 86400000) + 1 }
 function stLbl(s: string) { return ({ planifiee: 'Planifiée', en_cours: 'En cours', terminee: 'Terminée', annulee: 'Annulée' } as any)[s] || s }
-function stChip(s: string) { return ({ planifiee: 'ca', en_cours: 'cb', terminee: 'cg', annulee: 'cr' } as any)[s] || 'cm' }
-function ptColor(t: string) { return ({ PREPARATION: '#7C3AED', VERIFICATION: '#0369A1', CONCLUSION: '#059669', SUIVI: '#D97706', AUTRE: '#64748B' } as any)[t] || '#94a3b8' }
-function ptIcon(t: string) { return ({ PREPARATION: '⚙', VERIFICATION: '🔍', CONCLUSION: '📋', SUIVI: '📊', AUTRE: '•' } as any)[t] || '•' }
-function ptLabel(t: string) { return ({ PREPARATION: 'Préparation', VERIFICATION: 'Vérification', CONCLUSION: 'Conclusion', SUIVI: 'Suivi', AUTRE: 'Autre' } as any)[t] || (t || 'Autre') }
-function rCls(r: string) { return ({ DM: 'r-dm', CM: 'r-cm', AS: 'r-as', AJ: 'r-aj' } as any)[r] || 'r-oth' }
-function initials(full: string) { if (!full) return '?'; const p = full.trim().split(/\s+/); return (p.length === 1 ? (p[0][0] || '?') : (p[0][0] + p[p.length - 1][0])).toUpperCase() }
+function stChip(s: string) { return ({ planifiee: 'pa-badge--info', en_cours: 'pa-badge--primary', terminee: 'pa-badge--success', annulee: 'pa-badge--danger' } as any)[s] || 'pa-badge--neutral' }
+
+// ── Style des groupes de phases ──────────────────────────────────────────
+// Clé numérique stable (phase_num, 1..5, vient de ddmparam). Choix de
+// PRÉSENTATION uniquement (couleur/icône) — le libellé affiché (group.label
+// / grp.label) vient dynamiquement de ddmparam.audit_type_forms.phase_label
+// côté backend et varie légitimement selon le type d'audit.
+function ptColor(n: number) { return ({ 1: '#7C3AED', 2: '#2563EB', 3: '#059669', 4: '#D97706', 5: '#0D9488' } as any)[n] || '#94a3b8' }
+function ptIcon(n: number) { return ({ 1: 'ti ti-tool', 2: 'ti ti-search', 3: 'ti ti-report', 4: 'ti ti-chart-line', 5: 'ti ti-bulb' } as any)[n] || 'ti ti-dots' }
+
+function rCls(r: string) { return ({ DM: 'is-dm', CM: 'is-cm', AS: 'is-as', AJ: 'is-aj' } as any)[r] || 'is-other' }
+function initials(full: string) {
+  if (!full) return '?'
+  const parts = full.trim().split(/\s+/)
+  return (parts.length === 1 ? (parts[0][0] || '?') : (parts[0][0] + parts[parts.length - 1][0])).toUpperCase()
+}
 </script>
 
 <style scoped>
-:root { --b:#2563eb;--g:#059669;--a:#d97706;--r:#dc2626;--bd:#e2e8f0;--sf:#f8fafc;--ink:#0f172a;--m:#64748b; }
-.paf-shell{display:flex;flex-direction:column;height:calc(100vh - 68px);overflow:hidden;border-radius:8px;border:1px solid #e2e8f0;background:#f8fafc;}
-.paf-bar{display:flex;align-items:center;gap:10px;padding:6px 12px;background:#fff;border-bottom:1px solid #e2e8f0;flex-shrink:0;min-height:46px;}
-.paf-steps{display:flex;gap:3px;flex-shrink:0;}
-.step-pill{display:flex;align-items:center;gap:5px;padding:3px 10px 3px 3px;border-radius:20px;border:1px solid #e2e8f0;background:#f8fafc;font-size:.7rem;font-weight:700;color:#64748b;cursor:pointer;transition:all .15s;}
-.step-pill:hover{border-color:#bfdbfe;color:#2563eb;}.step-pill.active{background:#2563eb;color:#fff;border-color:#2563eb;}.step-pill.done{background:#ecfdf5;color:#059669;border-color:#6ee7b7;}
-.sp-num{width:18px;height:18px;border-radius:50%;background:rgba(255,255,255,.2);display:flex;align-items:center;justify-content:center;font-size:.6rem;font-weight:800;}
-.step-pill.done .sp-num{background:#059669;color:#fff;}
-.paf-mission-info{display:flex;align-items:center;gap:6px;padding-left:10px;border-left:1px solid #e2e8f0;flex:1;min-width:0;overflow:hidden;}
-.mi-color-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;}.mi-code{font-family:monospace;font-size:.68rem;font-weight:800;background:#dbeafe;color:#1d4ed8;padding:2px 7px;border-radius:4px;flex-shrink:0;}
-.mi-lib{font-size:.76rem;font-weight:600;color:#334155;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-.mi-badge{font-size:.62rem;font-weight:700;background:#f1f5f9;color:#64748b;padding:1px 6px;border-radius:10px;white-space:nowrap;flex-shrink:0;}
-.mi-count{font-size:.68rem;color:#64748b;display:flex;align-items:center;gap:3px;flex-shrink:0;}
-.paf-bar-right{display:flex;align-items:center;gap:6px;flex-shrink:0;}
-.loading-pill{display:flex;align-items:center;gap:5px;font-size:.72rem;color:#64748b;background:#f1f5f9;padding:3px 8px;border-radius:10px;}
-.act{display:inline-flex;align-items:center;gap:4px;padding:4px 11px;border-radius:6px;font-size:.73rem;font-weight:700;border:1px solid transparent;cursor:pointer;transition:all .12s;white-space:nowrap;}
-.act.sm{padding:3px 9px;font-size:.68rem;}.act.full{width:100%;justify-content:center;}
-.act-ghost{background:#f8fafc;border-color:#e2e8f0;color:#334155;}.act-ghost:hover{background:#eff6ff;border-color:#bfdbfe;color:#2563eb;}
-.act-primary{background:#2563eb;color:#fff;}.act-primary:hover:not(:disabled){background:#1d4ed8;}.act-primary:disabled{opacity:.35;cursor:not-allowed;}
-.act-save{background:#059669;color:#fff;}.act-save:hover:not(:disabled){background:#047857;}.act-save:disabled{opacity:.35;cursor:not-allowed;}
-.act-danger-ghost{background:#fef2f2;border-color:#fecaca;color:#dc2626;}.act-danger-ghost:hover{background:#dc2626;color:#fff;}
-/* ── DDMParam Sync ── */
-.act-ddm{background:linear-gradient(135deg,#7c3aed,#4f46e5);color:#fff;border:none;}
-.act-ddm:hover:not(:disabled){opacity:.88;}.act-ddm:disabled{opacity:.4;cursor:not-allowed;}
-.spin-ddm{width:10px;height:10px;border:2px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:sp .6s linear infinite;display:inline-block;}
-.sync-panel{flex-shrink:0;border-bottom:1px solid transparent;font-size:.72rem;animation:slideDown .2s ease;}
-@keyframes slideDown{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:none}}
-.sp-ok{background:#f0fdf4;border-color:#a7f3d0;}.sp-err{background:#fef2f2;border-color:#fecaca;}
-.sp-head{display:flex;align-items:center;gap:8px;padding:6px 12px;flex-wrap:wrap;}
-.sp-ok .sp-head i{color:#059669;}.sp-err .sp-head i{color:#dc2626;}
-.sp-msg{font-weight:600;color:#1f2d3d;flex-shrink:0;}.sp-stats{display:flex;gap:6px;flex-wrap:wrap;}
-.sp-stat{display:inline-flex;align-items:center;gap:3px;padding:1px 7px;border-radius:999px;font-weight:700;font-size:.62rem;}
-.sp-stat.up{background:#eff6ff;color:#1d4ed8;}.sp-stat.cr{background:#f0fdf4;color:#059669;}.sp-stat.sk{background:#f8fafc;color:#64748b;}
-.sp-close{margin-left:auto;background:none;border:none;color:#94a3b8;cursor:pointer;font-size:.8rem;flex-shrink:0;}
-.sp-body{padding:4px 12px 8px;display:flex;flex-direction:column;gap:3px;max-height:160px;overflow-y:auto;border-top:1px dashed #e2e8f0;}
-.sp-change{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:.67rem;padding:2px 0;}
-.sp-code{font-family:monospace;font-size:.6rem;font-weight:800;background:#ede9fe;color:#7c3aed;padding:1px 5px;border-radius:4px;flex-shrink:0;}
-.sp-act{font-size:.58rem;font-weight:800;padding:1px 5px;border-radius:4px;flex-shrink:0;}.sa-cr{background:#d1fae5;color:#065f46;}.sa-up{background:#dbeafe;color:#1d4ed8;}
-.sp-lbl{color:#334155;font-weight:600;}.sp-field{display:inline-flex;align-items:center;gap:4px;}.sp-fname{color:#64748b;font-style:italic;}.sp-old{color:#dc2626;font-size:.6rem;}.sp-arrow{color:#94a3b8;}.sp-new{color:#059669;}
-/* ── dirty badge ── */
-.dirty-badge{display:inline-flex;align-items:center;gap:3px;font-size:.68rem;font-weight:700;background:#fffbeb;color:#d97706;border:1px solid #fde68a;padding:2px 8px;border-radius:20px;}
-.db-dot{width:6px;height:6px;border-radius:50%;background:#d97706;animation:blink 1.4s infinite;}
-.spin{width:10px;height:10px;border:2px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:sp .6s linear infinite;display:inline-block;}
-@keyframes sp{to{transform:rotate(360deg)}}@keyframes blink{0%,100%{opacity:1}50%{opacity:.2}}
-.paf-content{flex:1;overflow:hidden;display:flex;flex-direction:column;}
-/* ── Étape 1 ── */
-.s1-toolbar{display:flex;align-items:center;gap:8px;padding:7px 12px;background:#fff;border-bottom:1px solid #e2e8f0;flex-shrink:0;flex-wrap:wrap;}
-.tb-title{font-size:.78rem;font-weight:700;color:#334155;display:flex;align-items:center;gap:5px;flex-shrink:0;}.tb-title em{font-style:normal;color:#2563eb;}
-.tb-search{display:flex;align-items:center;gap:5px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:0 8px;flex:1;min-width:160px;max-width:300px;}
-.tb-search input{border:none;background:none;font-size:.76rem;padding:4px 0;flex:1;outline:none;color:#0f172a;}
-.tb-pills{display:flex;gap:3px;}.pill{padding:3px 9px;border-radius:12px;border:1px solid #e2e8f0;background:#fff;color:#64748b;font-size:.68rem;font-weight:700;cursor:pointer;transition:all .12s;}
-.pill:hover{border-color:#bfdbfe;color:#2563eb;}.pill.active{background:#2563eb;color:#fff;border-color:#2563eb;}
-.s1-table-wrap{flex:1;overflow-y:auto;}
-.s1-footer{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:7px 12px;background:#f0f9ff;border-top:1px solid #bae6fd;flex-shrink:0;}
-.sf-info{font-size:.76rem;color:#334155;display:flex;align-items:center;gap:4px;}
-.prog-bar-wrap{display:flex;align-items:center;gap:5px;min-width:80px;}.prog-bar{flex:1;height:5px;background:#e2e8f0;border-radius:3px;overflow:hidden;}
-.prog-fill{height:100%;background:#059669;border-radius:3px;transition:width .3s;}.prog-pct{font-size:.65rem;font-weight:700;color:#059669;white-space:nowrap;}
-/* ── Étape 2 ── */
-.s2-layout{flex-direction:row;padding:10px;gap:10px;overflow:hidden;min-height:0;}
-.s2-side{width:220px;flex-shrink:0;background:#fff;border-radius:8px;border:1px solid #e2e8f0;display:flex;flex-direction:column;padding:10px;gap:10px;overflow-y:auto;min-height:0;max-height:100%;}
-.side-block{display:flex;flex-direction:column;gap:3px;}.side-label{font-size:.57rem;text-transform:uppercase;letter-spacing:.06em;color:#94a3b8;font-weight:700;}
-.side-code{font-family:monospace;font-size:.78rem;color:#2563eb;font-weight:800;}.side-lib{font-size:.75rem;font-weight:600;color:#334155;}
-.side-type-badge{display:inline-flex;align-items:center;gap:5px;color:#fff;padding:.3rem .7rem;border-radius:8px;font-size:.75rem;font-weight:700;}
-.badge-count{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:50%;background:#2563eb;color:#fff;font-size:.58rem;font-weight:800;margin-left:4px;}
-.forms-mini-list{display:flex;flex-direction:column;gap:2px;}.form-mini-item{display:flex;align-items:center;gap:4px;font-size:.68rem;padding:2px 4px;border-radius:4px;background:#f8fafc;}
-.fmi-child{padding-left:12px;color:#94a3b8;}.fmi-icon{font-size:.72rem;color:#64748b;flex-shrink:0;}.fmi-code{font-family:monospace;font-size:.6rem;font-weight:800;color:#2563eb;flex-shrink:0;}
-.fmi-label{font-size:.65rem;color:#334155;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}.form-mini-more{font-size:.65rem;color:#94a3b8;font-style:italic;padding:2px 4px;}
-.forms-source-badge{display:flex;align-items:center;gap:3px;font-size:.6rem;color:#94a3b8;margin-top:2px;}
-.no-forms-hint{display:flex;align-items:center;gap:5px;font-size:.72rem;color:#d97706;background:#fffbeb;border:1px solid #fde68a;border-radius:6px;padding:6px 8px;}
-.side-counter{display:flex;align-items:baseline;gap:3px;}.sc-n{font-size:1.4rem;font-weight:800;color:#2563eb;line-height:1;}.sc-t{font-size:.8rem;color:#94a3b8;}
-.sc-bar{height:4px;background:#e2e8f0;border-radius:3px;overflow:hidden;}.sc-fill{height:100%;background:#2563eb;border-radius:3px;transition:width .3s;}
-.side-btns{display:flex;gap:4px;}.side-submit{margin-top:auto;}
-.s2-groups-wrap{flex:1;display:flex;flex-direction:column;min-height:0;overflow:hidden;}
-.s2-groups{flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:5px;min-height:0;padding-bottom:8px;}
-.loading-phases{flex:1;display:flex;align-items:center;justify-content:center;gap:8px;color:#64748b;font-size:.82rem;}
-.empty-phases{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;color:#94a3b8;}
-.phases-search-bar{display:flex;align-items:center;gap:6px;background:#fff;border:1px solid #e2e8f0;border-radius:6px;padding:4px 10px;flex-shrink:0;}
-.phase-search-input{border:none;background:none;font-size:.78rem;flex:1;outline:none;}
-.pg-card{background:#fff;border:1px solid #e2e8f0;border-radius:8px;overflow:hidden;}
-.pg-head{display:flex;align-items:center;gap:6px;padding:6px 10px;background:#f8fafc;cursor:pointer;user-select:none;}
-.pg-head input[type=checkbox]{width:13px;height:13px;accent-color:#2563eb;cursor:pointer;flex-shrink:0;}.pg-icon{font-size:.8rem;}
-.pg-name{flex:1;font-size:.76rem;font-weight:700;}.pg-cnt{font-size:.65rem;color:#94a3b8;}.pg-arr{color:#94a3b8;font-size:.78rem;}
-.pg-body{border-top:1px solid #f1f5f9;}
-.ph-row{display:flex;align-items:center;gap:6px;padding:4px 10px;border-bottom:1px solid #f8fafc;cursor:pointer;transition:background .1s;min-height:30px;}
-.ph-row:last-child{border-bottom:none;}.ph-row:hover{background:#f8fbff;}.ph-parent{background:#fafafa;}.ph-child{padding-left:26px;background:#fdfdff;}.ph-row.mandatory{background:#fffbeb;}
-.ph-row input[type=checkbox]{width:13px;height:13px;accent-color:#2563eb;cursor:pointer;flex-shrink:0;}
-.conn{color:#cbd5e1;font-family:monospace;font-size:.72rem;flex-shrink:0;}.ph-code{font-family:monospace;font-size:.6rem;color:#94a3b8;background:#f1f5f9;padding:1px 4px;border-radius:3px;flex-shrink:0;}
-.ph-name{flex:1;font-size:.76rem;font-weight:500;color:#334155;}.ph-form-badge{display:inline-flex;align-items:center;gap:3px;font-size:.6rem;font-weight:700;color:#2563eb;background:#dbeafe;padding:1px 5px;border-radius:4px;flex-shrink:0;}
-/* ── Étape 3 ── */
-.s3-layout{background:#fff;}
-.ent-tabs{display:flex;overflow-x:auto;gap:2px;padding:5px 10px 0;background:#f1f5f9;border-bottom:2px solid #e2e8f0;flex-shrink:0;scrollbar-width:none;}
-.ent-tabs::-webkit-scrollbar{display:none;}
-.et{display:flex;align-items:center;gap:4px;padding:5px 11px;border:1px solid transparent;border-bottom:none;border-radius:6px 6px 0 0;background:rgba(255,255,255,.5);font-size:.7rem;font-weight:600;color:#64748b;cursor:pointer;white-space:nowrap;flex-shrink:0;transition:all .12s;}
-.et:hover{background:rgba(255,255,255,.9);color:#334155;}.et.active{background:#fff;color:#2563eb;border-color:#e2e8f0;border-bottom-color:#fff;margin-bottom:-2px;}
-.et-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0;}.d-gray{background:#e2e8f0;}.d-green{background:#059669;}.d-amber{background:#d97706;animation:blink 1.4s infinite;}
-.et-name{font-weight:700;}.et-sub{font-size:.6rem;color:#94a3b8;font-weight:400;}.et-pct{font-size:.6rem;font-weight:800;color:#059669;}
-.ent-bar{display:flex;align-items:center;gap:7px;flex-wrap:wrap;padding:5px 12px;background:#eff6ff;border-bottom:1px solid #bfdbfe;flex-shrink:0;}
-.ent-bar-right{margin-left:auto;display:flex;gap:5px;}
-.err-pill{display:inline-flex;align-items:center;gap:4px;font-size:.68rem;font-weight:700;color:#dc2626;background:#fef2f2;border:1px solid #fecaca;padding:2px 7px;border-radius:20px;}
-.warn-pill{display:inline-flex;align-items:center;gap:4px;font-size:.68rem;font-weight:700;color:#d97706;background:#fffbeb;border:1px solid #fde68a;padding:2px 7px;border-radius:20px;cursor:pointer;}
-.warnings-panel{background:#fffbeb;border-bottom:1px solid #fde68a;flex-shrink:0;max-height:120px;overflow-y:auto;}
-.wp-head{display:flex;align-items:center;gap:6px;padding:5px 12px;font-size:.75rem;font-weight:700;color:#d97706;}.wp-close{margin-left:auto;background:none;border:none;cursor:pointer;color:#d97706;}
-.wp-list{padding:0 12px 8px 30px;font-size:.72rem;color:#92400e;}.wp-list li{margin-bottom:2px;}
-.aff-wrap{flex:1;overflow:auto;}
-.aff-tbl{width:100%;border-collapse:collapse;font-size:.73rem;}
-.aff-tbl thead th{position:sticky;top:0;z-index:5;background:#0f172a;padding:6px 5px;font-size:.58rem;font-weight:800;text-transform:uppercase;letter-spacing:.04em;color:#475569;border-bottom:1px solid #1e293b;white-space:nowrap;text-align:center;}
-.col-grip{width:20px;}.col-code{width:82px;text-align:left !important;padding-left:8px !important;}.col-lbl{min-width:150px;text-align:left !important;}
-.col-form{width:90px;text-align:center !important;}.col-aff{width:40px;}.col-status{width:90px;}.col-date{width:110px;text-align:left !important;}
-.col-date small{display:block;font-size:.5rem;color:#d97706;font-weight:400;text-transform:none;letter-spacing:0;}
-.col-days{width:38px;text-align:center !important;color:#7c3aed !important;}.col-aud{width:44px;min-width:40px;padding:3px 2px !important;}.col-note{width:30px;}
-.aud-hd{display:flex;flex-direction:column;align-items:center;gap:2px;}
-.aud-av{width:20px;height:20px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:.5rem;font-weight:800;}
-.aud-rc{font-size:.48rem;font-weight:700;padding:0 3px;border-radius:3px;text-transform:uppercase;}
-.tr-sep td{padding:4px 8px;background:#f1f5f9;border-bottom:1px solid #e2e8f0;font-size:.7rem;}.sep-icon{margin-right:4px;}.sep-cnt{margin-left:6px;}
-.td-status{padding:2px 3px !important;}.status-sel{width:100%;border:1px solid #e2e8f0;border-radius:4px;padding:2px 4px;font-size:.65rem;background:#fafafa;color:#334155;outline:none;}
-.status-sel:disabled{opacity:.3;cursor:not-allowed;}
-.td-form{text-align:center;padding:3px 4px !important;}
-.form-link{display:inline-flex;align-items:center;gap:3px;font-size:.65rem;font-weight:700;color:#2563eb;background:#dbeafe;padding:1px 5px;border-radius:4px;text-decoration:none;transition:all .15s;}
-.form-link:hover{background:#2563eb;color:#fff;}.form-tag{display:inline-flex;align-items:center;gap:3px;font-size:.65rem;color:#64748b;background:#f1f5f9;padding:1px 5px;border-radius:4px;}
-.td-days{text-align:center;padding:3px 2px !important;white-space:nowrap;}
-.days-badge{display:inline-flex;align-items:center;padding:1px 5px;border-radius:8px;font-size:.62rem;font-weight:800;font-family:monospace;}
-.db-ok{background:#ede9fe;color:#6d28d9;border:1px solid #ddd6fe;}.db-err{background:#fee2e2;color:#dc2626;border:1px solid #fecaca;}
-.db-total{background:#7c3aed;color:#fff;border:none;font-size:.7rem;padding:2px 7px;}.days-empty{font-size:.62rem;color:#cbd5e1;}
-.tr-total td{padding:6px 5px;background:#0f172a;border-top:2px solid #334155;vertical-align:middle;}
-.total-lbl{display:inline-flex;align-items:center;gap:5px;font-size:.68rem;font-weight:800;color:#94a3b8;letter-spacing:.06em;text-transform:uppercase;}
-.total-dates{text-align:left;}.total-range{font-family:monospace;font-size:.68rem;color:#7dd3fc;font-weight:700;}.total-days-cell{text-align:center;}.total-hint{color:#475569;font-size:.6rem;font-style:italic;}
-.tr-locked td{padding:4px 5px;background:#f8fafc;border-bottom:1px solid #f1f5f9;vertical-align:middle;}.lock-ic{font-size:.76rem;color:#cbd5e1;}
-.locked-lbl{font-size:.73rem;font-weight:600;color:#94a3b8;}.locked-hint{font-size:.63rem;color:#94a3b8;font-style:italic;margin-left:5px;}
-.tr-ph td{padding:4px 5px;border-bottom:1px solid #f1f5f9;background:#fff;vertical-align:middle;transition:background .1s;}
-.tr-ph:hover td{background:#fafbfe;}.tr-on td{background:#f0fdf4 !important;}.tr-sub td{background:#fcfcff;}.tr-sub:hover td{background:#f2f6ff;}.tr-warn td{background:#fef2f2 !important;}
-.tr-dov{outline:2px dashed #2563eb;outline-offset:-1px;}.tr-drag{opacity:.25;}
-.td-grip{width:20px;text-align:center;}.grip-ic{color:#cbd5e1;cursor:grab;font-size:.82rem;}.grip-ic:hover{color:#2563eb;}
-.td-code{padding-left:6px !important;white-space:nowrap;}.sub-conn{color:#cbd5e1;font-family:monospace;margin-right:2px;font-size:.72rem;}.td-lbl{max-width:180px;}
-.ph-lbl-txt{font-size:.75rem;font-weight:500;color:#334155;display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
-.prev-hint{display:flex;align-items:center;gap:2px;font-size:.58rem;color:#d97706;margin-top:1px;}
-.td-aff{text-align:center;}.tog{display:inline-flex;cursor:pointer;}.tog input{display:none;}
-.tog-track{width:26px;height:14px;background:#e2e8f0;border-radius:7px;position:relative;transition:background .18s;}
-.tog-track::after{content:'';position:absolute;top:2px;left:2px;width:10px;height:10px;background:#fff;border-radius:50%;box-shadow:0 1px 2px rgba(0,0,0,.2);transition:transform .18s;}
-.tog input:checked + .tog-track{background:#059669;}.tog input:checked + .tog-track::after{transform:translateX(12px);}.tog input:disabled + .tog-track{opacity:.3;cursor:not-allowed;}
-.td-date{padding:3px 4px !important;}
-.di{width:100%;border:1px solid #e2e8f0;border-radius:4px;padding:2px 4px;font-family:monospace;font-size:.67rem;color:#334155;background:#fafafa;outline:none;transition:border-color .12s,box-shadow .12s;}
-.di:focus{border-color:#2563eb;box-shadow:0 0 0 2px rgba(37,99,235,.1);background:#fff;}.di.di-on{border-color:#bfdbfe;color:#1d4ed8;font-weight:700;}.di.di-err{border-color:#fecaca !important;background:#fef2f2 !important;}.di:disabled{opacity:.25;cursor:not-allowed;}
-.td-aud{text-align:center;padding:3px 2px !important;}.td-aud-on{background:rgba(5,150,105,.04) !important;}
-.aud-tog{display:inline-flex;cursor:pointer;}.aud-tog input{display:none;}
-.aud-face{width:22px;height:22px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:.56rem;font-weight:700;transition:all .12s;}
-.af-off{border:2px dashed #d1d5db;background:#fff;}.af-off:hover{border-color:#9ca3af;}.af-on{border:2px solid;}
-.aud-tog input:disabled ~ .aud-face{opacity:.25;cursor:not-allowed;}
-.td-note{text-align:center;padding:3px 2px !important;}
-.note-btn{width:22px;height:22px;border-radius:4px;border:1px solid #e2e8f0;background:#f8fafc;color:#94a3b8;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;font-size:.75rem;transition:all .12s;}
-.note-btn:hover:not(:disabled){background:#eff6ff;color:#2563eb;border-color:#bfdbfe;}.nb-fill{background:#fffbeb;color:#d97706;border-color:#fde68a;}.note-btn:disabled{opacity:.2;cursor:not-allowed;}
-.no-ent{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#94a3b8;font-size:.82rem;gap:6px;background:#fff;}
-.r-dm{background:#fef3c7;color:#b45309;border-color:#fde68a !important;}.r-cm{background:#dbeafe;color:#1d4ed8;border-color:#bfdbfe !important;}
-.r-as{background:#d1fae5;color:#065f46;border-color:#6ee7b7 !important;}.r-aj{background:#ede9fe;color:#6d28d9;border-color:#ddd6fe !important;}.r-oth{background:#f1f5f9;color:#64748b;border-color:#e2e8f0 !important;}
-.g-table{width:100%;border-collapse:collapse;font-size:.76rem;}
-.g-table thead th{position:sticky;top:0;z-index:2;background:#f1f5f9;padding:6px 8px;font-size:.62rem;font-weight:800;text-transform:uppercase;letter-spacing:.04em;color:#64748b;border-bottom:1px solid #e2e8f0;white-space:nowrap;}
-.g-table tbody tr{border-bottom:1px solid #f8fafc;cursor:pointer;transition:background .1s;}.g-table tbody tr:hover td{background:#f0f7ff;}.g-table tbody tr.sel td{background:#eff6ff;}
-.g-table td{padding:5px 8px;vertical-align:middle;color:#334155;}
-.ell{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}.max240{max-width:240px;}.max160{max-width:160px;}.mono{font-family:monospace;}.small{font-size:.7rem;}.muted{color:#64748b;}.blue{color:#2563eb;}.green{color:#059669;}.amber{color:#d97706;}
-.row-btn{display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:5px;background:#eff6ff;color:#2563eb;border:1px solid #bfdbfe;text-decoration:none;transition:all .12s;}
-.row-btn:hover{background:#2563eb;color:#fff;}.empty-row{text-align:center;padding:28px !important;color:#94a3b8;font-size:.78rem;}
-.chip{display:inline-flex;align-items:center;padding:1px 6px;border-radius:10px;font-size:.6rem;font-weight:700;white-space:nowrap;}
-.cb{background:#dbeafe;color:#1d4ed8;}.cg{background:#d1fae5;color:#065f46;}.ca{background:#fef3c7;color:#b45309;}.cr{background:#fee2e2;color:#991b1b;}.cm{background:#f1f5f9;color:#64748b;}.cv{background:#ede9fe;color:#6d28d9;}
-.paf-toast{position:fixed;bottom:18px;right:18px;z-index:9999;display:flex;align-items:center;gap:7px;padding:9px 14px;border-radius:8px;font-size:.78rem;font-weight:500;box-shadow:0 8px 30px rgba(0,0,0,.18);max-width:420px;}
-.paf-toast button{background:none;border:none;color:inherit;cursor:pointer;margin-left:4px;opacity:.7;}
-.toast-success{background:#064e3b;color:#6ee7b7;}.toast-warning{background:#78350f;color:#fcd34d;}.toast-error{background:#7f1d1d;color:#fca5a5;}
-.tf-enter-active,.tf-leave-active{transition:all .22s;}.tf-enter-from,.tf-leave-to{opacity:0;transform:translateY(8px);}
-.modal-bg{position:fixed;inset:0;background:rgba(10,15,30,.5);backdrop-filter:blur(3px);z-index:1000;display:flex;align-items:center;justify-content:center;}
-.modal-box{background:#fff;border-radius:10px;width:420px;max-width:94vw;box-shadow:0 20px 60px rgba(0,0,0,.2);border:1px solid #e2e8f0;overflow:hidden;}
-.modal-hd{display:flex;align-items:center;gap:6px;padding:11px 14px;font-size:.84rem;font-weight:700;color:#0f172a;border-bottom:1px solid #f8fafc;}
-.modal-close{margin-left:auto;background:none;border:none;color:#64748b;cursor:pointer;}
-.modal-ta{width:100%;border:none;padding:12px 14px;font-family:inherit;font-size:.8rem;color:#334155;resize:vertical;outline:none;min-height:100px;}
-.modal-ft{display:flex;justify-content:flex-end;gap:7px;padding:9px 14px;border-top:1px solid #f8fafc;}
-.aff-wrap::-webkit-scrollbar,.s1-table-wrap::-webkit-scrollbar,.s2-groups::-webkit-scrollbar,.s2-side::-webkit-scrollbar{width:4px;height:4px;}
-.aff-wrap::-webkit-scrollbar-track,.s1-table-wrap::-webkit-scrollbar-track,.s2-groups::-webkit-scrollbar-track,.s2-side::-webkit-scrollbar-track{background:transparent;}
-.aff-wrap::-webkit-scrollbar-thumb,.s1-table-wrap::-webkit-scrollbar-thumb,.s2-groups::-webkit-scrollbar-thumb,.s2-side::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:2px;}
-@media(max-width:768px){.paf-shell{height:100vh;border-radius:0;}.s2-layout{flex-direction:column;overflow-y:auto;}.s2-side{width:100%;flex-direction:row;flex-wrap:wrap;max-height:200px;}.s2-groups-wrap{min-height:300px;}}
+/* ══════════════════════════════════════════════════════════
+   DESIGN TOKENS
+══════════════════════════════════════════════════════════ */
+.pa-app {
+  --ink: #0f172a;
+  --body: #334155;
+  --muted: #64748b;
+  --faint: #94a3b8;
+  --border: #e2e8f0;
+  --surface: #ffffff;
+  --surface-alt: #f8fafc;
+  --surface-sunken: #f1f5f9;
+  --primary: #2563eb;
+  --primary-dark: #1d4ed8;
+  --primary-soft: #eff6ff;
+  --success: #059669;
+  --success-soft: #ecfdf5;
+  --warning: #d97706;
+  --warning-soft: #fffbeb;
+  --danger: #dc2626;
+  --danger-soft: #fef2f2;
+  --violet: #7c3aed;
+  --violet-soft: #f5f3ff;
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --shadow-sm: 0 1px 2px rgba(15, 23, 42, .06);
+  --shadow-md: 0 6px 20px rgba(15, 23, 42, .10);
+
+  display: flex; flex-direction: column;
+  height: calc(100vh - 68px);
+  overflow: hidden;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border);
+  background: var(--surface-alt);
+  font-size: 13px;
+  color: var(--body);
+}
+
+/* ══════════════════════════════════════════════════════════
+   EN-TÊTE
+══════════════════════════════════════════════════════════ */
+.pa-header {
+  display: flex; align-items: center; gap: 14px;
+  padding: 8px 14px; min-height: 52px; flex-shrink: 0;
+  background: var(--surface); border-bottom: 1px solid var(--border);
+}
+.pa-steps { display: flex; align-items: center; gap: 0; list-style: none; margin: 0; padding: 0; flex-shrink: 0; }
+.pa-steps li { display: flex; align-items: center; }
+.pa-step {
+  display: flex; align-items: center; gap: 7px;
+  padding: 5px 12px 5px 5px; border-radius: 20px;
+  border: 1px solid var(--border); background: var(--surface-alt);
+  font-size: .74rem; font-weight: 700; color: var(--muted);
+  cursor: pointer; transition: all .15s;
+}
+.pa-step:hover:not(:disabled) { border-color: #bfdbfe; color: var(--primary); }
+.pa-step:disabled { cursor: not-allowed; opacity: .55; }
+.pa-step.is-active { background: var(--primary); color: #fff; border-color: var(--primary); }
+.pa-step.is-done { background: var(--success-soft); color: var(--success); border-color: #a7f3d0; }
+.pa-step-mark {
+  width: 20px; height: 20px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: .65rem; font-weight: 800; background: rgba(255, 255, 255, .25);
+  flex-shrink: 0;
+}
+.pa-step.is-done .pa-step-mark { background: var(--success); color: #fff; }
+.pa-step-sep { width: 18px; height: 1px; background: var(--border); margin: 0 4px; flex-shrink: 0; }
+
+.pa-mission-chip {
+  display: flex; align-items: center; gap: 8px;
+  padding-left: 14px; border-left: 1px solid var(--border);
+  flex: 1; min-width: 0; overflow: hidden;
+}
+.pa-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.pa-mission-code {
+  font-family: ui-monospace, monospace; font-size: .72rem; font-weight: 800;
+  background: var(--primary-soft); color: var(--primary-dark);
+  padding: 2px 8px; border-radius: 5px; flex-shrink: 0;
+}
+.pa-mission-title { font-size: .8rem; font-weight: 600; color: var(--body); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pa-mission-meta { font-size: .72rem; color: var(--muted); display: flex; align-items: center; gap: 4px; flex-shrink: 0; margin-left: auto; }
+.pa-mission-meta i { margin-right: 2px; }
+
+.pa-header-actions { display: flex; align-items: center; gap: 7px; flex-shrink: 0; }
+.pa-loading-tag { display: flex; align-items: center; gap: 6px; font-size: .74rem; color: var(--muted); background: var(--surface-sunken); padding: 4px 10px; border-radius: 20px; }
+
+/* ── Boutons ── */
+.pa-btn {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 6px 13px; border-radius: var(--radius-sm);
+  font-size: .76rem; font-weight: 700; border: 1px solid transparent;
+  cursor: pointer; transition: all .12s; white-space: nowrap; line-height: 1.1;
+}
+.pa-btn--sm { padding: 4px 10px; font-size: .71rem; }
+.pa-btn--block { width: 100%; justify-content: center; }
+.pa-btn--icon { padding: 6px 9px; }
+.pa-btn:disabled { opacity: .4; cursor: not-allowed; }
+.pa-btn--ghost { background: var(--surface-alt); border-color: var(--border); color: var(--body); }
+.pa-btn--ghost:hover:not(:disabled) { background: var(--primary-soft); border-color: #bfdbfe; color: var(--primary-dark); }
+.pa-btn--primary { background: var(--primary); color: #fff; }
+.pa-btn--primary:hover:not(:disabled) { background: var(--primary-dark); }
+.pa-btn--success { background: var(--success); color: #fff; }
+.pa-btn--success:hover:not(:disabled) { background: #047857; }
+.pa-btn--danger-ghost { background: var(--danger-soft); border-color: #fecaca; color: var(--danger); }
+.pa-btn--danger-ghost:hover:not(:disabled) { background: var(--danger); color: #fff; }
+.pa-btn--ddm { background: linear-gradient(135deg, var(--violet), var(--primary-dark)); color: #fff; border: none; }
+.pa-btn--ddm:hover:not(:disabled) { filter: brightness(1.08); }
+
+.pa-icon-btn { background: none; border: none; color: var(--faint); cursor: pointer; padding: 2px; display: inline-flex; }
+.pa-icon-btn:hover { color: var(--body); }
+
+.pa-spinner { width: 11px; height: 11px; border: 2px solid rgba(37, 99, 235, .25); border-top-color: var(--primary); border-radius: 50%; animation: pa-spin .6s linear infinite; display: inline-block; }
+.pa-spinner--light { border-color: rgba(255, 255, 255, .35); border-top-color: #fff; }
+@keyframes pa-spin { to { transform: rotate(360deg); } }
+@keyframes pa-blink { 0%, 100% { opacity: 1; } 50% { opacity: .25; } }
+
+/* ── Badges / chips ── */
+.pa-badge { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 20px; font-size: .68rem; font-weight: 700; white-space: nowrap; border: none; }
+.pa-badge--clickable { cursor: pointer; }
+.pa-badge--neutral { background: var(--surface-sunken); color: var(--muted); }
+.pa-badge--primary { background: var(--primary-soft); color: var(--primary-dark); }
+.pa-badge--info { background: #e0f2fe; color: #0369a1; }
+.pa-badge--success { background: var(--success-soft); color: var(--success); }
+.pa-badge--warning { background: var(--warning-soft); color: var(--warning); border: 1px solid #fde68a; }
+.pa-badge--danger { background: var(--danger-soft); color: var(--danger); border: 1px solid #fecaca; }
+.pa-badge--violet { background: var(--violet-soft); color: var(--violet); }
+.pa-badge-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--warning); animation: pa-blink 1.4s infinite; }
+.pa-chip { display: inline-flex; align-items: center; gap: 3px; padding: 1px 8px; border-radius: 20px; font-size: .64rem; font-weight: 700; }
+.pa-chip--info { background: var(--primary-soft); color: var(--primary-dark); }
+.pa-chip--success { background: var(--success-soft); color: var(--success); }
+.pa-chip--neutral { background: var(--surface-sunken); color: var(--muted); }
+
+/* ══════════════════════════════════════════════════════════
+   PANNEAU DE SYNCHRO
+══════════════════════════════════════════════════════════ */
+.pa-sync-panel { flex-shrink: 0; font-size: .74rem; animation: pa-slide-down .18s ease; border-bottom: 1px solid transparent; }
+@keyframes pa-slide-down { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
+.pa-sync-panel.is-ok { background: var(--success-soft); border-color: #a7f3d0; }
+.pa-sync-panel.is-error { background: var(--danger-soft); border-color: #fecaca; }
+.pa-sync-head { display: flex; align-items: center; gap: 9px; padding: 7px 14px; flex-wrap: wrap; }
+.pa-sync-panel.is-ok .pa-sync-head i:first-child { color: var(--success); }
+.pa-sync-panel.is-error .pa-sync-head i:first-child { color: var(--danger); }
+.pa-sync-msg { font-weight: 700; color: var(--ink); }
+.pa-sync-stats { display: flex; gap: 6px; flex-wrap: wrap; }
+.pa-sync-panel .pa-icon-btn { margin-left: auto; }
+.pa-sync-list { list-style: none; margin: 0; padding: 4px 14px 9px; display: flex; flex-direction: column; gap: 3px; max-height: 150px; overflow-y: auto; border-top: 1px dashed var(--border); }
+.pa-sync-list li { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; font-size: .68rem; padding: 2px 0; }
+.pa-sync-code { font-family: ui-monospace, monospace; font-size: .62rem; font-weight: 800; background: var(--violet-soft); color: var(--violet); padding: 1px 6px; border-radius: 4px; }
+.pa-sync-label { color: var(--body); font-weight: 600; }
+.pa-sync-diff { display: inline-flex; align-items: center; gap: 4px; }
+.pa-sync-diff em { color: var(--muted); font-style: italic; }
+.pa-sync-diff s { color: var(--danger); font-size: .62rem; }
+.pa-sync-diff strong { color: var(--success); }
+
+/* ══════════════════════════════════════════════════════════
+   CORPS
+══════════════════════════════════════════════════════════ */
+.pa-body { flex: 1; overflow: hidden; display: flex; flex-direction: column; }
+.pa-panel-state { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 9px; color: var(--faint); font-size: .84rem; background: var(--surface); text-align: center; padding: 24px; }
+.pa-panel-state i { font-size: 1.7rem; opacity: .5; }
+.pa-panel-state--empty { background: transparent; }
+
+/* ── Étape 1 : liste des missions ── */
+.pa-toolbar { display: flex; align-items: center; gap: 10px; padding: 9px 14px; background: var(--surface); border-bottom: 1px solid var(--border); flex-shrink: 0; flex-wrap: wrap; }
+.pa-toolbar-title { font-size: .84rem; font-weight: 700; color: var(--ink); display: flex; align-items: center; gap: 6px; margin: 0; flex-shrink: 0; }
+.pa-toolbar-count { color: var(--primary); font-weight: 800; }
+.pa-search { display: flex; align-items: center; gap: 6px; background: var(--surface-alt); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 0 10px; flex: 1; min-width: 180px; max-width: 340px; transition: border-color .12s; }
+.pa-search:focus-within { border-color: var(--primary); background: var(--surface); }
+.pa-search i { color: var(--faint); font-size: .8rem; }
+.pa-search input { border: none; background: none; font-size: .78rem; padding: 6px 0; flex: 1; outline: none; color: var(--ink); }
+.pa-search--phases { max-width: none; margin-bottom: 8px; flex-shrink: 0; }
+.pa-filter-group { display: flex; gap: 4px; }
+.pa-filter { padding: 4px 11px; border-radius: 20px; border: 1px solid var(--border); background: var(--surface); color: var(--muted); font-size: .71rem; font-weight: 700; cursor: pointer; transition: all .12s; }
+.pa-filter:hover { border-color: #bfdbfe; color: var(--primary); }
+.pa-filter.is-active { background: var(--primary); color: #fff; border-color: var(--primary); }
+
+.pa-table-scroll { flex: 1; overflow-y: auto; }
+.pa-table { width: 100%; border-collapse: collapse; font-size: .78rem; }
+.pa-table thead th { position: sticky; top: 0; z-index: 2; background: var(--surface-sunken); padding: 8px 10px; font-size: .64rem; font-weight: 800; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); border-bottom: 1px solid var(--border); white-space: nowrap; text-align: left; }
+.pa-th-action { width: 42px; }
+.pa-row { border-bottom: 1px solid var(--surface-alt); cursor: pointer; transition: background .1s; }
+.pa-row:hover td { background: var(--primary-soft); }
+.pa-row.is-selected td { background: #dbeafe; }
+.pa-row td { padding: 7px 10px; vertical-align: middle; color: var(--body); }
+.pa-code-tag { font-family: ui-monospace, monospace; font-size: .74rem; font-weight: 800; color: var(--primary-dark); background: var(--primary-soft); padding: 1px 6px; border-radius: 4px; }
+.pa-row-link { display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 26px; border-radius: var(--radius-sm); background: var(--primary-soft); color: var(--primary); border: 1px solid #bfdbfe; text-decoration: none; transition: all .12s; }
+.pa-row-link:hover { background: var(--primary); color: #fff; }
+.pa-empty-row { text-align: center; padding: 34px !important; color: var(--faint); font-size: .82rem; }
+.pa-empty-row i { display: block; font-size: 1.6rem; margin-bottom: 6px; opacity: .5; }
+
+.pa-progress { display: flex; align-items: center; gap: 6px; min-width: 90px; }
+.pa-progress-track { flex: 1; height: 5px; background: var(--surface-sunken); border-radius: 3px; overflow: hidden; }
+.pa-progress-fill { height: 100%; background: var(--success); border-radius: 3px; transition: width .3s; }
+.pa-progress-pct { font-size: .68rem; font-weight: 700; color: var(--success); white-space: nowrap; }
+
+.pa-confirm-bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 9px 14px; background: var(--primary-soft); border-top: 1px solid #bfdbfe; flex-shrink: 0; }
+.pa-confirm-info { font-size: .78rem; color: var(--body); display: flex; align-items: center; gap: 5px; }
+
+/* ── Étape 2 : sélection des phases ── */
+.pa-body--split { flex-direction: row; padding: 12px; gap: 12px; overflow: hidden; min-height: 0; }
+.pa-sidebar { width: 240px; flex-shrink: 0; background: var(--surface); border-radius: var(--radius-lg); border: 1px solid var(--border); display: flex; flex-direction: column; padding: 14px; gap: 14px; overflow-y: auto; min-height: 0; }
+.pa-side-block { display: flex; flex-direction: column; gap: 4px; }
+.pa-side-label { font-size: .62rem; text-transform: uppercase; letter-spacing: .06em; color: var(--faint); font-weight: 800; }
+.pa-side-code { font-family: ui-monospace, monospace; font-size: .82rem; color: var(--primary); font-weight: 800; }
+.pa-side-title { font-size: .78rem; font-weight: 600; color: var(--body); margin: 0; }
+.pa-side-sub { font-size: .7rem; color: var(--muted); margin: 0; }
+.pa-audit-badge { display: inline-flex; align-items: center; gap: 6px; color: #fff; padding: 6px 11px; border-radius: var(--radius-sm); font-size: .76rem; font-weight: 700; }
+.pa-count-pill { display: inline-flex; align-items: center; justify-content: center; width: 17px; height: 17px; border-radius: 50%; background: var(--primary); color: #fff; font-size: .58rem; font-weight: 800; margin-left: 4px; }
+.pa-forms-preview { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.pa-forms-preview li { display: flex; align-items: center; gap: 5px; font-size: .7rem; padding: 3px 5px; border-radius: 5px; background: var(--surface-alt); }
+.pa-forms-preview li.is-child { padding-left: 14px; color: var(--faint); }
+.pa-forms-preview li i { color: var(--muted); flex-shrink: 0; font-size: .74rem; }
+.pa-forms-preview li code { font-family: ui-monospace, monospace; font-size: .62rem; font-weight: 800; color: var(--primary-dark); flex-shrink: 0; }
+.pa-forms-preview li span { font-size: .68rem; color: var(--body); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pa-side-more { font-size: .68rem; color: var(--faint); font-style: italic; margin: 0; padding: 2px 5px; }
+.pa-side-source { display: flex; align-items: center; gap: 4px; font-size: .62rem; color: var(--faint); margin: 4px 0 0; }
+.pa-hint { display: flex; align-items: center; gap: 6px; font-size: .74rem; border-radius: var(--radius-sm); padding: 7px 9px; margin: 0; }
+.pa-hint--warning { color: var(--warning); background: var(--warning-soft); border: 1px solid #fde68a; }
+.pa-counter { display: flex; align-items: baseline; gap: 3px; }
+.pa-counter-n { font-size: 1.5rem; font-weight: 800; color: var(--primary); line-height: 1; }
+.pa-counter-t { font-size: .82rem; color: var(--faint); }
+.pa-track { height: 5px; background: var(--surface-sunken); border-radius: 3px; overflow: hidden; }
+.pa-track-fill { height: 100%; background: var(--primary); border-radius: 3px; transition: width .3s; }
+.pa-side-actions { display: flex; gap: 5px; }
+
+.pa-phase-panel { flex: 1; display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
+.pa-phase-groups { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; min-height: 0; padding-bottom: 10px; }
+.pa-phase-group { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-md); overflow: hidden; box-shadow: var(--shadow-sm); }
+.pa-phase-group-head { display: flex; align-items: center; gap: 8px; padding: 8px 12px; background: var(--surface-alt); cursor: pointer; user-select: none; border: none; width: 100%; text-align: left; border-left: 3px solid var(--pt-color); }
+.pa-phase-group-icon { font-size: .84rem; color: var(--pt-color); }
+.pa-phase-group-name { flex: 1; font-size: .8rem; font-weight: 700; color: var(--pt-color); }
+.pa-phase-group-count { font-size: .68rem; color: var(--faint); font-weight: 600; }
+.pa-phase-group-chevron { color: var(--faint); font-size: .8rem; }
+.pa-phase-group-body { border-top: 1px solid var(--surface-alt); }
+.pa-phase-row { display: flex; align-items: center; gap: 8px; padding: 6px 12px; border-bottom: 1px solid var(--surface-alt); cursor: pointer; transition: background .1s; min-height: 34px; }
+.pa-phase-row:last-child { border-bottom: none; }
+.pa-phase-row:hover { background: var(--surface-alt); }
+.pa-phase-row.is-mandatory { background: var(--warning-soft); }
+.pa-phase-row.is-unprovisioned { opacity: .62; }
+.pa-phase-row--child { padding-left: 30px; }
+.pa-connector { color: var(--border); font-family: ui-monospace, monospace; font-size: .78rem; flex-shrink: 0; }
+.pa-phase-code { font-family: ui-monospace, monospace; font-size: .64rem; color: var(--muted); background: var(--surface-sunken); padding: 1px 5px; border-radius: 4px; flex-shrink: 0; }
+.pa-phase-name { flex: 1; font-size: .78rem; font-weight: 500; color: var(--body); }
+.pa-form-tag { display: inline-flex; align-items: center; gap: 3px; font-size: .64rem; font-weight: 700; color: var(--primary-dark); background: var(--primary-soft); padding: 2px 6px; border-radius: 4px; flex-shrink: 0; }
+.pa-checkbox { width: 14px; height: 14px; accent-color: var(--primary); cursor: pointer; flex-shrink: 0; }
+.pa-checkbox:disabled { cursor: not-allowed; }
+
+/* ── Étape 3 : tableau d'affectation ── */
+.pa-body--assign { background: var(--surface); }
+.pa-entity-tabs { display: flex; overflow-x: auto; gap: 3px; padding: 7px 14px 0; background: var(--surface-sunken); border-bottom: 2px solid var(--border); flex-shrink: 0; scrollbar-width: none; }
+.pa-entity-tabs::-webkit-scrollbar { display: none; }
+.pa-entity-tab { display: flex; align-items: center; gap: 5px; padding: 6px 13px; border: 1px solid transparent; border-bottom: none; border-radius: 8px 8px 0 0; background: rgba(255, 255, 255, .55); font-size: .72rem; font-weight: 600; color: var(--muted); cursor: pointer; white-space: nowrap; flex-shrink: 0; transition: all .12s; }
+.pa-entity-tab:hover { background: rgba(255, 255, 255, .95); color: var(--body); }
+.pa-entity-tab.is-active { background: var(--surface); color: var(--primary); border-color: var(--border); border-bottom-color: var(--surface); margin-bottom: -2px; }
+.pa-entity-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+.pa-entity-dot.is-gray { background: var(--border); }
+.pa-entity-dot.is-green { background: var(--success); }
+.pa-entity-dot.is-amber { background: var(--warning); animation: pa-blink 1.4s infinite; }
+.pa-entity-name { font-weight: 700; }
+.pa-entity-range { font-size: .62rem; color: var(--faint); font-weight: 400; }
+.pa-entity-pct { font-size: .62rem; font-weight: 800; color: var(--success); }
+
+.pa-entity-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 7px 14px; background: var(--primary-soft); border-bottom: 1px solid #bfdbfe; flex-shrink: 0; }
+.pa-entity-bar-actions { margin-left: auto; display: flex; gap: 5px; }
+.pa-warnings { background: var(--warning-soft); border-bottom: 1px solid #fde68a; flex-shrink: 0; max-height: 130px; overflow-y: auto; }
+.pa-warnings-head { display: flex; align-items: center; gap: 7px; padding: 6px 14px; font-size: .78rem; font-weight: 700; color: var(--warning); }
+.pa-warnings-head .pa-icon-btn { margin-left: auto; color: var(--warning); }
+.pa-warnings ul { list-style: none; margin: 0; padding: 0 14px 9px 32px; font-size: .74rem; color: #92400e; }
+.pa-warnings li { margin-bottom: 3px; list-style: disc; }
+
+.pa-assign-scroll { flex: 1; overflow: auto; }
+.pa-assign-table { width: 100%; border-collapse: collapse; font-size: .74rem; }
+.pa-assign-table thead th { position: sticky; top: 0; z-index: 5; background: var(--ink); padding: 7px 6px; font-size: .6rem; font-weight: 800; text-transform: uppercase; letter-spacing: .04em; color: #94a3b8; border-bottom: 1px solid #1e293b; white-space: nowrap; text-align: center; }
+.pa-th-left { text-align: left !important; }
+.pa-col-grip { width: 20px; }
+.pa-col-code { width: 84px; padding-left: 10px !important; }
+.pa-col-label { min-width: 160px; }
+.pa-col-form { width: 92px; }
+.pa-col-toggle { width: 42px; }
+.pa-col-status { width: 96px; }
+.pa-col-date { width: 112px; }
+.pa-col-date small { display: block; font-size: .52rem; color: #fbbf24; font-weight: 400; text-transform: none; letter-spacing: 0; }
+.pa-col-days { width: 42px; color: #c4b5fd !important; }
+.pa-col-aud { width: 46px; min-width: 42px; padding: 4px 2px !important; }
+.pa-col-note { width: 32px; }
+
+.pa-aud-head { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+.pa-aud-avatar { width: 21px; height: 21px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: .52rem; font-weight: 800; }
+.pa-aud-role { font-size: .5rem; font-weight: 700; padding: 0 3px; border-radius: 3px; text-transform: uppercase; }
+
+.pa-row-sep td { padding: 5px 10px; background: var(--surface-sunken); border-bottom: 1px solid var(--border); font-size: .72rem; }
+.pa-row-sep i { margin-right: 5px; }
+.pa-row-sep span { margin-left: 6px; }
+.pa-td-status { padding: 3px !important; }
+.pa-select { width: 100%; border: 1px solid var(--border); border-radius: 4px; padding: 3px 4px; font-size: .66rem; background: var(--surface-alt); color: var(--body); outline: none; }
+.pa-select:disabled { opacity: .35; cursor: not-allowed; }
+.pa-td-form { text-align: center; padding: 3px 4px !important; }
+.pa-form-link { display: inline-flex; align-items: center; gap: 3px; font-size: .66rem; font-weight: 700; color: var(--primary-dark); background: var(--primary-soft); padding: 2px 6px; border-radius: 4px; text-decoration: none; transition: all .15s; }
+.pa-form-link:hover { background: var(--primary); color: #fff; }
+.pa-td-days { text-align: center; padding: 3px 2px !important; white-space: nowrap; }
+.pa-days-badge { display: inline-flex; align-items: center; padding: 1px 6px; border-radius: 8px; font-size: .64rem; font-weight: 800; font-family: ui-monospace, monospace; }
+.pa-days-badge.is-ok { background: var(--violet-soft); color: #6d28d9; border: 1px solid #ddd6fe; }
+.pa-days-badge.is-error { background: var(--danger-soft); color: var(--danger); border: 1px solid #fecaca; }
+.pa-days-badge.is-total { background: var(--violet); color: #fff; border: none; font-size: .72rem; padding: 3px 8px; }
+
+.pa-row-total td { padding: 7px 6px; background: var(--ink); border-top: 2px solid #334155; vertical-align: middle; }
+.pa-total-label { display: inline-flex; align-items: center; gap: 5px; font-size: .7rem; font-weight: 800; color: #94a3b8; letter-spacing: .06em; text-transform: uppercase; }
+.pa-total-dates { text-align: left; }
+.pa-total-range { font-family: ui-monospace, monospace; font-size: .7rem; color: #7dd3fc; font-weight: 700; }
+.pa-total-hint { color: #64748b; font-size: .62rem; font-style: italic; }
+
+.pa-row-locked td { padding: 5px 6px; background: var(--surface-alt); border-bottom: 1px solid var(--surface-alt); vertical-align: middle; }
+.pa-lock-icon { font-size: .78rem; color: var(--border); }
+.pa-locked-label { font-size: .74rem; font-weight: 600; color: var(--faint); }
+.pa-locked-hint { font-size: .64rem; color: var(--faint); font-style: italic; margin-left: 6px; }
+
+.pa-row-phase td { padding: 5px 6px; border-bottom: 1px solid var(--surface-alt); background: var(--surface); vertical-align: middle; transition: background .1s; }
+.pa-row-phase:hover td { background: #fafbfe; }
+.pa-row-phase.is-active td { background: var(--success-soft) !important; }
+.pa-row-phase.is-child td { background: #fcfcff; }
+.pa-row-phase.is-child:hover td { background: #f2f6ff; }
+.pa-row-phase.has-warning td { background: var(--danger-soft) !important; }
+.pa-row-phase.is-dragover { outline: 2px dashed var(--primary); outline-offset: -1px; }
+.pa-row-phase.is-dragging { opacity: .3; }
+.pa-td-grip { width: 20px; text-align: center; }
+.pa-grip-icon { color: var(--border); cursor: grab; font-size: .84rem; }
+.pa-grip-icon:hover { color: var(--primary); }
+.pa-td-code { padding-left: 8px !important; white-space: nowrap; }
+.pa-td-label { max-width: 190px; }
+.pa-phase-label-text { font-size: .76rem; font-weight: 500; color: var(--body); display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pa-prev-hint { display: flex; align-items: center; gap: 2px; font-size: .6rem; color: var(--warning); margin-top: 1px; }
+.pa-td-toggle { text-align: center; }
+.pa-toggle { display: inline-flex; cursor: pointer; }
+.pa-toggle input { display: none; }
+.pa-toggle-track { width: 27px; height: 15px; background: var(--border); border-radius: 8px; position: relative; transition: background .18s; display: block; }
+.pa-toggle-track::after { content: ''; position: absolute; top: 2px; left: 2px; width: 11px; height: 11px; background: #fff; border-radius: 50%; box-shadow: 0 1px 2px rgba(0, 0, 0, .2); transition: transform .18s; }
+.pa-toggle input:checked + .pa-toggle-track { background: var(--success); }
+.pa-toggle input:checked + .pa-toggle-track::after { transform: translateX(12px); }
+.pa-toggle input:disabled + .pa-toggle-track { opacity: .3; cursor: not-allowed; }
+.pa-td-date { padding: 3px 4px !important; }
+.pa-date-input { width: 100%; border: 1px solid var(--border); border-radius: 4px; padding: 2px 4px; font-family: ui-monospace, monospace; font-size: .68rem; color: var(--body); background: var(--surface-alt); outline: none; transition: border-color .12s, box-shadow .12s; }
+.pa-date-input:focus { border-color: var(--primary); box-shadow: 0 0 0 2px rgba(37, 99, 235, .12); background: var(--surface); }
+.pa-date-input.is-active { border-color: #bfdbfe; color: var(--primary-dark); font-weight: 700; }
+.pa-date-input.has-error { border-color: #fecaca !important; background: var(--danger-soft) !important; }
+.pa-date-input:disabled { opacity: .25; cursor: not-allowed; }
+.pa-td-aud { text-align: center; padding: 3px 2px !important; }
+.pa-td-aud.is-active { background: rgba(5, 150, 105, .05) !important; }
+.pa-aud-toggle { display: inline-flex; cursor: pointer; }
+.pa-aud-toggle input { display: none; }
+.pa-aud-face { width: 23px; height: 23px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: .55rem; font-weight: 700; transition: all .12s; }
+.pa-aud-face.is-off { border: 2px dashed #d1d5db; background: var(--surface); }
+.pa-aud-face.is-off:hover { border-color: #9ca3af; }
+.pa-aud-face.is-on { border: 2px solid; }
+.pa-aud-toggle input:disabled ~ .pa-aud-face { opacity: .25; cursor: not-allowed; }
+.pa-td-note { text-align: center; padding: 3px 2px !important; }
+.pa-note-btn { width: 23px; height: 23px; border-radius: 5px; border: 1px solid var(--border); background: var(--surface-alt); color: var(--faint); display: inline-flex; align-items: center; justify-content: center; cursor: pointer; font-size: .76rem; transition: all .12s; }
+.pa-note-btn:hover:not(:disabled) { background: var(--primary-soft); color: var(--primary); border-color: #bfdbfe; }
+.pa-note-btn.has-note { background: var(--warning-soft); color: var(--warning); border-color: #fde68a; }
+.pa-note-btn:disabled { opacity: .2; cursor: not-allowed; }
+
+/* ── Rôles auditeurs ── */
+.is-dm { background: #fef3c7; color: #b45309; border-color: #fde68a !important; }
+.is-cm { background: #dbeafe; color: #1d4ed8; border-color: #bfdbfe !important; }
+.is-as { background: #d1fae5; color: #065f46; border-color: #6ee7b7 !important; }
+.is-aj { background: #ede9fe; color: #6d28d9; border-color: #ddd6fe !important; }
+.is-other { background: var(--surface-sunken); color: var(--muted); border-color: var(--border) !important; }
+
+/* ── Utilitaires ── */
+.pa-mono { font-family: ui-monospace, monospace; }
+.pa-small { font-size: .72rem; }
+.pa-muted { color: var(--muted); }
+.pa-text-primary { color: var(--primary); }
+.pa-text-success { color: var(--success); }
+.pa-ellipsis { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pa-w-260 { max-width: 260px; }
+.pa-w-180 { max-width: 180px; }
+
+/* ── Notifications ── */
+.pa-toast { position: fixed; bottom: 20px; right: 20px; z-index: 9999; display: flex; align-items: center; gap: 8px; padding: 10px 16px; border-radius: var(--radius-md); font-size: .8rem; font-weight: 500; box-shadow: var(--shadow-md); max-width: 420px; }
+.pa-toast button { background: none; border: none; color: inherit; cursor: pointer; margin-left: 4px; opacity: .75; display: inline-flex; }
+.pa-toast.is-success { background: #064e3b; color: #6ee7b7; }
+.pa-toast.is-warning { background: #78350f; color: #fcd34d; }
+.pa-toast.is-error { background: #7f1d1d; color: #fca5a5; }
+.pa-fade-enter-active, .pa-fade-leave-active { transition: all .2s; }
+.pa-fade-enter-from, .pa-fade-leave-to { opacity: 0; transform: translateY(8px); }
+
+/* ── Modale ── */
+.pa-modal-bg { position: fixed; inset: 0; background: rgba(10, 15, 30, .5); backdrop-filter: blur(3px); z-index: 1000; display: flex; align-items: center; justify-content: center; }
+.pa-modal { background: var(--surface); border-radius: var(--radius-lg); width: 440px; max-width: 94vw; box-shadow: var(--shadow-md); border: 1px solid var(--border); overflow: hidden; }
+.pa-modal-head { display: flex; align-items: center; gap: 7px; padding: 12px 16px; font-size: .86rem; font-weight: 700; color: var(--ink); border-bottom: 1px solid var(--surface-alt); }
+.pa-modal-head .pa-icon-btn { margin-left: auto; }
+.pa-modal-textarea { width: 100%; border: none; padding: 13px 16px; font-family: inherit; font-size: .82rem; color: var(--body); resize: vertical; outline: none; min-height: 110px; }
+.pa-modal-foot { display: flex; justify-content: flex-end; gap: 8px; padding: 10px 16px; border-top: 1px solid var(--surface-alt); }
+
+/* ── Scrollbars ── */
+.pa-assign-scroll::-webkit-scrollbar, .pa-table-scroll::-webkit-scrollbar, .pa-phase-groups::-webkit-scrollbar, .pa-sidebar::-webkit-scrollbar { width: 5px; height: 5px; }
+.pa-assign-scroll::-webkit-scrollbar-track, .pa-table-scroll::-webkit-scrollbar-track, .pa-phase-groups::-webkit-scrollbar-track, .pa-sidebar::-webkit-scrollbar-track { background: transparent; }
+.pa-assign-scroll::-webkit-scrollbar-thumb, .pa-table-scroll::-webkit-scrollbar-thumb, .pa-phase-groups::-webkit-scrollbar-thumb, .pa-sidebar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+
+/* ── Responsive ── */
+@media (max-width: 768px) {
+  .pa-app { height: 100vh; border-radius: 0; }
+  .pa-body--split { flex-direction: column; overflow-y: auto; }
+  .pa-sidebar { width: 100%; flex-direction: row; flex-wrap: wrap; max-height: 220px; }
+  .pa-phase-panel { min-height: 320px; }
+}
 </style>

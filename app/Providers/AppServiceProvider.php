@@ -2,10 +2,21 @@
 
 namespace App\Providers;
 
+use App\Models\AuditType;
+use App\Models\AuditTypeForm;
+use App\Models\MissionType;
+use App\Models\Tenant;
+use App\Observers\AuditTypeFormObserver;
+use App\Observers\AuditTypeObserver;
+use App\Observers\MissionTypeObserver;
+use App\Observers\TenantObserver;
 use App\Support\TenantManager;
-use Illuminate\Support\ServiceProvider;
+use Illuminate\Filesystem\FilesystemAdapter;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\ServiceProvider;
 use Inertia\Inertia;
+use League\Flysystem\Filesystem as Flysystem;
+use League\Flysystem\Local\LocalFilesystemAdapter;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -19,36 +30,45 @@ class AppServiceProvider extends ServiceProvider
 
     public function boot(): void
     {
-        // Extension du disque tenant_uploads
+        // ══════════════════════════════════════════════════════════════
+        //  SYNCHRO AUTOMATIQUE ddmparam ──► bases tenant
+        //  Toute écriture Eloquent sur le référentiel central déclenche
+        //  un SyncTenantReferenceDataJob par tenant (via la queue).
+        //  ⚠️ Les écritures en DB::table() brut (ex: AuditTypeFormsController)
+        //     ne passent pas par les observers : le contrôleur dispatche
+        //     lui-même la synchro (trait DispatchesTenantSync).
+        // ══════════════════════════════════════════════════════════════
+        AuditType::observe(AuditTypeObserver::class);
+        AuditTypeForm::observe(AuditTypeFormObserver::class);
+        MissionType::observe(MissionTypeObserver::class);
+        Tenant::observe(TenantObserver::class);
+
+        // Extension du disque tenant_uploads (racine isolée par tenant)
         Storage::extend('tenant_uploads', function ($app, $config) {
-            // Récupération de l'ID du tenant (à adapter selon votre implémentation)
             $tenantId = null;
-            
-            // Méthode 1: si vous avez une classe Tenant avec une méthode current()
-            if (function_exists('tenant') && method_exists(tenant(), 'id')) {
-                $tenantId = tenant()->id;
+
+            // Via le TenantManager (source de vérité de la session tenant)
+            if ($app->bound(TenantManager::class)) {
+                $tenantId = $app->make(TenantManager::class)->currentId();
             }
-            // Méthode 2: via le TenantManager (si vous l'avez)
-            elseif (app()->bound(TenantManager::class)) {
-                $tenantId = app(TenantManager::class)->getTenantId();
-            }
-            // Méthode 3: via la session
-            else {
-                $tenantId = session('tenant_id', 'global');
-            }
-            
+
+            // Repli : session directe, sinon espace "global"
+            $tenantId = $tenantId ?: session('tenant_id', 'global');
+
             $root = storage_path("app/tenant_uploads/{$tenantId}");
             if (!is_dir($root)) {
                 mkdir($root, 0755, true);
             }
-            
-            return new \Illuminate\Filesystem\FilesystemAdapter(
-                new \Illuminate\Filesystem\Filesystem(),
-                $root,
+
+            $adapter = new LocalFilesystemAdapter($root);
+
+            return new FilesystemAdapter(
+                new Flysystem($adapter, $config),
+                $adapter,
                 $config
             );
         });
-        
+
         // Partage Inertia (si nécessaire)
         Inertia::share([
             // vos variables partagées

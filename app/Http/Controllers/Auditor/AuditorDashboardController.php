@@ -489,7 +489,98 @@ class AuditorDashboardController extends Controller
             'missionEnCours'      => $missionEnCours,
             'calendrier'          => $calendrier,
             'currentYear'         => $currentYear,
+            // Badge "Mes Missions" du sidebar (VerticalMenuAudit) : missions
+            // planifiées que l'auditeur peut démarrer.
+            'missionsDemarrables' => $affectations->where('status', 'planifiee')->values(),
         ]);
+    }
+
+    /**
+     * GET /mon-espace/competences (route auditor.competences)
+     * Portefeuille de compétences de l'auditeur connecté, groupé par
+     * catégorie (référentiel tenant competencies / competency_categories).
+     */
+    public function competences(Request $request)
+    {
+        $auditor = $this->getConnectedAuditor();
+        if (!$auditor) return redirect()->route('login');
+
+        $rows = DB::table('auditor_competencies as ac')
+            ->join('competencies as c', 'ac.competency_id', '=', 'c.id')
+            ->leftJoin('competency_categories as cat', 'c.category_id', '=', 'cat.id')
+            ->where('ac.auditor_id', $auditor->id)
+            ->orderBy(DB::raw('COALESCE(cat.`order`, 99)'))
+            ->orderBy('c.code')
+            ->get([
+                'c.id', 'c.code', 'c.name', 'c.description', 'c.level_required',
+                'ac.level', 'ac.is_primary', 'ac.certified_date', 'ac.notes',
+                DB::raw("DATE_FORMAT(ac.certified_date, '%d/%m/%Y') as certified_date_fr"),
+                'cat.id as category_id',
+                DB::raw("COALESCE(cat.code, 'AUT') as category_code"),
+                DB::raw("COALESCE(cat.name, 'Autres') as category_name"),
+                DB::raw("COALESCE(cat.color, '#64748B') as category_color"),
+            ]);
+
+        $categories = $rows->groupBy('category_name')->map(function ($items, $name) {
+            return [
+                'name'         => $name,
+                'code'         => $items->first()->category_code,
+                'color'        => $items->first()->category_color,
+                'niveau_moyen' => round($items->avg('level'), 1),
+                'competencies' => $items->map(fn ($r) => [
+                    'id'                => $r->id,
+                    'code'              => $r->code,
+                    'name'              => $r->name,
+                    'description'       => $r->description,
+                    'level'             => (int) $r->level,
+                    'level_required'    => (int) $r->level_required,
+                    'is_primary'        => (bool) $r->is_primary,
+                    'certified_date_fr' => $r->certified_date_fr,
+                    'notes'             => $r->notes,
+                ])->values()->toArray(),
+            ];
+        })->values()->toArray();
+
+        return Inertia::render('dashboards/Auditor/Competences', [
+            'auditor' => [
+                'id'               => $auditor->id,
+                'audit_code'       => $auditor->audit_code,
+                'nom_complet'      => strtoupper($auditor->last_name) . ' ' . ucfirst(strtolower($auditor->first_name)),
+                'initiales'        => mb_strtoupper(mb_substr($auditor->last_name ?? '', 0, 1) . mb_substr($auditor->first_name ?? '', 0, 1)),
+                'avatar'           => $auditor->avatar,
+                'entity'           => $auditor->entity?->name ?? null,
+                'audit_experience' => $auditor->audit_experience ?? 0,
+                'status'           => $auditor->status,
+            ],
+            'categories' => $categories,
+            'stats' => [
+                'total'        => $rows->count(),
+                'principales'  => $rows->where('is_primary', 1)->count(),
+                'certifiees'   => $rows->whereNotNull('certified_date')->count(),
+                'niveau_moyen' => $rows->count() ? round($rows->avg('level'), 1) : 0,
+                'expertes'     => $rows->where('level', '>=', 4)->count(),
+            ],
+        ]);
+    }
+
+    /**
+     * GET /mon-espace/missions/{missionId} (route auditor.mission.show)
+     * CORRECTION : la route existait mais la méthode manquait
+     * (BadMethodCallException au clic sur une mission du dashboard).
+     * Le détail d'une mission = sa page de phases canonique.
+     */
+    public function showMission(Request $request, int $missionId)
+    {
+        $auditor = $this->getConnectedAuditor();
+        if (!$auditor) return redirect()->route('login');
+
+        $isAffected = DB::table('mission_phase_auditeurs')
+            ->where('mission_id', $missionId)
+            ->where('auditeur_id', $auditor->id)
+            ->exists();
+        if (!$isAffected) abort(403, 'Mission non accessible.');
+
+        return redirect("/m/audit.core/auditor/missions/{$missionId}/phases");
     }
 
     private function buildAffectationEntity(

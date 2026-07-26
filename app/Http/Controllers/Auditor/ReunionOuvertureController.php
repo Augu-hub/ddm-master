@@ -31,6 +31,14 @@ class ReunionOuvertureController extends BasePhaseFormController
     protected string $inertiaPage = 'dashboards/Auditor/Forms/ReunionOuverture';
     protected string $routeEdit   = 'auditor.ac.reunion-ouverture.edit';
 
+    /**
+     * Chemin de base du formulaire — surchargé par les déclinaisons par type
+     * d'audit (ex: Ap\ApReunionOuvertureController → ap/preparation/...).
+     * Toutes les URLs du payload (formUrl, edit, soumettre, valider, pdf)
+     * en découlent côté Vue.
+     */
+    protected string $basePath = 'm/audit.core/ac/preparation/reunion-ouverture';
+
     protected array $jsonFields = [
         'ordre_du_jour',
         'participants',
@@ -87,7 +95,7 @@ class ReunionOuvertureController extends BasePhaseFormController
 
         $chatMessages = $this->getChatMessages($assignmentId, $auditor->id, $role);
 
-        return array_merge(parent::buildPayload($missionId, $assignmentId, $auditor, $form), [
+        $payload = array_merge(parent::buildPayload($missionId, $assignmentId, $auditor, $form), [
             'fro'          => $form,   // alias sémantique Vue
             'fros'         => $fros,
             'chatMessages' => $chatMessages,
@@ -99,11 +107,38 @@ class ReunionOuvertureController extends BasePhaseFormController
                 'first_name' => $auditor->first_name,
                 'email'      => $auditor->email ?? null,
             ],
-            // URLs construites PHP — jamais reconstruites côté JS
-            'formUrl'      => url('/m/audit.core/ac/preparation/reunion-ouverture'),
+            // URLs construites PHP — jamais reconstruites côté JS.
+            // basePath est surchargé par les déclinaisons (ex: AP).
+            'formUrl'      => url('/' . ltrim($this->basePath, '/')),
             'backUrl'      => url("/m/audit.core/auditor/missions/{$missionId}/phases"),
-            'chatBaseUrl'  => url('/api/mission-phase-chat'),
+            // CORRECTION : /api/mission-phase-chat n'existe nulle part — la
+            // vraie route est POST /m/audit.core/missions/{mission}/chat/{phase_type}
+            // (réunion d'ouverture = phase 1 → PREPARATION). Le body envoyé par
+            // la vue (assignment_id, form_code, content, type, priority)
+            // correspond au contrat de MissionPhaseChatController::store.
+            'chatBaseUrl'  => url("/m/audit.core/missions/{$missionId}/chat/PREPARATION"),
         ]);
+
+        // Couleur/icône/label du type d'audit depuis ddmparam — la vue s'en
+        // sert pour thémer la page (AC bleu #2563EB, AP vert #059669…).
+        $mission = $payload['mission'] ?? null;
+        if ($mission && !empty($mission->audit_type_code)) {
+            try {
+                $at = DB::table('ddmparam.audit_types')
+                    ->where('code', strtoupper($mission->audit_type_code))
+                    ->select(['color', 'icon', 'label'])
+                    ->first();
+                if ($at) {
+                    $mission->audit_color      = $at->color;
+                    $mission->audit_icon       = $at->icon;
+                    $mission->audit_type_label = $at->label;
+                }
+            } catch (\Throwable $e) {
+                // ddmparam indisponible — la vue garde ses couleurs par défaut
+            }
+        }
+
+        return $payload;
     }
 
     private function getChatMessages(int $assignmentId, int $auditorId, string $role): array

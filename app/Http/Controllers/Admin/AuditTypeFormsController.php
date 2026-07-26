@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Observers\Concerns\DispatchesTenantSync;
 use App\Services\Audit\UserMenuSessionService;
 use Inertia\Inertia;
 use Illuminate\Http\Request;
@@ -10,7 +11,14 @@ use Illuminate\Support\Facades\DB;
 
 class AuditTypeFormsController extends Controller
 {
-    private string $p = 'ddmparam'; // préfixe DB param
+    /**
+     * Les écritures de ce contrôleur passent par DB::table() (pas d'events
+     * Eloquent) : on dispatche donc nous-mêmes la synchro vers les tenants
+     * après chaque mutation du référentiel central.
+     */
+    use DispatchesTenantSync;
+
+    private string $p = 'ddmparam';
 
     public function __construct()
     {
@@ -35,10 +43,9 @@ class AuditTypeFormsController extends Controller
     }
 
     // ══════════════════════════════════════════════════════════════
-    //  API JSON — lecture (appelées via fetch() depuis la Vue)
+    //  API JSON — lecture
     // ══════════════════════════════════════════════════════════════
 
-    /** GET /admin/audit-type-forms/api/audit-types */
     public function apiAuditTypes()
     {
         return response()->json([
@@ -48,7 +55,6 @@ class AuditTypeFormsController extends Controller
         ]);
     }
 
-    /** GET /admin/audit-type-forms/api/forms/{auditTypeId} */
     public function apiFormsByType(int $auditTypeId)
     {
         $type = DB::connection('mysql')
@@ -72,6 +78,7 @@ class AuditTypeFormsController extends Controller
                 'f.audit_type_id',
                 'f.phase_num',
                 'f.phase_label',
+                'f.norme',
                 'f.parent_id',
                 'par.label as parent_label',
                 'f.code',
@@ -104,6 +111,7 @@ class AuditTypeFormsController extends Controller
                 return [
                     'phase_num'   => (int) $phaseNum,
                     'phase_label' => $items->first()->phase_label,
+                    'norme'       => null, // plus de norme partagée
                     'forms'       => $buildTree($roots),
                 ];
             })
@@ -121,7 +129,6 @@ class AuditTypeFormsController extends Controller
     //  CRUD — AUDIT TYPES
     // ══════════════════════════════════════════════════════════════
 
-    /** POST /admin/audit-type-forms/audit-types */
     public function storeAuditType(Request $request)
     {
         $data = $request->validate([
@@ -149,13 +156,11 @@ class AuditTypeFormsController extends Controller
             ->table("{$this->p}.audit_types")
             ->insertGetId($data);
 
-        // ── Invalider la session : nouveau type d'audit disponible ────────
         UserMenuSessionService::clear();
-
+        $this->dispatchSyncToAllTenants();
         return back()->with('success', "Type d'audit '{$data['label']}' créé (ID {$id}).");
     }
 
-    /** PUT /admin/audit-type-forms/audit-types/{id} */
     public function updateAuditType(Request $request, int $id)
     {
         $this->findAuditTypeOrFail($id);
@@ -174,13 +179,11 @@ class AuditTypeFormsController extends Controller
             ->where('id', $id)
             ->update($data);
 
-        // ── Invalider la session : label/couleur/icône changés ────────────
         UserMenuSessionService::clear();
-
+        $this->dispatchSyncToAllTenants();
         return back()->with('success', "Type d'audit mis à jour.");
     }
 
-    /** DELETE /admin/audit-type-forms/audit-types/{id} */
     public function destroyAuditType(int $id)
     {
         $type = $this->findAuditTypeOrFail($id);
@@ -202,13 +205,11 @@ class AuditTypeFormsController extends Controller
                 ->delete();
         });
 
-        // ── Invalider la session : type + formulaires supprimés ───────────
         UserMenuSessionService::clear();
-
+        $this->dispatchSyncToAllTenants();
         return back()->with('success', "Type '{$type->label}' et {$nb} formulaire(s) supprimés.");
     }
 
-    /** PATCH /admin/audit-type-forms/audit-types/{id}/toggle-active */
     public function toggleAuditTypeActive(int $id)
     {
         $type = $this->findAuditTypeOrFail($id);
@@ -222,24 +223,22 @@ class AuditTypeFormsController extends Controller
             ]);
 
         $etat = $type->is_active ? 'désactivé' : 'activé';
-
-        // ── Invalider la session : is_active changé ───────────────────────
         UserMenuSessionService::clear();
-
+        $this->dispatchSyncToAllTenants();
         return back()->with('success', "Type '{$type->label}' {$etat}.");
     }
 
     // ══════════════════════════════════════════════════════════════
-    //  CRUD — FORMULAIRES
+    //  CRUD — FORMULAIRES (norme individuelle)
     // ══════════════════════════════════════════════════════════════
 
-    /** POST /admin/audit-type-forms/forms */
     public function storeForm(Request $request)
     {
         $data = $request->validate([
             'audit_type_id' => ['required', 'integer'],
             'phase_num'     => ['required', 'integer', 'min:1'],
             'phase_label'   => ['required', 'string', 'max:100'],
+            'norme'         => ['nullable', 'string'], // utilisateur la renseigne
             'parent_id'     => ['nullable', 'integer'],
             'code'          => ['required', 'string', 'max:50'],
             'label'         => ['required', 'string', 'max:255'],
@@ -269,6 +268,9 @@ class AuditTypeFormsController extends Controller
             }
         }
 
+        // ✅ Suppression du bloc qui héritait automatiquement la norme de la phase
+        // La norme est maintenant laissée telle quelle (nullable, définie par l'utilisateur)
+
         $data['is_active']  = $data['is_active'] ?? true;
         $data['sort_order'] = $data['sort_order']
             ?? $this->nextSortOrder($data['audit_type_id'], $data['phase_num'], $data['parent_id'] ?? null);
@@ -279,13 +281,11 @@ class AuditTypeFormsController extends Controller
             ->table("{$this->p}.audit_type_forms")
             ->insertGetId($data);
 
-        // ── Invalider la session : nouveau formulaire dans ddmparam ───────
         UserMenuSessionService::clear();
-
+        $this->dispatchSyncToAllTenants();
         return back()->with('success', "Formulaire '{$data['label']}' créé (ID {$id}).");
     }
 
-    /** PUT /admin/audit-type-forms/forms/{id} */
     public function updateForm(Request $request, int $id)
     {
         $form = $this->findFormOrFail($id);
@@ -293,6 +293,7 @@ class AuditTypeFormsController extends Controller
         $data = $request->validate([
             'phase_num'   => ['required', 'integer', 'min:1'],
             'phase_label' => ['required', 'string', 'max:100'],
+            'norme'       => ['nullable', 'string'],
             'parent_id'   => ['nullable', 'integer'],
             'code'        => ['required', 'string', 'max:50'],
             'label'       => ['required', 'string', 'max:255'],
@@ -313,13 +314,11 @@ class AuditTypeFormsController extends Controller
             ->where('id', $id)
             ->update($data);
 
-        // ── Invalider la session : formulaire modifié (label/url/icon…) ──
         UserMenuSessionService::clear();
-
+        $this->dispatchSyncToAllTenants();
         return back()->with('success', "Formulaire '{$form->label}' mis à jour.");
     }
 
-    /** DELETE /admin/audit-type-forms/forms/{id} */
     public function destroyForm(int $id)
     {
         $form = $this->findFormOrFail($id);
@@ -329,8 +328,8 @@ class AuditTypeFormsController extends Controller
             $nbEnfants = $this->deleteFormRecursive($id);
         });
 
-        // ── Invalider la session : formulaire(s) supprimé(s) ─────────────
         UserMenuSessionService::clear();
+        $this->dispatchSyncToAllTenants();
 
         $msg = $nbEnfants > 0
             ? "Formulaire '{$form->label}' et {$nbEnfants} enfant(s) supprimés."
@@ -339,7 +338,6 @@ class AuditTypeFormsController extends Controller
         return back()->with('success', $msg);
     }
 
-    /** PATCH /admin/audit-type-forms/forms/{id}/toggle-active */
     public function toggleFormActive(int $id)
     {
         $form = $this->findFormOrFail($id);
@@ -353,14 +351,11 @@ class AuditTypeFormsController extends Controller
             ]);
 
         $etat = $form->is_active ? 'désactivé' : 'activé';
-
-        // ── Invalider la session : is_active formulaire changé ────────────
         UserMenuSessionService::clear();
-
+        $this->dispatchSyncToAllTenants();
         return back()->with('success', "Formulaire '{$form->label}' {$etat}.");
     }
 
-    /** POST /admin/audit-type-forms/forms/reorder */
     public function reorderForms(Request $request)
     {
         $request->validate([
@@ -383,17 +378,15 @@ class AuditTypeFormsController extends Controller
             }
         });
 
-        // ── Invalider la session : ordre des formulaires changé ───────────
         UserMenuSessionService::clear();
-
+        $this->dispatchSyncToAllTenants();
         return response()->json(['success' => true, 'message' => 'Ordre mis à jour.']);
     }
 
     // ══════════════════════════════════════════════════════════════
-    //  GESTION DES PHASES
+    //  GESTION DES PHASES (sans norme partagée)
     // ══════════════════════════════════════════════════════════════
 
-    /** PATCH /admin/audit-type-forms/phase-rename */
     public function phaseRename(Request $request)
     {
         $data = $request->validate([
@@ -401,6 +394,7 @@ class AuditTypeFormsController extends Controller
             'old_phase_num'   => ['required', 'integer'],
             'new_phase_num'   => ['required', 'integer', 'min:1'],
             'new_phase_label' => ['required', 'string', 'max:100'],
+            // 'new_norme' => supprimé — la norme n'est plus gérée au niveau de la phase
         ]);
 
         if ((int) $data['new_phase_num'] !== (int) $data['old_phase_num']) {
@@ -424,16 +418,15 @@ class AuditTypeFormsController extends Controller
             ->update([
                 'phase_num'   => $data['new_phase_num'],
                 'phase_label' => $data['new_phase_label'],
+                // norme non modifiée
                 'updated_at'  => now(),
             ]);
 
-        // ── Invalider la session : numéro/libellé de phase changés ────────
         UserMenuSessionService::clear();
-
+        $this->dispatchSyncToAllTenants();
         return back()->with('success', "{$nb} formulaire(s) de la phase mis à jour.");
     }
 
-    /** DELETE /admin/audit-type-forms/phase/{auditTypeId}/{phaseNum} */
     public function phaseDelete(int $auditTypeId, int $phaseNum)
     {
         $this->findAuditTypeOrFail($auditTypeId);
@@ -455,9 +448,8 @@ class AuditTypeFormsController extends Controller
             }
         });
 
-        // ── Invalider la session : phase entière supprimée ────────────────
         UserMenuSessionService::clear();
-
+        $this->dispatchSyncToAllTenants();
         return back()->with('success', "Phase {$phaseNum} supprimée ({$total} formulaire(s) effacés).");
     }
 

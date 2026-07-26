@@ -9,9 +9,12 @@ class Activite extends Model
 {
     protected $connection = 'tenant';
     protected $table = 'activities';
-    protected $fillable = ['process_id','code','name','description'];
+    protected $fillable = ['process_id','objectif_id','code','name','description'];
 
     public function process(): BelongsTo { return $this->belongsTo(Processus::class); }
+
+    public function objectif(): BelongsTo { return $this->belongsTo(Objectif::class, 'objectif_id'); }
+
     public static function nextCodeForProcess(Processus $process): string
     {
         $procCode = strtoupper((string)$process->code);

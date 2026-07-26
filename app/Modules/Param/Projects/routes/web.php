@@ -58,6 +58,59 @@ Route::resource('mpa', MacroProcessusController::class)->names([
     'destroy' => 'mpa.destroy',
 ]);
 
+
+Route::prefix('mpa/ai')->name('mpa.ai.')->group(function () {
+
+   // ── Processus (déjà chez toi, inchangé) ──
+    Route::post('processus', [MacroProcessusController::class, 'storeProcessus'])
+        ->name('processus.store');
+    Route::put('processus/{processus}', [MacroProcessusController::class, 'updateProcessus'])
+        ->name('processus.update');
+    Route::delete('processus/{processus}', [MacroProcessusController::class, 'destroyProcessus'])
+        ->name('processus.destroy');
+
+    // ── Activités (déjà chez toi, inchangé) ──
+    Route::post('activites', [MacroProcessusController::class, 'storeActivite'])
+        ->name('activites.store');
+    Route::put('activites/{activite}', [MacroProcessusController::class, 'updateActivite'])
+        ->name('activites.update');
+    Route::delete('activites/{activite}', [MacroProcessusController::class, 'destroyActivite'])
+        ->name('activites.destroy');
+
+    // ── 🎯 Objectifs (nouveau) ──
+    Route::post('objectifs', [MacroProcessusController::class, 'storeObjectif'])
+        ->name('objectifs.store');
+    Route::put('objectifs/{objectif}', [MacroProcessusController::class, 'updateObjectif'])
+        ->name('objectifs.update');
+    Route::delete('objectifs/{objectif}', [MacroProcessusController::class, 'destroyObjectif'])
+        ->name('objectifs.destroy');
+
+    // ── 🤖 IA — tout sous le même préfixe "projects.mpa.ai.*" ──
+    
+        Route::post('suggest-processus', [MacroProcessusController::class, 'aiSuggestProcessus'])
+            ->name('suggest-processus');
+
+        Route::post('suggest-data', [MacroProcessusController::class, 'aiSuggestData'])
+            ->name('suggest-data');
+
+        Route::post('suggest-activites', [MacroProcessusController::class, 'aiSuggestActivites'])
+            ->name('suggest-activites');
+
+        Route::post('suggest-objectifs', [MacroProcessusController::class, 'aiSuggestObjectifs'])
+            ->name('suggest-objectifs');
+
+        // 📋 données (inputs/outputs/resources) pour un objectif précis
+        Route::post('suggest-objectif-data', [MacroProcessusController::class, 'aiSuggestObjectifData'])
+            ->name('suggest-objectif-data');
+
+        // 🎨 activités pour un objectif précis
+        Route::post('suggest-activites-objectif', [MacroProcessusController::class, 'aiSuggestActivitesForObjectif'])
+            ->name('suggest-activites-objectif');
+    });
+
+
+
+
 Route::post('/param/mpa/ai/suggest-processus', [MacroProcessusController::class, 'aiSuggestProcessus'])
     ->middleware(['web', 'auth'])
     ->name('mpa.ai.suggest-processus');

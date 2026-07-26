@@ -98,5 +98,5 @@ const d = computed({
 </script>
 
 <style scoped>
-@import './outil-shared.css';
+/* @import './outil-shared.css'; */
 </style>

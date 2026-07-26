@@ -2,201 +2,208 @@
 
 namespace App\Services\Audit;
 
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
+/**
+ * ══════════════════════════════════════════════════════════════════════════
+ *  PhaseSyncService — v2 (NOUVEAU SCHÉMA)
+ *
+ *  ⚠️ Réécrit intégralement : l'ancienne version écrivait dans
+ *  `mission_phases` avec les colonnes de l'ANCIEN schéma (code, label,
+ *  phase_type, form_code…) qui n'existent plus depuis la migration
+ *  `migrate_phases_to_central_ids.sql` → crash SQL garanti.
+ *
+ *  Nouveau contrat :
+ *   - mission_phases.id = ddmparam.audit_type_forms.id (id partagé) ;
+ *     le tenant ne stocke QUE ses réglages (mission_type_id, is_mandatory,
+ *     status, weight) — le contenu est toujours lu dans ddmparam.
+ *
+ *  Deux responsabilités :
+ *   1. syncForMissionType()        : provisionne les lignes mission_phases
+ *      d'un programme d'audit tenant depuis le référentiel central.
+ *   2. ensureMissionAssignments()  : LE CŒUR — garantit qu'une mission a un
+ *      `mission_phase_assignment` pour CHAQUE formulaire actif ddmparam de
+ *      son type d'audit (obligatoires → pending, optionnels → skipped).
+ *      Idempotent, mis en cache 5 min, appelé automatiquement à l'ouverture
+ *      d'une mission (BuildsMissionMenu / phases / gantt) : les phases
+ *      apparaissent d'elles-mêmes, y compris pour les missions créées avant
+ *      la génération auto ou après un ajout de formulaire côté admin.
+ * ══════════════════════════════════════════════════════════════════════════
+ */
 class PhaseSyncService
 {
-    // ══════════════════════════════════════════════════════════════════════════
-    //  Synchronise LA TOTALITÉ des phases pour TOUS les tenants
-    //  À exécuter via une commande artisan ou un appel admin
-    // ══════════════════════════════════════════════════════════════════════════
-
-    public static function syncAllTenants(): array
-    {
-        $result = ['updated' => 0, 'created' => 0, 'deleted' => 0, 'errors' => []];
-
-        try {
-            // Récupérer tous les mission_types du tenant courant
-            $tenantTypes = DB::table('mission_types')->get();
-
-            foreach ($tenantTypes as $tenantType) {
-                $typeResult = self::syncForMissionType($tenantType->id);
-                $result['updated'] += $typeResult['updated'];
-                $result['created'] += $typeResult['created'];
-                $result['deleted'] += $typeResult['deleted'];
-                if (!empty($typeResult['errors'])) {
-                    $result['errors'] = array_merge($result['errors'], $typeResult['errors']);
-                }
-            }
-        } catch (\Exception $e) {
-            Log::error('[PhaseSync] Échec syncAllTenants: ' . $e->getMessage());
-            $result['errors'][] = $e->getMessage();
-        }
-
-        return $result;
-    }
-
-    // ══════════════════════════════════════════════════════════════════════════
-    //  Synchronise un mission_type spécifique
-    //  INSERT/UPDATE/DELETE pour aligner local_phases sur ddmparam
-    // ══════════════════════════════════════════════════════════════════════════
+    // ══════════════════════════════════════════════════════════════════════
+    //  1) mission_phases (tenant) ← ddmparam, pour un mission_type
+    // ══════════════════════════════════════════════════════════════════════
 
     public static function syncForMissionType(int $missionTypeId): array
     {
-        $stats = ['updated' => 0, 'created' => 0, 'deleted' => 0, 'errors' => []];
+        $stats = ['created' => 0, 'updated' => 0, 'errors' => []];
 
         try {
-            // 1. Récupérer les infos du mission_type local
             $localType = DB::table('mission_types')->where('id', $missionTypeId)->first();
             if (!$localType) {
                 throw new \Exception("Mission type #{$missionTypeId} introuvable.");
             }
 
             $auditTypeCode = $localType->audit_type_code
-                ?? self::guessAuditTypeCode($localType->code);
-
+                ?: self::guessAuditTypeCode($localType->code);
             if (!$auditTypeCode) {
                 Log::warning("[PhaseSync] Aucun audit_type_code pour mission_type #{$missionTypeId}");
                 return $stats;
             }
 
-            // 2. Récupérer le audit_type depuis ddmparam
-            $ddmAuditType = DB::connection('mysql')
-                ->table('ddmparam.audit_types')
-                ->where('code', $auditTypeCode)
-                ->first();
+            $formIds = self::centralFormIds($auditTypeCode);
+            if ($formIds === []) return $stats;
 
-            if (!$ddmAuditType) {
-                throw new \Exception("Audit type '{$auditTypeCode}' introuvable dans ddmparam.");
-            }
+            // Lignes tenant existantes pour ces ids centraux
+            $existing = DB::table('mission_phases')
+                ->whereIn('id', $formIds)
+                ->pluck('mission_type_id', 'id');
 
-            // 3. Récupérer TOUS les formulaires ddmparam pour cet audit_type
-            $ddmForms = DB::connection('mysql')
-                ->table('ddmparam.audit_type_forms as f')
-                ->where('f.audit_type_id', $ddmAuditType->id)
-                ->where('f.is_active', 1)
-                ->orderBy('f.phase_num')
-                ->orderBy('f.sort_order')
-                ->orderBy('f.id')
-                ->get();
-
-            if ($ddmForms->isEmpty()) {
-                Log::warning("[PhaseSync] Aucun formulaire ddmparam pour audit_type_id={$ddmAuditType->id}");
-                return $stats;
-            }
-
-            // 4. Construire la map des phases locales existantes (indexées par form_code)
-            $localPhases = DB::table('mission_phases')
-                ->where('mission_type_id', $missionTypeId)
-                ->get()
-                ->keyBy('form_code');
-
-            $phaseTypeMap = [
-                1 => 'PREPARATION',
-                2 => 'VERIFICATION',
-                3 => 'CONCLUSION',
-                4 => 'SUIVI',
-                5 => 'RECOMMANDATIONS',
-            ];
-
-            // Map pour résoudre les parent_id après création des parents
-            $ddmIdToLocalId = [];
-
-            DB::beginTransaction();
-
-            // 5. Parcourir les formulaires ddmparam
-            foreach ($ddmForms as $ddm) {
-                $local = $localPhases->get($ddm->code);
-                $phaseType = $phaseTypeMap[$ddm->phase_num] ?? 'AUTRE';
-
-                // Déterminer parent_id local
-                $localParentId = null;
-                if ($ddm->parent_id && isset($ddmIdToLocalId[$ddm->parent_id])) {
-                    $localParentId = $ddmIdToLocalId[$ddm->parent_id];
-                }
-
-                $data = [
-                    'mission_type_id' => $missionTypeId,
-                    'code'            => $ddm->code,
-                    'code_full'       => $ddm->code,
-                    'label'           => $ddm->label,
-                    'phase_type'      => $phaseType,
-                    'level'           => $ddm->parent_id ? 2 : 1,
-                    'parent_id'       => $localParentId,
-                    'is_mandatory'    => false,
-                    'form_code'       => $ddm->code,
-                    'sort_order'      => (int) $ddm->sort_order,
-                    'status'          => 'active',
-                    'updated_at'      => now(),
-                ];
-
-                if ($local) {
-                    // UPDATE
-                    $modified = false;
-                    if ((string)$local->label !== $ddm->label) {
-                        $data['label'] = $ddm->label;
-                        $modified = true;
-                    }
-                    if ((int)($local->parent_id ?? 0) !== (int)$localParentId) {
-                        $data['parent_id'] = $localParentId;
-                        $modified = true;
-                    }
-                    if ($local->phase_type !== $phaseType) {
-                        $data['phase_type'] = $phaseType;
-                        $modified = true;
-                    }
-                    if ((int)($local->sort_order ?? 0) !== (int)$ddm->sort_order) {
-                        $data['sort_order'] = $ddm->sort_order;
-                        $modified = true;
-                    }
-
-                    if ($modified) {
-                        DB::table('mission_phases')
-                            ->where('id', $local->id)
-                            ->update($data);
-                        $stats['updated']++;
-                    }
-                    $ddmIdToLocalId[$ddm->id] = $local->id;
-
-                } else {
-                    // CREATE
-                    $data['created_at'] = now();
-                    $newId = DB::table('mission_phases')->insertGetId($data);
+            $now = now();
+            foreach ($formIds as $fid) {
+                if (!$existing->has($fid)) {
+                    DB::table('mission_phases')->insert([
+                        'id'              => $fid,   // = ddmparam.audit_type_forms.id
+                        'mission_type_id' => $missionTypeId,
+                        'is_mandatory'    => 1,
+                        'status'          => 'active',
+                        'weight'          => 0,
+                        'created_at'      => $now,
+                        'updated_at'      => $now,
+                    ]);
                     $stats['created']++;
-                    $ddmIdToLocalId[$ddm->id] = $newId;
+                } elseif ((int) $existing[$fid] !== $missionTypeId) {
+                    // Rattachement qui a dérivé (ex: fusion de programmes)
+                    DB::table('mission_phases')->where('id', $fid)
+                        ->update(['mission_type_id' => $missionTypeId, 'updated_at' => $now]);
+                    $stats['updated']++;
                 }
             }
 
-            // 6. Supprimer les phases locales qui n'existent plus dans ddmparam
-            $ddmCodes = $ddmForms->pluck('code')->toArray();
-            $toDelete = DB::table('mission_phases')
-                ->where('mission_type_id', $missionTypeId)
-                ->whereNotIn('form_code', $ddmCodes)
-                ->get();
-
-            foreach ($toDelete as $del) {
-                DB::table('mission_phases')->where('id', $del->id)->delete();
-                $stats['deleted']++;
+            if ($stats['created'] || $stats['updated']) {
+                Log::info("[PhaseSync] mission_type #{$missionTypeId} [{$auditTypeCode}] : "
+                    . "+{$stats['created']} phase(s), {$stats['updated']} réalignée(s).");
             }
-
-            DB::commit();
-
-            Log::info("[PhaseSync] MissionType #{$missionTypeId} [{$auditTypeCode}] : "
-                . "C={$stats['created']} U={$stats['updated']} D={$stats['deleted']}");
-
-        } catch (\Exception $e) {
-            DB::rollBack();
-            Log::error("[PhaseSync] Échec syncForMissionType #{$missionTypeId}: " . $e->getMessage());
+        } catch (\Throwable $e) {
+            Log::error("[PhaseSync] syncForMissionType #{$missionTypeId}: " . $e->getMessage());
             $stats['errors'][] = $e->getMessage();
         }
 
         return $stats;
     }
 
-    // ══════════════════════════════════════════════════════════════════════════
-    //  Helper : Deviner audit_type_code depuis code du mission_type
-    // ══════════════════════════════════════════════════════════════════════════
+    // ══════════════════════════════════════════════════════════════════════
+    //  2) mission_phase_assignments ← ddmparam, pour UNE mission
+    // ══════════════════════════════════════════════════════════════════════
+
+    /**
+     * Garantit qu'une mission possède un assignment par formulaire actif
+     * ddmparam de son type d'audit. Retourne le nombre créé.
+     */
+    public static function ensureMissionAssignments(int $missionId): int
+    {
+        // Anti-rafale : au plus une vraie passe toutes les 5 min par mission
+        $cacheKey = "mission_assign_sync_{$missionId}";
+        if (Cache::get($cacheKey)) return 0;
+
+        try {
+            // Mission → programme d'audit tenant → type d'audit central
+            $m = DB::table('mission_programmation as mp')
+                ->leftJoin('missions as ms', 'mp.mission_id', '=', 'ms.id')
+                ->leftJoin('mission_types as mt', 'ms.mission_type_id', '=', 'mt.id')
+                ->where('mp.id', $missionId)
+                ->selectRaw('mt.id as mission_type_id, COALESCE(mt.audit_type_code, mt.code) as audit_type_code')
+                ->first();
+
+            if (!$m || !$m->audit_type_code || !$m->mission_type_id) {
+                Cache::put($cacheKey, 1, 300);
+                return 0;
+            }
+
+            $formIds = self::centralFormIds($m->audit_type_code);
+            if ($formIds === []) {
+                Cache::put($cacheKey, 1, 300);
+                return 0;
+            }
+
+            // 1. Provisionner les réglages tenant manquants (mission_phases)
+            $settings = DB::table('mission_phases')
+                ->whereIn('id', $formIds)
+                ->pluck('is_mandatory', 'id');
+
+            $now = now();
+            foreach ($formIds as $fid) {
+                if (!$settings->has($fid)) {
+                    DB::table('mission_phases')->insert([
+                        'id'              => $fid,
+                        'mission_type_id' => (int) $m->mission_type_id,
+                        'is_mandatory'    => 1,
+                        'status'          => 'active',
+                        'weight'          => 0,
+                        'created_at'      => $now,
+                        'updated_at'      => $now,
+                    ]);
+                    $settings[$fid] = 1;
+                }
+            }
+
+            // 2. Créer les assignments manquants pour CETTE mission
+            $existing = DB::table('mission_phase_assignments')
+                ->where('mission_programmation_id', $missionId)
+                ->pluck('mission_phase_id')
+                ->all();
+
+            $missing = array_values(array_diff($formIds, $existing));
+            if ($missing !== []) {
+                $rows = array_map(fn (int $fid) => [
+                    'mission_programmation_id' => $missionId,
+                    'mission_phase_id'         => $fid,
+                    'entity_id'                => null, // toutes entités
+                    // Obligatoire → à faire ; optionnel → ignorée par défaut
+                    'status'                   => ((int) ($settings[$fid] ?? 1)) === 1 ? 'pending' : 'skipped',
+                    'created_at'               => $now,
+                    'updated_at'               => $now,
+                ], $missing);
+
+                DB::table('mission_phase_assignments')->insert($rows);
+
+                Log::info("[PhaseSync] Mission #{$missionId} [{$m->audit_type_code}] : "
+                    . count($missing) . ' phase(s) provisionnée(s) automatiquement depuis ddmparam.');
+            }
+
+            Cache::put($cacheKey, 1, 300);
+            return count($missing);
+        } catch (\Throwable $e) {
+            Log::error("[PhaseSync] ensureMissionAssignments #{$missionId}: " . $e->getMessage());
+            return 0;
+        }
+    }
+
+    // ══════════════════════════════════════════════════════════════════════
+    //  Helpers
+    // ══════════════════════════════════════════════════════════════════════
+
+    /** Ids des formulaires actifs ddmparam pour un code de type d'audit. */
+    private static function centralFormIds(string $auditTypeCode): array
+    {
+        $type = DB::connection('mysql')
+            ->table('ddmparam.audit_types')
+            ->where('code', strtoupper($auditTypeCode))
+            ->first(['id']);
+        if (!$type) return [];
+
+        return DB::connection('mysql')
+            ->table('ddmparam.audit_type_forms')
+            ->where('audit_type_id', $type->id)
+            ->where('is_active', 1)
+            ->pluck('id')
+            ->map(fn ($id) => (int) $id)
+            ->all();
+    }
 
     private static function guessAuditTypeCode(?string $typeCode): ?string
     {

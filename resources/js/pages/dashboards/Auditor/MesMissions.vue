@@ -325,10 +325,17 @@
 
                             <!-- Gantt timeline -->
                             <div class="gd-gantt-wrap">
-                                <div v-for="grp in gantt.data.phases_by_type" :key="grp.phase_type" class="gg-group">
-                                    <div class="gg-group-head" :style="'border-left:3px solid '+ptColor(grp.phase_type)">
-                                        <span class="gg-gh-icon">{{ ptIcon(grp.phase_type) }}</span>
-                                        <span class="gg-gh-name" :style="'color:'+ptColor(grp.phase_type)">{{ grp.label }}</span>
+                                <!--
+                                    CORRECTION : clé/couleur/icône basées sur phase_num
+                                    (numérique, stable, 1..5) au lieu de phase_type (chaîne
+                                    figée côté ancien backend). Le libellé affiché (grp.label)
+                                    vient maintenant directement de ddmparam.audit_type_forms
+                                    .phase_label — dynamique, exact pour chaque type d'audit.
+                                -->
+                                <div v-for="grp in gantt.data.phases_by_type" :key="grp.phase_num" class="gg-group">
+                                    <div class="gg-group-head" :style="'border-left:3px solid '+ptColor(grp.phase_num)">
+                                        <span class="gg-gh-icon">{{ ptIcon(grp.phase_num) }}</span>
+                                        <span class="gg-gh-name" :style="'color:'+ptColor(grp.phase_num)">{{ grp.label }}</span>
                                         <div class="gg-gh-stats">
                                             <span class="ggs-done">{{ grp.stats.completed }} <i class="ti ti-check"></i></span>
                                             <span class="ggs-ip">{{ grp.stats.in_progress }} <i class="ti ti-loader-2"></i></span>
@@ -339,7 +346,7 @@
                                     <div v-for="ph in grp.phases" :key="ph.assignment_id" class="gg-phase">
                                         <div class="gg-ph-meta">
                                             <div class="gg-ph-left">
-                                                <code class="gg-code" :style="'color:'+ptColor(grp.phase_type)">{{ ph.code_full||ph.code }}</code>
+                                                <code class="gg-code" :style="'color:'+ptColor(grp.phase_num)">{{ ph.code_full||ph.code }}</code>
                                                 <span class="gg-label">{{ ph.label }}</span>
                                                 <!-- Auditeur propriétaire (owner_name) -->
                                                 <span v-if="ph.owner_name" class="gg-owner" :title="'Responsable: '+ph.owner_name">
@@ -359,7 +366,7 @@
                                         <div class="gg-ph-bar-wrap">
                                             <div class="gg-ph-bar">
                                                 <div class="gg-ph-fill"
-                                                    :style="'width:'+ph.progression+'%;background:'+ptColor(grp.phase_type)"
+                                                    :style="'width:'+ph.progression+'%;background:'+ptColor(grp.phase_num)"
                                                     :class="'ps-fill-'+ph.phase_status"></div>
                                             </div>
                                             <div class="gg-ph-dates" v-if="ph.planned_start||ph.planned_end">
@@ -491,11 +498,14 @@ function openGantt(aff: any) {
 
 function closeGantt() { gantt.open = false; }
 
-async function loadGantt(missionId: number) {
+async function loadGantt(missionId: number | null) {
+    if (!missionId) return;
     gantt.loading = true;
     gantt.error   = null;
     try {
-        const res  = await fetch(`/api/auditor/missions/${missionId}/gantt`, {
+        // CORRECTION : /api/auditor/... n'existe pas — la route réelle est
+        // GET /m/audit.core/auditor/missions/{id}/gantt (cf. routes/web.php).
+        const res  = await fetch(`/m/audit.core/auditor/missions/${missionId}/gantt`, {
             headers: { Accept: 'application/json' }
         });
         const json = await res.json();
@@ -509,8 +519,8 @@ async function loadGantt(missionId: number) {
     }
 }
 
-function phasesUrl(missionId: number) {
-    return `/m/audit.core/auditor/missions/${missionId}/phases`;
+function phasesUrl(missionId: number | null) {
+    return missionId ? `/m/audit.core/auditor/missions/${missionId}/phases` : '#';
 }
 
 function initials(last: string, first: string) {
@@ -533,12 +543,17 @@ function progClass(p: number, status: string) {
     return 'pf-low';
 }
 
-function ptColor(t: string) {
-    return ({ PREPARATION: '#7C3AED', VERIFICATION: '#0369A1', CONCLUSION: '#059669', SUIVI: '#D97706', RECOMMANDATIONS: '#db2777' } as any)[t] || '#64748B';
+// ── Style des groupes de phases ──────────────────────────────────────────
+// Clé numérique stable (phase_num, 1..5, vient de ddmparam.audit_type_forms).
+// C'est un choix de PRÉSENTATION (couleur/icône), volontairement indépendant
+// du libellé affiché (grp.label), qui lui vient dynamiquement de la base et
+// varie selon le type d'audit.
+function ptColor(n: number) {
+    return ({ 1: '#7C3AED', 2: '#0369A1', 3: '#059669', 4: '#D97706', 5: '#db2777' } as any)[n] || '#64748B';
 }
 
-function ptIcon(t: string) {
-    return ({ PREPARATION: '⚙', VERIFICATION: '🔍', CONCLUSION: '📋', SUIVI: '📊', RECOMMANDATIONS: '💡' } as any)[t] || '•';
+function ptIcon(n: number) {
+    return ({ 1: '⚙', 2: '🔍', 3: '📋', 4: '📊', 5: '💡' } as any)[n] || '•';
 }
 
 function formatBudget(v: number) {
@@ -682,7 +697,10 @@ function formatBudget(v: number) {
     background: #080e1c;
     border-bottom: 1px solid rgba(255,255,255,.05);
     flex-wrap: wrap;
-    sticky: top;
+    /* CORRECTION : `sticky: top` n'est pas du CSS valide */
+    position: sticky;
+    top: 0;
+    z-index: 20;
 }
 
 .tb-left { display: flex; align-items: center; gap: 10px; }

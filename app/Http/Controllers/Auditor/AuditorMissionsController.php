@@ -24,6 +24,7 @@
 
 namespace App\Http\Controllers\Auditor;
 
+use App\Http\Controllers\Concerns\BuildsMissionMenu;
 use App\Http\Controllers\Controller;
 use App\Models\Param\Auditor;
 use Illuminate\Http\Request;
@@ -34,6 +35,8 @@ use Inertia\Inertia;
 
 class AuditorMissionsController extends Controller
 {
+    use BuildsMissionMenu;
+
     // ══════════════════════════════════════════════════════════════════════════
     // HELPER — Construire une URL absolue correcte depuis un url_path
     //
@@ -281,11 +284,13 @@ class AuditorMissionsController extends Controller
         if (!$mission) abort(404);
 
         // Rôle de l'auditeur sur cette mission
+        // CORRECTION : COALESCE peut renvoyer NULL (affectation sans rôle) —
+        // buildPhasesByType() exige un string → repli '—' (niveau 9).
         $monRole = DB::table('mission_phase_auditeurs as mpa')
             ->leftJoin('mission_roles as mr', 'mpa.role_id', '=', 'mr.id')
             ->where('mpa.mission_id', $missionId)
             ->where('mpa.auditeur_id', $auditor->id)
-            ->value(DB::raw("COALESCE(mr.code, mpa.role)"));
+            ->value(DB::raw("COALESCE(mr.code, mpa.role)")) ?? '—';
 
         $roleNiveaux = ['DM' => 1, 'CM' => 2, 'AS' => 3, 'AJ' => 4];
         $monNiveau   = $roleNiveaux[$monRole] ?? 9;
@@ -303,6 +308,9 @@ class AuditorMissionsController extends Controller
             'equipe'        => array_values($equipe),
             'markingsData'  => $markingsData,
             'chatMessages'  => $chatMessages,
+            // Menu latéral "Mission en cours" (phases depuis ddmparam) —
+            // même navigation que sur les pages de formulaire.
+            'missionMenu'   => $this->buildMissionMenu($missionId),
             'auditor'       => array_merge($this->buildAuditorPayload($auditor), ['role' => $monRole]),
             // URLs pré-construites avec slash initial garanti → préfixe correct
             'chatBaseUrl'   => $this->buildUrl("m/audit.core/missions/{$missionId}/chat"),
@@ -328,11 +336,14 @@ class AuditorMissionsController extends Controller
         $mission = $this->getMissionWithColor($missionId);
         if (!$mission) return response()->json(['error' => 'Mission introuvable'], 404);
 
+        // Provision auto des phases depuis ddmparam (idempotent, cache 5 min)
+        \App\Services\Audit\PhaseSyncService::ensureMissionAssignments($missionId);
+
         $monRole   = DB::table('mission_phase_auditeurs as mpa')
             ->leftJoin('mission_roles as mr', 'mpa.role_id', '=', 'mr.id')
             ->where('mpa.mission_id', $missionId)
             ->where('mpa.auditeur_id', $auditor->id)
-            ->value(DB::raw("COALESCE(mr.code, mpa.role)"));
+            ->value(DB::raw("COALESCE(mr.code, mpa.role)")) ?? '—'; // jamais NULL (TypeError sinon)
         $monNiveau = ['DM' => 1, 'CM' => 2, 'AS' => 3, 'AJ' => 4][$monRole] ?? 9;
 
         $phasesByType = $this->buildPhasesByType($missionId, $auditor->id, $monRole, $monNiveau, $mission->audit_color);
@@ -410,10 +421,13 @@ class AuditorMissionsController extends Controller
             ->update(['status' => 'in_progress', 'actual_start' => now(), 'updated_at' => now()]);
 
         // Récupérer l'URL du formulaire pour redirection côté Vue
+        // ⚠️ NOUVEAU SCHÉMA : mission_phases.id = ddmparam.audit_type_forms.id,
+        // donc le code de formulaire se lit directement dans ddmparam via cet id
+        // (il n'est plus dupliqué dans mission_phases.form_code).
         $formCode = DB::table('mission_phase_assignments as mpa')
-            ->join('mission_phases as ph', 'mpa.mission_phase_id', '=', 'ph.id')
+            ->join('ddmparam.audit_type_forms as atf', 'mpa.mission_phase_id', '=', 'atf.id')
             ->where('mpa.id', $assignmentId)
-            ->value('ph.form_code');
+            ->value('atf.code');
 
         $formUrl = null;
         if ($formCode) {
@@ -441,6 +455,86 @@ class AuditorMissionsController extends Controller
         }
 
         return response()->json(['success' => true, 'form_url' => $formUrl]);
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════
+    // VALIDATE PHASE — Valider / rejeter le formulaire d'une phase (DM/CM)
+    // POST /m/audit.core/auditor/missions/{missionId}/phases/{assignmentId}/validate
+    // Body : { action: validate|reject, note?, form_code? }
+    // ══════════════════════════════════════════════════════════════════════════
+
+    public function validatePhase(Request $request, int $missionId, int $assignmentId)
+    {
+        $auditor = $this->getConnectedAuditor();
+        if (!$auditor) return response()->json(['error' => 'Non autorisé'], 403);
+
+        $data = $request->validate([
+            'action'    => 'required|in:validate,reject',
+            'note'      => 'nullable|string|max:2000',
+            'form_code' => 'nullable|string|max:160',
+        ]);
+
+        if ($data['action'] === 'reject' && trim((string) ($data['note'] ?? '')) === '') {
+            return response()->json(['message' => 'Le motif du rejet est obligatoire.'], 422);
+        }
+
+        $assignment = DB::table('mission_phase_assignments')
+            ->where('id', $assignmentId)
+            ->where('mission_programmation_id', $missionId)
+            ->first();
+        if (!$assignment) return response()->json(['error' => 'Phase introuvable'], 404);
+
+        // Seuls DM et CM peuvent valider/rejeter un formulaire
+        $monRole = DB::table('mission_phase_auditeurs as mpa')
+            ->leftJoin('mission_roles as mr', 'mpa.role_id', '=', 'mr.id')
+            ->where('mpa.mission_id', $missionId)
+            ->where('mpa.auditeur_id', $auditor->id)
+            ->value(DB::raw("COALESCE(mr.code, mpa.role)"));
+
+        if (!in_array($monRole, ['DM', 'CM'])) {
+            return response()->json(['error' => 'Droit insuffisant — action réservée au DM/CM.'], 403);
+        }
+
+        $oldStatus = $assignment->validation_status ?? 'draft';
+        if ($oldStatus === 'validated') {
+            return response()->json(['message' => 'Formulaire déjà validé — verrouillé.'], 409);
+        }
+
+        $newStatus = $data['action'] === 'validate' ? 'validated' : 'rejected';
+
+        $update = [
+            'validation_status' => $newStatus,
+            'validation_note'   => $data['note'] ?? null,
+            'validated_at'      => now(),
+            'validated_by'      => $auditor->id,
+            'updated_at'        => now(),
+        ];
+        // Une validation définitive clôt la phase
+        if ($newStatus === 'validated') {
+            $update['status'] = 'completed';
+            if ($this->columnExists('mission_phase_assignments', 'actual_end') && empty($assignment->actual_end)) {
+                $update['actual_end'] = now();
+            }
+        }
+
+        DB::table('mission_phase_assignments')->where('id', $assignmentId)->update($update);
+
+        // Journal d'audit des validations (si la table existe)
+        if ($this->columnExists('mission_phase_validation_log', 'id')) {
+            DB::table('mission_phase_validation_log')->insert([
+                'assignment_id' => $assignmentId,
+                'form_code'     => $data['form_code'] ?? null,
+                'actor_id'      => $auditor->id,
+                'actor_role'    => $monRole,
+                'action'        => $newStatus,
+                'old_status'    => $oldStatus,
+                'new_status'    => $newStatus,
+                'note'          => $data['note'] ?? null,
+                'created_at'    => now(),
+            ]);
+        }
+
+        return response()->json(['success' => true, 'validation_status' => $newStatus]);
     }
 
     // ══════════════════════════════════════════════════════════════════════════
@@ -596,27 +690,6 @@ class AuditorMissionsController extends Controller
         int    $monNiveau,
         string $missionColor = '#3B82F6'
     ): array {
-        // ── Formulaires depuis ddmparam ───────────────────────────────────────
-        $auditTypeCode = DB::table('mission_programmation as mp')
-            ->join('missions as m',       'mp.mission_id',     '=', 'm.id')
-            ->join('mission_types as mt', 'm.mission_type_id', '=', 'mt.id')
-            ->where('mp.id', $missionId)
-            ->value(DB::raw("COALESCE(mt.audit_type_code, mt.code)"));
-
-        $forms = [];
-        if ($auditTypeCode) {
-            try {
-                $forms = DB::table('ddmparam.audit_type_forms as atf')
-                    ->join('ddmparam.audit_types as at', 'atf.audit_type_id', '=', 'at.id')
-                    ->where('at.code', strtoupper($auditTypeCode))
-                    ->where('atf.is_active', 1)
-                    ->select(['atf.code', 'atf.url_path', 'atf.route_name', 'atf.label', 'atf.icon'])
-                    ->get()
-                    ->keyBy('code')
-                    ->toArray();
-            } catch (\Exception $e) {}
-        }
-
         // ── Détection colonnes optionnelles ───────────────────────────────────
         $hasActualDates      = $this->columnExists('mission_phase_assignments', 'actual_start');
         $hasOwnerId          = $this->columnExists('mission_phase_assignments', 'owner_id');
@@ -626,6 +699,11 @@ class AuditorMissionsController extends Controller
 
         $colorLight = $missionColor . '20';
 
+        // ⚠️ NOUVEAU SCHÉMA : mission_phases.id = ddmparam.audit_type_forms.id.
+        // Le contenu (libellé, phase_type, hiérarchie, code de formulaire...)
+        // vient DIRECTEMENT de ddmparam via un JOIN sur cet id — il n'est plus
+        // dupliqué dans mission_phases, qui ne porte plus que les réglages
+        // propres au tenant (is_mandatory, status, weight).
         $select = [
             'mpa.id as assignment_id',
             'mpa.mission_phase_id',
@@ -634,9 +712,20 @@ class AuditorMissionsController extends Controller
             'mpa.planned_start',
             'mpa.planned_end',
             'mpa.notes',
-            'ph.code', 'ph.code_full', 'ph.label', 'ph.description',
-            'ph.phase_type', 'ph.level', 'ph.parent_id',
-            'ph.form_code',
+            'atf.code', 'atf.code as code_full', 'atf.label', 'atf.description',
+            'atf.phase_num', 'atf.phase_label', 'atf.sort_order',
+            DB::raw("CASE atf.phase_num
+                WHEN 1 THEN 'PREPARATION' WHEN 2 THEN 'VERIFICATION'
+                WHEN 3 THEN 'CONCLUSION'  WHEN 4 THEN 'SUIVI'
+                WHEN 5 THEN 'RECOMMANDATIONS' ELSE 'AUTRE'
+            END as phase_type"),
+            DB::raw("CASE WHEN atf.parent_id IS NULL THEN 1 ELSE 2 END as level"),
+            'atf.parent_id',
+            'atf.code as form_code',
+            'atf.url_path as form_url_path',
+            'atf.route_name as form_route',
+            'atf.label as form_label',
+            'atf.icon as form_icon',
             'e.name as entity_name',
             DB::raw("DATE_FORMAT(mpa.planned_start,'%d/%m/%Y') as planned_start_fr"),
             DB::raw("DATE_FORMAT(mpa.planned_end,'%d/%m/%Y') as planned_end_fr"),
@@ -671,9 +760,15 @@ class AuditorMissionsController extends Controller
 
         $query = DB::table('mission_phase_assignments as mpa')
             ->select($select)
-            ->join('mission_phases as ph', 'mpa.mission_phase_id', '=', 'ph.id')
+            ->join('ddmparam.audit_type_forms as atf', 'mpa.mission_phase_id', '=', 'atf.id')
             ->leftJoin('entities as e', 'mpa.entity_id', '=', 'e.id')
             ->where('mpa.mission_programmation_id', $missionId);
+
+        // Les réglages tenant (weight) restent dans mission_phases, jointe
+        // séparément par id — jamais pour le contenu (label, phase_type...).
+        if ($hasWeight) {
+            $query->leftJoin('mission_phases as ph', 'ph.id', '=', 'mpa.mission_phase_id');
+        }
 
         if ($hasOwnerId) {
             $query
@@ -685,10 +780,15 @@ class AuditorMissionsController extends Controller
                 ->leftJoin('mission_roles as omr', 'own_mpa.role_id', '=', 'omr.id');
         }
 
-        $query->orderByRaw("FIELD(ph.phase_type,'PREPARATION','VERIFICATION','CONCLUSION','SUIVI')")
-              ->orderBy('ph.level', 'asc');
-        if ($hasWeight) $query->orderBy('ph.weight', 'asc');
-        $query->orderBy('mpa.planned_start', 'asc');
+        // ★ ORDRE OFFICIEL DE LA BASE PRINCIPALE : dans chaque phase,
+        // l'affichage suit exactement l'ordre défini par l'admin dans
+        // ddmparam (atf.sort_order, réglé par le glisser-déposer de l'écran
+        // AuditTypeForms, puis atf.id) — plus de tri par weight/dates qui
+        // mélangeait les formulaires.
+        $query->orderBy('atf.phase_num')
+              ->orderByRaw('CASE WHEN atf.parent_id IS NULL THEN 1 ELSE 2 END')
+              ->orderBy('atf.sort_order')
+              ->orderBy('atf.id');
 
         $phases = $query->get();
 
@@ -749,24 +849,30 @@ class AuditorMissionsController extends Controller
                 });
         }
 
-        // ── Groupage par phase_type ────────────────────────────────────────────
+        // ── Groupage par phase_num (1..5, ddmparam) ───────────────────────────
+        // CORRECTION : l'ancien groupage par liste figée de phase_type perdait
+        // silencieusement la phase 5 (RECOMMANDATIONS) et tout futur numéro.
+        // Le libellé de groupe est désormais DYNAMIQUE : atf.phase_label
+        // (exact pour chaque type d'audit), avec repli sur un libellé standard.
+        // phase_type (chaîne) est conservé par groupe ET par phase pour les
+        // consommateurs historiques (chat par phase_type notamment).
         $typeLabels = [
-            'PREPARATION'  => 'Préparation',
-            'VERIFICATION' => 'Vérification',
-            'CONCLUSION'   => 'Conclusion / Clôture',
-            'SUIVI'        => 'Suivi des Recommandations',
+            'PREPARATION'     => 'Préparation',
+            'VERIFICATION'    => 'Vérification',
+            'CONCLUSION'      => 'Conclusion / Clôture',
+            'SUIVI'           => 'Suivi des Recommandations',
+            'RECOMMANDATIONS' => 'Recommandations',
         ];
 
         $result  = [];
-        $grouped = $phases->groupBy('phase_type');
+        $grouped = $phases->groupBy('phase_num')->sortKeys();
 
-        foreach (['PREPARATION', 'VERIFICATION', 'CONCLUSION', 'SUIVI'] as $pt) {
-            if (!isset($grouped[$pt])) continue;
-            $group = $grouped[$pt];
+        foreach ($grouped as $phaseNum => $group) {
+            $first = $group->first();
 
             $phasesArray = $group->values()->map(function ($ph) use (
                 $tasksParPhase, $audsByAssignment, $hasTasks,
-                $missionColor, $colorLight, $forms, $hasValidationStatus,
+                $missionColor, $colorLight, $hasValidationStatus,
                 $missionId
             ) {
                 $arr = (array) $ph;
@@ -782,17 +888,17 @@ class AuditorMissionsController extends Controller
                 // Ex: 'm/audit.core/ac/preparation/reunion-lancement'
                 // → url('/m/audit.core/ac/preparation/reunion-lancement')
                 // → http://ddm-master.test/m/audit.core/ac/preparation/reunion-lancement ✓
-                $formEntry       = $ph->form_code ? ($forms[$ph->form_code] ?? null) : null;
-                $formPath        = $formEntry->url_path ?? null;
+                // Les champs form_* viennent directement de ddmparam.audit_type_forms
+                // (colonnes atf.* du SELECT), plus besoin d'un lookup séparé.
+                $formPath        = $arr['form_url_path'] ?? null;
                 $arr['form_url'] = $formPath
                     ? $this->buildUrl($formPath, [
                         'mission_id'    => $missionId,
                         'assignment_id' => $ph->assignment_id,
                     ])
                     : null;
-                $arr['form_route'] = $formEntry->route_name ?? null;
-                $arr['form_label'] = $formEntry->label      ?? null;
-                $arr['form_icon']  = $formEntry->icon       ?? 'ti ti-file-description';
+                $arr['form_icon'] = $arr['form_icon'] ?? 'ti ti-file-description';
+                unset($arr['form_url_path']);
 
                 // ── URL démarrer la phase ──────────────────────────────────────
                 // CORRECTION : buildUrl() au lieu de url() directement
@@ -809,8 +915,10 @@ class AuditorMissionsController extends Controller
             })->toArray();
 
             $result[] = [
-                'phase_type'  => $pt,
-                'label'       => $typeLabels[$pt] ?? $pt,
+                'phase_num'   => (int) $phaseNum,
+                'phase_type'  => $first->phase_type,
+                'label'       => $first->phase_label
+                    ?: ($typeLabels[$first->phase_type] ?? $first->phase_type),
                 'color'       => $missionColor,
                 'color_light' => $colorLight,
                 'phases'      => $phasesArray,

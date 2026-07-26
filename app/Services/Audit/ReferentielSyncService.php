@@ -83,16 +83,34 @@ class ReferentielSyncService
 
         Log::info('ReferentielSync: démarrage', ['tenant_id' => $tenantId, 'db' => $dbName, 'version' => $version]);
 
+        // ── 0. Mise à niveau du schéma tenant (tables/colonnes AM 2026) ──
+        //     Les paramètres ARMP (barèmes, pondération, conditions, gravité
+        //     des écarts) ont été ajoutés dans ddmparam APRÈS le provisioning
+        //     initial des tenants : on garantit d'abord que la structure
+        //     d'accueil existe, sinon l'upsert échouerait sur colonne absente.
+        $this->ensureTenantSchema($tenant);
+
         $tenant->transaction(function () use ($master, $tenant) {
 
             // ── 1. Référentiels simples (upsert par code) ────────────
             foreach ([
                 'pm_types_entites', 'pm_sources_financement', 'pm_natures_marche',
-                'pm_modes_passation', 'pm_organes_controle', 'pm_operations',
-                'pm_dates_reference',
+                'pm_modes_passation', 'pm_organes_controle',
+                // Paramétrage AM 2026 (identifié par code, id tenant libre)
+                'pm_parametres_audit', 'pm_modalites_appreciation',
+                'pm_conditions_conformite', 'pm_pieces_categories',
             ] as $table) {
                 $this->upsertByKey($master, $tenant, $table, ['code']);
             }
+            // Gabarits de formulaire : clé = form_code
+            $this->upsertByKey($master, $tenant, 'pm_form_templates', ['form_code']);
+            // pm_pieces_obligatoires : id STABLE — mission_phase pièces
+            // (à venir) référenceront piece_id ; pm_operations /
+            // pm_dates_reference : id STABLE car pm_delais.operation_id et
+            // .date_reference_id pointent sur ces id centraux (sinon FK KO).
+            $this->upsertWithId($master, $tenant, 'pm_operations');
+            $this->upsertWithId($master, $tenant, 'pm_dates_reference');
+            $this->upsertWithId($master, $tenant, 'pm_pieces_obligatoires');
 
             // ── 2. Seuils / délais / grilles — upsert avec ID STABLE ──
             $this->upsertWithId($master, $tenant, 'pm_seuils_generaux');
@@ -102,7 +120,11 @@ class ReferentielSyncService
             $this->upsertWithId($master, $tenant, 'pm_grilles_verification_items');
             $this->upsertWithId($master, $tenant, 'pm_articles_loi');
 
-            // ── 3. Pivots — resynchronisation simple (delete + insert) ─
+            // ── 3. Barèmes/appréciations — id stable (référencés à l'écran) ─
+            $this->upsertWithId($master, $tenant, 'pm_grille_appreciation_disponibilite');
+            $this->upsertWithId($master, $tenant, 'pm_baremes_appreciation');
+
+            // ── 4. Pivots — resynchronisation simple (delete + insert) ─
             foreach ([
                 'pm_mode_organes', 'pm_delai_organes', 'pm_delai_modes',
                 'pm_seuils_ac_organes', 'pm_grilles_verification_organes',
@@ -159,6 +181,118 @@ class ReferentielSyncService
     }
 
     // ═══════════════════════════════════════════════════════════════
+    //  SCHÉMA TENANT — DDL idempotente pour le paramétrage AM 2026
+    //  (tables ajoutées après le provisioning initial des tenants)
+    // ═══════════════════════════════════════════════════════════════
+
+    private function ensureTenantSchema($tenant): void
+    {
+        // 4.a — Nouvelles tables de paramétrage (structure identique à ddmparam)
+        $tenant->statement(<<<'SQL'
+CREATE TABLE IF NOT EXISTS `pm_baremes_appreciation` (
+  `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `type_bareme` VARCHAR(20) NOT NULL,
+  `borne_min` DECIMAL(5,2) DEFAULT NULL,
+  `operateur_min` VARCHAR(5) DEFAULT NULL,
+  `borne_max` DECIMAL(5,2) DEFAULT NULL,
+  `operateur_max` VARCHAR(5) DEFAULT NULL,
+  `appreciation` VARCHAR(255) NOT NULL,
+  `code_resultat` VARCHAR(30) DEFAULT NULL,
+  `est_conforme` TINYINT(1) DEFAULT NULL,
+  `couleur` VARCHAR(20) DEFAULT 'gray',
+  `actif` TINYINT(1) NOT NULL DEFAULT 1,
+  `sort` INT NOT NULL DEFAULT 0,
+  `created_at` TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_bareme_type` (`type_bareme`,`sort`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+SQL);
+
+        $tenant->statement(<<<'SQL'
+CREATE TABLE IF NOT EXISTS `pm_modalites_appreciation` (
+  `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `code` VARCHAR(30) NOT NULL,
+  `libelle` VARCHAR(100) NOT NULL,
+  `poids` DECIMAL(5,2) NOT NULL,
+  `exclu_du_calcul` TINYINT(1) NOT NULL DEFAULT 0,
+  `couleur` VARCHAR(20) DEFAULT 'gray',
+  `icone` VARCHAR(60) DEFAULT NULL,
+  `actif` TINYINT(1) NOT NULL DEFAULT 1,
+  `sort` INT NOT NULL DEFAULT 0,
+  `created_at` TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `code` (`code`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+SQL);
+
+        $tenant->statement(<<<'SQL'
+CREATE TABLE IF NOT EXISTS `pm_conditions_conformite` (
+  `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `code` VARCHAR(40) NOT NULL,
+  `libelle` VARCHAR(300) NOT NULL,
+  `description` TEXT DEFAULT NULL,
+  `portee` VARCHAR(20) NOT NULL DEFAULT 'marche',
+  `parametre_code` VARCHAR(50) DEFAULT NULL,
+  `bloquante` TINYINT(1) NOT NULL DEFAULT 1,
+  `actif` TINYINT(1) NOT NULL DEFAULT 1,
+  `sort` INT NOT NULL DEFAULT 0,
+  `created_at` TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `code` (`code`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+SQL);
+
+        $tenant->statement(<<<'SQL'
+CREATE TABLE IF NOT EXISTS `pm_form_templates` (
+  `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `form_code` VARCHAR(160) NOT NULL,
+  `audit_type_code` VARCHAR(10) DEFAULT NULL,
+  `titre` VARCHAR(255) DEFAULT NULL,
+  `sections_json` LONGTEXT NOT NULL,
+  `actif` TINYINT(1) NOT NULL DEFAULT 1,
+  `created_at` TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_tpl_form` (`form_code`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+SQL);
+
+        // 4.b — Colonnes ajoutées sur des tables déjà provisionnées
+        $this->addColumnIfMissing($tenant, 'pm_pieces_categories', 'annexe',
+            "ADD COLUMN `annexe` VARCHAR(10) DEFAULT NULL AFTER `libelle`");
+        $this->addColumnIfMissing($tenant, 'pm_pieces_obligatoires', 'reference_texte',
+            "ADD COLUMN `reference_texte` VARCHAR(255) DEFAULT NULL AFTER `incidence`,
+             ADD COLUMN `mode_passation_code` VARCHAR(20) DEFAULT NULL AFTER `reference_texte`,
+             ADD COLUMN `compte_auditabilite` TINYINT(1) NOT NULL DEFAULT 1 AFTER `mode_passation_code`");
+        $this->addColumnIfMissing($tenant, 'pm_grilles_verification_items', 'gravite_ecart',
+            "ADD COLUMN `gravite_ecart` VARCHAR(10) DEFAULT NULL AFTER `type_reponse`,
+             ADD COLUMN `reference_ecart` VARCHAR(30) DEFAULT NULL AFTER `gravite_ecart`");
+        // `preuves` : colonne présente en central mais absente de certains
+        // tenants provisionnés avant son ajout (dérive de schéma historique).
+        $this->addColumnIfMissing($tenant, 'pm_grilles_verification_items', 'preuves',
+            "ADD COLUMN `preuves` TEXT DEFAULT NULL AFTER `seuil_ac_id`");
+        // Certains tenants historiques ont `unite` en VARCHAR(20) : on élargit
+        $tenant->statement("ALTER TABLE `pm_parametres_audit` MODIFY `unite` VARCHAR(40) DEFAULT '%'");
+    }
+
+    /** ALTER conditionnel : n'ajoute la/les colonne(s) que si la 1ʳᵉ manque. */
+    private function addColumnIfMissing($tenant, string $table, string $column, string $alterClause): void
+    {
+        $dbName = $tenant->getDatabaseName();
+        $exists = $tenant->selectOne(
+            'SELECT COUNT(*) AS n FROM information_schema.COLUMNS
+              WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ? AND COLUMN_NAME = ?',
+            [$dbName, $table, $column]
+        );
+        if (!$exists || (int) $exists->n === 0) {
+            $tenant->statement("ALTER TABLE `{$table}` {$alterClause}");
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════
     //  HELPERS
     // ═══════════════════════════════════════════════════════════════
 
@@ -187,11 +321,16 @@ class ReferentielSyncService
         }
     }
 
-    /** Resynchronisation totale d'une table pivot (aucune FK externe dessus). */
+    /**
+     * Resynchronisation totale d'une table pivot (aucune FK externe dessus).
+     * ⚠️ On utilise DELETE et non TRUNCATE : TRUNCATE est du DDL et provoque
+     *    un COMMIT implicite qui romprait la transaction englobante de
+     *    syncTenant() (« There is no active transaction » au commit final).
+     */
     private function replaceAll($master, $tenant, string $table): void
     {
         $rows = $master->table("ddmparam.{$table}")->get()->map(fn($r) => (array) $r)->toArray();
-        $tenant->table($table)->truncate();
+        $tenant->table($table)->delete();
         foreach (array_chunk($rows, 500) as $chunk) {
             if ($chunk) $tenant->table($table)->insert($chunk);
         }

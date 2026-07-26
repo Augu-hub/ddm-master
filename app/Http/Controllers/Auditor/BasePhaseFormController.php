@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Auditor;
 
+use App\Http\Controllers\Concerns\BuildsMissionMenu;
 use App\Http\Controllers\Controller;
 use App\Models\Param\Auditor;
 use Illuminate\Http\Request;
@@ -24,6 +25,8 @@ use Illuminate\Support\Facades\Session;
  */
 abstract class BasePhaseFormController extends Controller
 {
+    use BuildsMissionMenu;
+
     /** Table de stockage du formulaire */
     protected string $table;
 
@@ -152,14 +155,18 @@ abstract class BasePhaseFormController extends Controller
 
     protected function getAssignment(int $assignmentId, int $missionId): ?object
     {
+        // ⚠️ NOUVEAU SCHÉMA : mission_phases ne porte plus code/label/form_code —
+        // le contenu se lit dans ddmparam.audit_type_forms via l'id partagé
+        // (mission_phases.id = audit_type_forms.id = mpa.mission_phase_id).
         return DB::table('mission_phase_assignments as mpa')
-            ->join('mission_phases as ph', 'mpa.mission_phase_id', '=', 'ph.id')
+            ->join('ddmparam.audit_type_forms as atf', 'mpa.mission_phase_id', '=', 'atf.id')
             ->where('mpa.id', $assignmentId)
             ->where('mpa.mission_programmation_id', $missionId)
             ->select([
                 'mpa.id', 'mpa.status as phase_status',
                 'mpa.validation_status', 'mpa.planned_start', 'mpa.planned_end',
-                'ph.code as phase_code', 'ph.label as phase_label', 'ph.form_code',
+                'atf.code as phase_code', 'atf.label as phase_label',
+                'atf.code as form_code', 'atf.phase_num', 'atf.phase_label as phase_group_label',
             ])
             ->first();
     }
@@ -215,8 +222,17 @@ abstract class BasePhaseFormController extends Controller
             'missionId'    => $missionId,
             'assignmentId' => $assignmentId,
             'errors'       => [],
+            // Menu latéral "Mission en cours" : toutes les phases/formulaires
+            // de CETTE mission avec leur assignment_id et leur URL prête à
+            // l'emploi — consommé par VerticalMenuAudit (sidebar) sur chaque
+            // page de formulaire, pour naviguer sans repasser par MissionPhases.
+            'missionMenu'  => $this->buildMissionMenu($missionId),
         ];
     }
+
+    // buildMissionMenu() vit désormais dans le trait partagé
+    // App\Http\Controllers\Concerns\BuildsMissionMenu (utilisé aussi par
+    // AuditorMissionsController pour la page MissionPhases).
 
     // ══════════════════════════════════════════════════════════════════
     // INDEX

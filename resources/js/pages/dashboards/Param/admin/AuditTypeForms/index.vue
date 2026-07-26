@@ -156,6 +156,8 @@
                   </div>
                 </div>
 
+                <!-- ⚠️ Suppression des blocs de normes de phase -->
+
                 <!-- Formulaires de la phase -->
                 <div class="phase-forms">
                   <div v-if="!hasVisibleForms(phase.forms)" class="phase-empty">
@@ -231,7 +233,7 @@
       </div>
     </Teleport>
 
-    <!-- ══ MODAL PHASE ════════════════════════════════════════════════ -->
+    <!-- ══ MODAL PHASE (sans champ norme) ════════════════════════════ -->
     <Teleport to="body">
       <div v-if="phaseModal.show" class="modal-overlay" @click.self="phaseModal.show = false">
         <div class="modal-box">
@@ -254,6 +256,7 @@
                 <input v-model="phaseModal.form.phase_label" required class="finput" placeholder="ex: Préparation, Réalisation..." />
               </div>
             </div>
+            <!-- ⚠️ Le champ norme a été supprimé -->
             <div class="modal-footer">
               <button type="button" @click="phaseModal.show = false" class="btn-cancel">Annuler</button>
               <button type="submit" class="btn-save" :disabled="phaseModal.loading">
@@ -265,7 +268,7 @@
       </div>
     </Teleport>
 
-    <!-- ══ MODAL FORMULAIRE ═══════════════════════════════════════════ -->
+    <!-- ══ MODAL FORMULAIRE (avec champ norme individuel) ════════════ -->
     <Teleport to="body">
       <div v-if="formModal.show" class="modal-overlay" @click.self="formModal.show = false">
         <div class="modal-box modal-lg">
@@ -285,6 +288,23 @@
                 <input v-model="formModal.form.phase_label" required class="finput" placeholder="ex: Préparation..." />
               </div>
             </div>
+
+            <!-- Normes spécifiques au formulaire -->
+            <div class="fg">
+              <label>Normes / référentiels (propres à ce formulaire)</label>
+              <input
+                v-model="formModal.form.norme"
+                class="finput"
+                placeholder="ex: ISO 9001, INTOSAI, COSO (séparés par des virgules)"
+              />
+              <div class="norme-preview" v-if="normeList(formModal.form.norme).length">
+                <span
+                  v-for="(n, idx) in normeList(formModal.form.norme)" :key="idx"
+                  class="norme-chip"
+                >{{ n }}</span>
+              </div>
+            </div>
+
             <!-- Parent -->
             <div class="fg">
               <label>Parent (optionnel)</label>
@@ -300,6 +320,7 @@
                 </optgroup>
               </select>
             </div>
+
             <!-- Code + Label -->
             <div class="fg-row">
               <div class="fg">
@@ -311,6 +332,7 @@
                 <input v-model="formModal.form.label" required class="finput" />
               </div>
             </div>
+
             <!-- URL + Icône + Ordre -->
             <div class="fg-row">
               <div class="fg" style="flex:2">
@@ -326,9 +348,11 @@
                 <input v-model.number="formModal.form.sort_order" type="number" min="0" class="finput" />
               </div>
             </div>
+
             <div class="fg-check">
               <label><input type="checkbox" v-model="formModal.form.is_active" /> Actif</label>
             </div>
+
             <div class="modal-footer">
               <button type="button" @click="formModal.show = false" class="btn-cancel">Annuler</button>
               <button type="submit" class="btn-save" :disabled="formModal.loading">
@@ -379,7 +403,7 @@ import { ref, computed, defineComponent, h } from 'vue'
 import VerticalLayout from '@/layoutsparam/VerticalLayout.vue'
 
 // ══════════════════════════════════════════════════════════════════
-//  Composant récursif — render function (Vue 3, pas de template string)
+//  Composant récursif — render function (Vue 3)
 // ══════════════════════════════════════════════════════════════════
 const FormTreeItem = defineComponent({
   name: 'FormTreeItem',
@@ -414,12 +438,17 @@ const FormTreeItem = defineComponent({
     return () => {
       if (!visible.value) return null
 
-      // Lignes d'indentation
       const lines = Array.from({ length: props.level }, (_, i) =>
         h('span', { key: i, class: 'ftree-line', style: { borderColor: props.typeColor } })
       )
 
-      // Enfants récursifs
+      // Affichage des normes du formulaire (propre)
+      const normesChips = props.form.norme
+        ? props.form.norme.split(',').map(n => n.trim()).filter(Boolean).map(n =>
+            h('span', { class: 'norme-chip', style: { borderColor: props.typeColor, color: props.typeColor } }, n)
+          )
+        : []
+
       const childNodes = (props.form.children || []).map(child =>
         h(FormTreeItem, {
           key:          child.id,
@@ -442,6 +471,8 @@ const FormTreeItem = defineComponent({
           h('div', { class: 'ftree-info' }, [
             h('div', { class: 'ftree-code' }, props.form.code),
             h('div', { class: 'ftree-label' }, props.form.label),
+            // Affichage des normes du formulaire
+            normesChips.length ? h('div', { class: 'ftree-normes' }, normesChips) : null,
             props.form.url_path ? h('div', { class: 'ftree-url' }, props.form.url_path) : null,
           ]),
           h('div', { class: 'ftree-actions' }, [
@@ -482,8 +513,8 @@ const showInactiveForms = ref(false)
 const refreshing        = ref(false)
 const loadingForms      = ref(false)
 const selectedTypeId    = ref(null)
-const phases            = ref([])    // arbre par phase
-const flatForms         = ref([])    // liste plate pour select parent
+const phases            = ref([])    // arbre par phase (plus de norme partagée)
+const flatForms         = ref([])
 
 // ══════════════════════════════════════════════════════════════════
 //  Computed
@@ -500,7 +531,6 @@ const filteredTypes = computed(() => {
   )
 })
 
-// Liste plate groupée par phase pour le <select> parent du modal formulaire
 const flatFormsByPhase = computed(() => {
   const map = {}
   flatForms.value.forEach(f => {
@@ -531,10 +561,19 @@ function hasVisibleForms(forms) {
   return forms.some(f => showInactiveForms.value || f.is_active)
 }
 
+function normeList(norme) {
+  if (!norme) return []
+  return norme
+    .split(',')
+    .map(n => n.trim())
+    .filter(n => n.length > 0)
+}
+
 function autoFillPhaseLabel() {
   const ph = phases.value.find(p => p.phase_num === formModal.value.form.phase_num)
-  if (ph && !formModal.value.form.phase_label) {
-    formModal.value.form.phase_label = ph.phase_label
+  if (ph) {
+    if (!formModal.value.form.phase_label) formModal.value.form.phase_label = ph.phase_label
+    // Ne pas remplir automatiquement la norme
   }
 }
 
@@ -620,7 +659,7 @@ function toggleTypeActive(type) {
 }
 
 // ══════════════════════════════════════════════════════════════════
-//  MODAL — Phase
+//  MODAL — Phase (sans norme)
 // ══════════════════════════════════════════════════════════════════
 const phaseModal = ref({ show: false, edit: false, loading: false, form: {}, originalNum: null })
 
@@ -641,7 +680,6 @@ function savePhase() {
   const { edit, form, originalNum } = phaseModal.value
 
   if (edit) {
-    // Renommer → PATCH phase-rename → met à jour tous les formulaires de la phase
     router.patch('/admin/audit-type-forms/phase-rename', {
       audit_type_id:   selectedTypeId.value,
       old_phase_num:   originalNum,
@@ -653,7 +691,7 @@ function savePhase() {
       onFinish:  ()   => { phaseModal.value.loading = false },
     })
   } else {
-    // Créer : pas d'entrée spécifique en DB pour la phase, on ouvre le modal formulaire pré-rempli
+    // Créer : on ouvre le modal formulaire pré-rempli avec les valeurs de phase
     phaseModal.value.show    = false
     phaseModal.value.loading = false
     openFormModal(null, form.phase_num, form.phase_label)
@@ -661,7 +699,7 @@ function savePhase() {
 }
 
 // ══════════════════════════════════════════════════════════════════
-//  MODAL — Formulaire
+//  MODAL — Formulaire (avec norme individuelle)
 // ══════════════════════════════════════════════════════════════════
 const formModal = ref({ show: false, edit: false, loading: false, form: {} })
 
@@ -674,8 +712,9 @@ function openFormModal(form = null, defaultPhase = null, defaultPhaseLabel = '',
       ? { ...form, children: undefined }
       : {
           audit_type_id: selectedTypeId.value,
-          phase_num:     defaultPhase      ?? (phases.value[0]?.phase_num   ?? 1),
+          phase_num:     defaultPhase ?? (phases.value[0]?.phase_num ?? 1),
           phase_label:   defaultPhaseLabel || (phases.value[0]?.phase_label ?? ''),
+          norme:         '',  // vide, l'utilisateur le renseigne
           parent_id:     defaultParentId,
           code:          '',
           label:         '',
@@ -707,12 +746,12 @@ function toggleFormActive(form) {
 }
 
 // ══════════════════════════════════════════════════════════════════
-//  MODAL — Suppression (type / phase / formulaire)
+//  MODAL — Suppression
 // ══════════════════════════════════════════════════════════════════
 const delModal = ref({
   show:       false,
   loading:    false,
-  type:       null,   // 'audit_type' | 'phase' | 'form'
+  type:       null,
   target:     null,
   label:      '',
   formsCount: 0,
@@ -753,7 +792,7 @@ function confirmDelete() {
         await refreshData()
       } else {
         await loadForms(selectedTypeId.value)
-        if (type !== 'form') await refreshData() // màj compteurs sidebar
+        if (type !== 'form') await refreshData()
       }
     },
     onFinish: () => { delModal.value.loading = false },
@@ -948,7 +987,9 @@ function confirmDelete() {
   cursor: pointer; font-weight: 600; text-decoration: underline; font-size: inherit;
 }
 
-/* FormTreeItem — styles via :deep() car render function */
+/* Suppression des styles de normes de phase (phase-normes-row) */
+
+/* FormTreeItem — styles */
 :deep(.ftree-item)        { border-bottom: 1px solid #f0f2f5; }
 :deep(.ftree-item:last-child) { border-bottom: none; }
 :deep(.ftree-row)         { display: flex; align-items: center; gap: .75rem; padding: .65rem 1rem; transition: background .15s; }
@@ -959,6 +1000,8 @@ function confirmDelete() {
 :deep(.ftree-info)        { flex: 1; min-width: 0; }
 :deep(.ftree-code)        { font-size: .7rem; font-weight: 800; color: #667eea; letter-spacing: .04em; }
 :deep(.ftree-label)       { font-size: .88rem; font-weight: 600; color: #2d3748; }
+:deep(.ftree-normes)      { display: flex; flex-wrap: wrap; gap: .3rem; margin-top: .2rem; }
+:deep(.ftree-normes .norme-chip) { font-size: .65rem; padding: .1rem .5rem; border-radius: 4px; border: 1px solid; background: #f7fafc; }
 :deep(.ftree-url)         { font-size: .72rem; color: #a0aec0; font-family: monospace; }
 :deep(.ftree-actions)     { display: flex; align-items: center; gap: .25rem; flex-shrink: 0; }
 :deep(.badge-on)          { font-size: .65rem; background: #c6f6d5; color: #276749; padding: .1rem .4rem; border-radius: 4px; font-weight: 700; }
@@ -1027,6 +1070,12 @@ function confirmDelete() {
 }
 .finput:focus    { outline: none; border-color: #667eea; box-shadow: 0 0 0 3px rgba(102,126,234,.1); }
 .finput:disabled { background: #f7fafc; color: #a0aec0; }
+.ftextarea       { resize: vertical; font-family: inherit; }
+
+.norme-preview {
+  display: flex; flex-wrap: wrap; gap: .35rem; margin-top: .25rem;
+}
+.norme-preview .norme-chip { border-color: #667eea; color: #667eea; }
 
 .color-row      { display: flex; gap: .5rem; align-items: center; }
 .color-picker   { width: 44px; height: 42px; border: 2px solid #e2e8f0; border-radius: 8px; cursor: pointer; padding: 2px; }
@@ -1044,11 +1093,9 @@ function confirmDelete() {
 
 .warn-text { color: #e53e3e; font-weight: 600; margin-top: .5rem; font-size: .9rem; }
 
-/* Animations */
 @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
 .anim-spin { animation: spin 1s linear infinite; }
 
-/* Responsive */
 @media (max-width: 768px) {
   .atf-body         { flex-direction: column; height: auto; }
   .types-panel      { width: 100%; border-right: none; border-bottom: 1px solid #e2e8f0; max-height: 280px; }

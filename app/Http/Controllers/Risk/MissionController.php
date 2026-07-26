@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Risk;
 
 use App\Http\Controllers\Controller;
+use App\Services\Mission\MissionProgrammationService;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Illuminate\Support\Facades\DB;
@@ -26,7 +27,22 @@ class MissionController extends Controller
      * Pivots :
      *   mission_risk       (id, mission_id, risk_id, created_at, updated_at)
      *   mission_competency (id, mission_id, competency_id, minimum_level, ...)
+     *
+     * ── NOUVEAU ──────────────────────────────────────────────────────────
+     * À la création, la mission déclenche désormais AUTOMATIQUEMENT la
+     * génération de sa programmation (`mission_programmation`) et de ses
+     * affectations de phase (`mission_phase_assignments`), via
+     * MissionProgrammationService::autoGenerate(). Les phases utilisées
+     * viennent de `mission_phases`, tenu à jour automatiquement depuis le
+     * référentiel central `ddmparam` par TenantReferenceSyncService
+     * (cf. app/Observers/*Observer.php + SyncTenantReferenceDataJob).
+     *
+     * Le résultat est renvoyé en "proposition" modifiable : rien n'est
+     * verrouillé tant que l'utilisateur n'a pas appelé confirmProgrammation().
      */
+    public function __construct(private MissionProgrammationService $programmationService)
+    {
+    }
 
     /** Connexion tenant (entities, processes, risks, missions…) */
     private function tenant()
@@ -53,17 +69,56 @@ class MissionController extends Controller
                     'year' => (int) $e->year,
                 ])->toArray();
 
-            // ── Types de mission ─────────────────────────────────────────
+            // ── Types d'audit — RÉFÉRENTIEL CENTRAL (ddmparam) ────────────
+            // Source de vérité pour label/couleur/icône : jamais la copie
+            // dénormalisée du tenant, qui peut être désynchronisée (bug déjà
+            // constaté : AMP rattaché à AF au lieu de AM dans fruitiva).
+            // ⚠️ CORRECTIF : il n'existe pas de connexion "default" dans ce
+            // projet (cf. .env : DB_CONNECTION=mysql). La base centrale
+            // ddmparam est accessible via la connexion "mysql".
+            $auditTypes = DB::connection('mysql')->table('ddmparam.audit_types')
+                ->where('is_active', 1)
+                ->orderBy('sort_order')
+                ->select('id', 'code', 'label', 'short_label', 'color', 'icon')
+                ->get()
+                ->map(fn($at) => [
+                    'id'          => (int) $at->id,
+                    'code'        => $at->code,
+                    'label'       => $at->label,
+                    'short_label' => $at->short_label,
+                    'color'       => $at->color,
+                    'icon'        => $at->icon,
+                ])->keyBy('code');
+
+            // ── Types de mission (tenant) enrichis en live depuis ddmparam ─
+            // On ne modifie rien en base ici (c'est le rôle du sync job en
+            // tâche de fond) : on corrige juste l'AFFICHAGE au cas où la
+            // synchro n'est pas encore passée, pour ne jamais montrer une
+            // donnée périmée à l'utilisateur.
             $missionTypes = $this->tenant()->table('mission_types')
                 ->where('is_active', 1)
                 ->orderBy('code')
-                ->select('id', 'code', 'label')
+                ->select('id', 'code', 'label', 'audit_type_code', 'audit_type_label', 'audit_color', 'audit_icon')
                 ->get()
-                ->map(fn($mt) => [
-                    'id'    => (int) $mt->id,
-                    'code'  => $mt->code,
-                    'label' => $mt->label,
-                ])->toArray();
+                ->map(function ($mt) use ($auditTypes) {
+                    $ref = $mt->audit_type_code ? ($auditTypes[$mt->audit_type_code] ?? null) : null;
+                    return [
+                        'id'               => (int) $mt->id,
+                        'code'             => $mt->code,
+                        'label'            => $mt->label,
+                        'audit_type_code'  => $mt->audit_type_code,
+                        // Valeurs central si le référentiel est trouvé, sinon on
+                        // retombe sur la copie tenant (mieux que rien).
+                        // ⚠️ $ref est un TABLEAU (cf. ->map(fn($at) => [...]) plus
+                        // haut), donc accès par clé ['label'], jamais ->label.
+                        'audit_type_label' => $ref['label'] ?? $mt->audit_type_label,
+                        'audit_color'      => $ref['color'] ?? $mt->audit_color,
+                        'audit_icon'       => $ref['icon']  ?? $mt->audit_icon,
+                        'is_synced'        => $ref
+                            ? ($ref['label'] === $mt->audit_type_label && $ref['color'] === $mt->audit_color && $ref['icon'] === $mt->audit_icon)
+                            : false,
+                    ];
+                })->toArray();
 
             // ── Entités ──────────────────────────────────────────────────
             $entities = $this->tenant()->table('entities')
@@ -272,6 +327,7 @@ class MissionController extends Controller
             return Inertia::render('dashboards/Audit/MissionA/create', [
                 'exercises'       => $exercises,
                 'missionTypes'    => $missionTypes,
+                'auditTypes'      => $auditTypes->values()->toArray(),
                 'entities'        => $entities,
                 'competencies'    => $competencies,
                 'fpmMissions'     => $fpmMissions,
@@ -293,6 +349,7 @@ class MissionController extends Controller
 
     // =========================================================================
     // STORE — enregistrement dans `missions` (connexion tenant)
+    //         + génération AUTOMATIQUE de la programmation et des phases
     // =========================================================================
     /**
      * ⚠️  CORRECTIF FK cross-DB :
@@ -352,7 +409,7 @@ class MissionController extends Controller
                 $code = $type->code . '-' . str_pad($count, 3, '0', STR_PAD_LEFT) . '-' . $yearSuffix;
             }
 
-            // ── Entité principale ─────────────────────────────────────────
+            // ── Entité principale (conservée pour compat. colonne `entity_id`) ──
             $firstEntityId = (int) $validated['entity_ids'][0];
 
             // ── Durée ─────────────────────────────────────────────────────
@@ -366,62 +423,79 @@ class MissionController extends Controller
                 ));
             }
 
-            // ── Insert dans `missions` (connexion tenant) ─────────────────
-            // created_by = NULL car FK cross-DB (users sur default, missions sur tenant)
-            $missionId = $this->tenant()->table('missions')->insertGetId([
-                'code'                  => $code,
-                'fpm_number'            => $validated['fpm_number']        ?? null,
-                'audit_exercise_id'     => $validated['audit_exercise_id'],
-                'mission_type_id'       => $validated['mission_type_id'],
-                'entity_id'             => $firstEntityId,
-                'title'                 => $validated['title'],
-                'objective'             => $validated['objective']          ?? null,
-                'domain'                => $validated['domain']             ?? null,
-                'reference_document'    => $validated['reference_document'] ?? null,
-                'priority'              => $validated['priority']           ?? 'moyenne',
-                'planned_start_date'    => $validated['planned_start_date'] ?? null,
-                'planned_end_date'      => $validated['planned_end_date']   ?? null,
-                'planned_duration_days' => $duration,
-                'status'                => 'brouillon',
-                'created_by'            => null,   // ← NULL : FK cross-DB (users ≠ tenant)
-                'updated_by'            => null,   // ← NULL : même raison
-                'created_at'            => now(),
-                'updated_at'            => now(),
-            ]);
+            $missionId = null;
+            $proposal  = null;
 
-            // ── Pivots risques (mission_risk) ─────────────────────────────
-            if (!empty($validated['risk_ids'])) {
-                $this->tenant()->table('mission_risk')->insert(
-                    array_map(fn($riskId) => [
-                        'mission_id' => $missionId,
-                        'risk_id'    => (int) $riskId,
-                        'created_at' => now(),
-                        'updated_at' => now(),
-                    ], array_unique($validated['risk_ids']))
-                );
-            }
+            // Toute l'opération (mission + programmation + phases) dans UNE
+            // transaction : soit tout est créé, soit rien ne l'est.
+            $this->tenant()->transaction(function () use (
+                $validated, $code, $firstEntityId, $duration, &$missionId, &$proposal
+            ) {
+                // ── Insert dans `missions` ────────────────────────────────
+                // created_by = NULL car FK cross-DB (users sur default, missions sur tenant)
+                $missionId = $this->tenant()->table('missions')->insertGetId([
+                    'code'                  => $code,
+                    'fpm_number'            => $validated['fpm_number']        ?? null,
+                    'audit_exercise_id'     => $validated['audit_exercise_id'],
+                    'mission_type_id'       => $validated['mission_type_id'],
+                    'entity_id'             => $firstEntityId,
+                    'title'                 => $validated['title'],
+                    'objective'             => $validated['objective']          ?? null,
+                    'domain'                => $validated['domain']             ?? null,
+                    'reference_document'    => $validated['reference_document'] ?? null,
+                    'priority'              => $validated['priority']           ?? 'moyenne',
+                    'planned_start_date'    => $validated['planned_start_date'] ?? null,
+                    'planned_end_date'      => $validated['planned_end_date']   ?? null,
+                    'planned_duration_days' => $duration,
+                    'status'                => 'brouillon',
+                    'created_by'            => null,   // ← NULL : FK cross-DB (users ≠ tenant)
+                    'updated_by'            => null,   // ← NULL : même raison
+                    'created_at'            => now(),
+                    'updated_at'            => now(),
+                ]);
 
-            // ── Pivots compétences (mission_competency) ───────────────────
-            if (!empty($validated['competency_ids'])) {
-                $this->tenant()->table('mission_competency')->insert(
-                    array_map(fn($compId) => [
-                        'mission_id'    => $missionId,
-                        'competency_id' => (int) $compId,
-                        'minimum_level' => 1,
-                        'created_at'    => now(),
-                        'updated_at'    => now(),
-                    ], array_unique($validated['competency_ids']))
+                // ── Pivots risques (mission_risk) ─────────────────────────
+                if (!empty($validated['risk_ids'])) {
+                    $this->tenant()->table('mission_risk')->insert(
+                        array_map(fn($riskId) => [
+                            'mission_id' => $missionId,
+                            'risk_id'    => (int) $riskId,
+                            'created_at' => now(),
+                            'updated_at' => now(),
+                        ], array_unique($validated['risk_ids']))
+                    );
+                }
+
+                // ── Pivots compétences (mission_competency) ───────────────
+                if (!empty($validated['competency_ids'])) {
+                    $this->tenant()->table('mission_competency')->insert(
+                        array_map(fn($compId) => [
+                            'mission_id'    => $missionId,
+                            'competency_id' => (int) $compId,
+                            'minimum_level' => 1,
+                            'created_at'    => now(),
+                            'updated_at'    => now(),
+                        ], array_unique($validated['competency_ids']))
+                    );
+                }
+
+                // ── NOUVEAU : génération automatique de la programmation ──
+                // et des affectations de phase, pour TOUTES les entités
+                // sélectionnées (et non plus seulement $firstEntityId).
+                $proposal = $this->programmationService->autoGenerate(
+                    $missionId,
+                    $validated['entity_ids']
                 );
-            }
+            });
 
             Log::info("✅ Mission créée : {$code}", [
-                'mission_id' => $missionId,
-                'entity_id'  => $firstEntityId,
-                'entity_ids' => $validated['entity_ids'],
-                'risks'      => count($validated['risk_ids'] ?? []),
+                'mission_id'       => $missionId,
+                'entity_ids'       => $validated['entity_ids'],
+                'risks'            => count($validated['risk_ids'] ?? []),
+                'programmation_id' => $proposal['programmation_id'] ?? null,
             ]);
 
-            return redirect()->back()->with('success', "Mission créée avec succès : {$code}");
+            return redirect()->back()->with('success', "Mission créée avec succès : {$code}")->with('programmation_proposal', $proposal);
 
         } catch (\Illuminate\Validation\ValidationException $e) {
             return back()->withErrors($e->errors())->withInput();
@@ -432,6 +506,47 @@ class MissionController extends Controller
             return back()
                 ->with('error', 'Erreur lors de la création : ' . $e->getMessage())
                 ->withInput();
+        }
+    }
+
+    // =========================================================================
+    // REVIEW — l'utilisateur ajuste la proposition auto-générée
+    // =========================================================================
+    /**
+     * PATCH /missions/{mission}/programmation/{programmation}
+     * Body: { adjustments: [{ assignment_id, status, owner_id?, planned_start?, planned_end? }, ...] }
+     */
+    public function updateProgrammation(Request $request, int $programmationId)
+    {
+        $validated = $request->validate([
+            'adjustments'                  => 'required|array|min:1',
+            'adjustments.*.assignment_id'  => 'required|integer',
+            'adjustments.*.status'         => 'nullable|in:pending,in_progress,completed,skipped',
+            'adjustments.*.owner_id'       => 'nullable|integer',
+            'adjustments.*.planned_start'  => 'nullable|date',
+            'adjustments.*.planned_end'    => 'nullable|date',
+        ]);
+
+        try {
+            $this->programmationService->updateProposal($programmationId, $validated['adjustments']);
+            return back()->with('success', 'Programmation mise à jour.');
+        } catch (\Exception $e) {
+            Log::error('❌ MissionController@updateProgrammation : ' . $e->getMessage());
+            return back()->with('error', 'Erreur lors de la mise à jour de la programmation.');
+        }
+    }
+
+    // =========================================================================
+    // CONFIRM — validation finale : la mission passe en "planifiée"
+    // =========================================================================
+    public function confirmProgrammation(int $missionId, int $programmationId)
+    {
+        try {
+            $this->programmationService->confirm($missionId, $programmationId);
+            return back()->with('success', 'Mission et programmation confirmées.');
+        } catch (\Exception $e) {
+            Log::error('❌ MissionController@confirmProgrammation : ' . $e->getMessage());
+            return back()->with('error', 'Erreur lors de la confirmation.');
         }
     }
 

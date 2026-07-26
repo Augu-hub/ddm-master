@@ -360,12 +360,28 @@ Route::middleware(['auth', 'verified', EnsureIsAuditor::class])
         Route::get('/dashboard', [AuditorDashboardController::class, 'index'])
             ->name('dashboard');
 
+        // ── Pages du menu latéral (complètent les entrées grisées) ─────────
+        // Planning et Budget = onglets dédiés du dashboard (deep-link ?tab=),
+        // Compétences = page dédiée (référentiel compétences + niveaux).
+        Route::get('/planning', function () {
+            return redirect()->route('auditor.dashboard', ['tab' => 'calendrier']);
+        })->name('planning');
+
+        Route::get('/budget', function () {
+            return redirect()->route('auditor.dashboard', ['tab' => 'budget']);
+        })->name('budget');
+
+        Route::get('/competences', [AuditorDashboardController::class, 'competences'])
+            ->name('competences');
+
         // ── Détail d'une mission ───────────────────────────────────────────
         Route::get('/missions/{missionId}', [AuditorDashboardController::class, 'showMission'])
             ->name('mission.show');
 
         // ── Démarrer une mission ───────────────────────────────────────────
-        Route::patch('/programmation-missions/{id}/start', [AuditorMissionsController::class, 'startMission'])
+        // CORRECTION : la méthode s'appelle start() (startMission n'existe pas
+        // dans AuditorMissionsController → BadMethodCallException au clic).
+        Route::patch('/programmation-missions/{id}/start', [AuditorMissionsController::class, 'start'])
             ->name('missions.start')
             ->where('id', '[0-9]+');
 
@@ -675,8 +691,108 @@ Route::middleware(['web', 'auth', 'audit.session'])
         // AUDITOR — Mes missions & phases
         // ══════════════════════════════════════════════════════════════════
 
-      Route::post('auditor/missions/{missionId}/phases/{assignmentId}/start', 
+      Route::post('auditor/missions/{missionId}/phases/{assignmentId}/start',
     [AuditorMissionsController::class, 'startPhase']);
+
+      // ══════════════════════════════════════════════════════════════════
+      // URLS CANONIQUES ESPACE AUDITEUR (m/audit.core/auditor/...)
+      // Ce sont les chemins que AuditorMissionsController::buildUrl() et les
+      // vues MesMissions/MissionPhases génèrent déjà — ils n'étaient
+      // enregistrés nulle part (404 sur "Voir les phases", le Gantt et la
+      // validation de formulaire).
+      // ══════════════════════════════════════════════════════════════════
+      Route::get('auditor/missions', [AuditorMissionsController::class, 'index'])
+          ->name('audit.core.auditor.missions.index');
+
+      Route::get('auditor/missions/{missionId}/phases', [AuditorMissionsController::class, 'phases'])
+          ->whereNumber('missionId')
+          ->name('audit.core.auditor.missions.phases');
+
+      Route::get('auditor/missions/{missionId}/gantt', [AuditorMissionsController::class, 'gantt'])
+          ->whereNumber('missionId')
+          ->name('audit.core.auditor.missions.gantt');
+
+      Route::post('auditor/missions/{missionId}/start', [AuditorMissionsController::class, 'start'])
+          ->whereNumber('missionId')
+          ->name('audit.core.auditor.missions.start');
+
+      Route::post('auditor/missions/{missionId}/phases/{assignmentId}/validate',
+          [AuditorMissionsController::class, 'validatePhase'])
+          ->whereNumber('missionId')->whereNumber('assignmentId')
+          ->name('audit.core.auditor.missions.phases.validate');
+// ══════════════════════════════════════════════════════════════════
+// AP — AUDIT DE PERFORMANCE
+// Phase 1 Préparation : Réunion d'ouverture (ddmparam.audit_type_forms
+// id=59, url_path /m/audit.core/ap/preparation/reunion-ouverture).
+// Mêmes verbes/segments que le bloc AC équivalent — la vue pilote tout
+// via formUrl, les deux déclinaisons restent donc parfaitement alignées.
+// ══════════════════════════════════════════════════════════════════
+Route::prefix('ap/preparation')->group(function () {
+    // ── Présentation générale du programme (formulaire PC, ddmparam id=128) ──
+    // Fiche programme + activités→objectifs→indicateurs + point financier.
+    $prog = \App\Http\Controllers\Auditor\Ap\ApProgrammeController::class;
+    Route::get('presentation-programme', [$prog, 'index'])
+        ->name('audit.ap.preparation.presentation-programme'); // = route_name ddmparam
+    Route::post('presentation-programme', [$prog, 'save'])
+        ->name('auditor.ap.presentation-programme.save');
+    Route::post('presentation-programme/financier', [$prog, 'saveFinancier'])
+        ->name('auditor.ap.presentation-programme.financier');
+    Route::post('presentation-programme/activites', [$prog, 'saveActivite'])
+        ->name('auditor.ap.presentation-programme.activites.save');
+    Route::delete('presentation-programme/activites/{id}', [$prog, 'deleteActivite'])
+        ->whereNumber('id')->name('auditor.ap.presentation-programme.activites.delete');
+    Route::post('presentation-programme/objectifs', [$prog, 'saveObjectif'])
+        ->name('auditor.ap.presentation-programme.objectifs.save');
+    Route::delete('presentation-programme/objectifs/{id}', [$prog, 'deleteObjectif'])
+        ->whereNumber('id')->name('auditor.ap.presentation-programme.objectifs.delete');
+    Route::post('presentation-programme/indicateurs', [$prog, 'saveIndicateur'])
+        ->name('auditor.ap.presentation-programme.indicateurs.save');
+    Route::delete('presentation-programme/indicateurs/{id}', [$prog, 'deleteIndicateur'])
+        ->whereNumber('id')->name('auditor.ap.presentation-programme.indicateurs.delete');
+    Route::post('presentation-programme/{form}/soumettre', [$prog, 'soumettreFiche'])
+        ->whereNumber('form')->name('auditor.ap.presentation-programme.soumettre');
+    Route::post('presentation-programme/{form}/valider', [$prog, 'validerFiche'])
+        ->whereNumber('form')->name('auditor.ap.presentation-programme.valider');
+
+    // ── Portée de l'audit (formulaire PA, ddmparam id=129) ──
+    // 3 volets : importance des sujets · ressources/résultats (cadre logique
+    // auto depuis la base) · risques d'audit (scoring brut→net).
+    $portee = \App\Http\Controllers\Auditor\Ap\ApPorteeController::class;
+    Route::get('portee-audit', [$portee, 'index'])
+        ->name('audit.ap.preparation.portee-audit'); // = route_name ddmparam
+    Route::post('portee-audit', [$portee, 'save'])
+        ->name('auditor.ap.portee-audit.save');
+    Route::post('portee-audit/suggest-indicateurs', [$portee, 'suggestIndicateurs'])
+        ->name('auditor.ap.portee-audit.suggest-indicateurs');
+    Route::post('portee-audit/suggest-cadre', [$portee, 'suggestCadreLogique'])
+        ->name('auditor.ap.portee-audit.suggest-cadre');
+    Route::post('portee-audit/{form}/soumettre', [$portee, 'soumettreFiche'])
+        ->whereNumber('form')->name('auditor.ap.portee-audit.soumettre');
+    Route::post('portee-audit/{form}/valider', [$portee, 'validerFiche'])
+        ->whereNumber('form')->name('auditor.ap.portee-audit.valider');
+
+    // Suggestion d'indicateurs réutilisée par la fiche Présentation Programme
+    Route::post('presentation-programme/suggest-indicateurs', [$portee, 'suggestIndicateurs'])
+        ->name('auditor.ap.presentation-programme.suggest-indicateurs');
+
+    Route::get('reunion-ouverture', [\App\Http\Controllers\Auditor\Ap\ApReunionOuvertureController::class, 'index'])
+        ->name('audit.ap.preparation.reunion-ouverture'); // = route_name ddmparam
+    Route::get('reunion-ouverture/{form}/pdf', [\App\Http\Controllers\Auditor\Ap\ApReunionOuvertureController::class, 'pdf'])
+        ->name('auditor.ap.reunion-ouverture.pdf');
+    Route::get('reunion-ouverture/{form}/edit', [\App\Http\Controllers\Auditor\Ap\ApReunionOuvertureController::class, 'edit'])
+        ->name('auditor.ap.reunion-ouverture.edit');
+    Route::post('reunion-ouverture', [\App\Http\Controllers\Auditor\Ap\ApReunionOuvertureController::class, 'store'])
+        ->name('auditor.ap.reunion-ouverture.store');
+    Route::put('reunion-ouverture/{form}', [\App\Http\Controllers\Auditor\Ap\ApReunionOuvertureController::class, 'update'])
+        ->name('auditor.ap.reunion-ouverture.update');
+    Route::delete('reunion-ouverture/{form}', [\App\Http\Controllers\Auditor\Ap\ApReunionOuvertureController::class, 'destroy'])
+        ->name('auditor.ap.reunion-ouverture.destroy');
+    Route::post('reunion-ouverture/{form}/soumettre', [\App\Http\Controllers\Auditor\Ap\ApReunionOuvertureController::class, 'soumettre'])
+        ->name('auditor.ap.reunion-ouverture.soumettre');
+    Route::post('reunion-ouverture/{form}/valider', [\App\Http\Controllers\Auditor\Ap\ApReunionOuvertureController::class, 'valider'])
+        ->name('auditor.ap.reunion-ouverture.valider');
+});
+
 Route::prefix('ac')->group(function () {
     // ── Phase 1 : Preparation ──
     Route::prefix('preparation')->group(function () {
@@ -1411,28 +1527,6 @@ Route::get('reunion-cloture/debug', [ReunionClotureController::class, 'debug'])
     // ── Plan d'action (Recommandation) ──────────────────────────────
 
     
-// Routes normales avec middleware auth
-
-//         // evaluations
-//         Route::get('evaluations', [App\Http\Controllers\Auditor\EvaluationsController::class, 'index'])->name('audit.ac.realisation.evaluations');
-//         Route::get('evaluations/{form}/edit', [App\Http\Controllers\Auditor\EvaluationsController::class, 'edit'])->name('auditor.ac.evaluations.edit');
-//         Route::post('evaluations', [App\Http\Controllers\Auditor\EvaluationsController::class, 'store'])->name('auditor.ac.evaluations.store');
-//         Route::put('evaluations/{form}', [App\Http\Controllers\Auditor\EvaluationsController::class, 'update'])->name('auditor.ac.evaluations.update');
-//         Route::delete('evaluations/{form}', [App\Http\Controllers\Auditor\EvaluationsController::class, 'destroy'])->name('auditor.ac.evaluations.destroy');
-//         Route::post('evaluations/{form}/soumettre', [App\Http\Controllers\Auditor\EvaluationsController::class, 'soumettre'])->name('auditor.ac.evaluations.soumettre');
-//         Route::post('evaluations/{form}/valider', [App\Http\Controllers\Auditor\EvaluationsController::class, 'valider'])->name('auditor.ac.evaluations.valider');
-//         // eval-ci-qci
-//         Route::get('eval-ci-qci', [App\Http\Controllers\Auditor\EvalCiQciController::class, 'index'])->name('audit.ac.realisation.eval-ci-qci');
-//         Route::get('eval-ci-qci/{form}/edit', [App\Http\Controllers\Auditor\EvalCiQciController::class, 'edit'])->name('auditor.ac.eval-ci-qci.edit');
-//         Route::post('eval-ci-qci', [App\Http\Controllers\Auditor\EvalCiQciController::class, 'store'])->name('auditor.ac.eval-ci-qci.store');
-//         Route::put('eval-ci-qci/{form}', [App\Http\Controllers\Auditor\EvalCiQciController::class, 'update'])->name('auditor.ac.eval-ci-qci.update');
-//         Route::delete('eval-ci-qci/{form}', [App\Http\Controllers\Auditor\EvalCiQciController::class, 'destroy'])->name('auditor.ac.eval-ci-qci.destroy');
-//         Route::post('eval-ci-qci/{form}/soumettre', [App\Http\Controllers\Auditor\EvalCiQciController::class, 'soumettre'])->name('auditor.ac.eval-ci-qci.soumettre');
-//         Route::post('eval-ci-qci/{form}/valider', [App\Http\Controllers\Auditor\EvalCiQciController::class, 'valider'])->name('auditor.ac.eval-ci-qci.valider');
-//         // eval-conformite
-//         Route::get('eval-conformite', [App\Http\Controllers\Auditor\EvalConformiteController::class, 'index'])->name('audit.ac.realisation.eval-conformite');
-//         Route::get('eval-conformite/{form}/edit', [App\Http\Controllers\Auditor\EvalConformiteController::class, 'edit'])->name('auditor.ac.eval-conformite.edit');
-//        / ── Plan d'action (suivi des FRAP) ──────────────────────────────
 Route::prefix('plan-action')->name('auditor.ac.plan-action.')->group(function () {
     Route::get('/',                 [PlanActionController::class, 'index'])->name('index');
     Route::get('/api/data',         [PlanActionController::class, 'getData'])->name('api.data');
@@ -1789,3 +1883,48 @@ Route::prefix('param-perf')
 
 });
 
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ROUTES AUTOMATIQUES DES FORMULAIRES DE PHASE (fallback générique)
+//
+// ⚠️ DOIT RESTER EN TOUTE FIN DE FICHIER : Laravel matche les routes dans
+// l'ordre d'enregistrement — toute route dédiée déclarée AVANT (ac/*,
+// ap/preparation/reunion-ouverture, modules…) garde la priorité.
+//
+// Chaque formulaire du référentiel central (ddmparam.audit_type_forms) a un
+// url_path /m/audit.core/{type}/{phase}/{code}. Ceux qui n'ont pas d'écran
+// dédié aboutissent ici : DynamicPhaseFormController les résout dans
+// ddmparam et sert un formulaire générique (sections JSON) stocké dans la
+// table tenant `mission_phase_form_data`, avec le workflow complet
+// draft → submitted → validated/rejected et journal de validation.
+//
+// Résultat : AJOUTER UN FORMULAIRE DANS LE RÉFÉRENTIEL SUFFIT — sa route,
+// son écran et son stockage existent immédiatement, pour les 6 types
+// d'audit (ac, af, ap, am, rp, es) et les 5 phases.
+// ═══════════════════════════════════════════════════════════════════════════
+Route::middleware(['web', 'auth', 'audit.session'])
+    ->prefix('m/audit.core')
+    ->group(function () {
+        $dyn = \App\Http\Controllers\Auditor\DynamicPhaseFormController::class;
+        $where = [
+            'auditType' => '[a-z]{2}',
+            'phaseSlug' => '[a-z0-9\-]+',
+            'formCode'  => '[a-z0-9\-]+',
+        ];
+
+        Route::get('{auditType}/{phaseSlug}/{formCode}', [$dyn, 'show'])
+            ->where($where)
+            ->name('audit.dynamic.form');
+
+        Route::post('{auditType}/{phaseSlug}/{formCode}', [$dyn, 'save'])
+            ->where($where)
+            ->name('audit.dynamic.form.save');
+
+        Route::post('{auditType}/{phaseSlug}/{formCode}/soumettre', [$dyn, 'soumettreForm'])
+            ->where($where)
+            ->name('audit.dynamic.form.soumettre');
+
+        Route::post('{auditType}/{phaseSlug}/{formCode}/valider', [$dyn, 'validerForm'])
+            ->where($where)
+            ->name('audit.dynamic.form.valider');
+    });

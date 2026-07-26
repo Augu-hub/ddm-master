@@ -29,7 +29,20 @@
                     <div class="d-flex align-items-center gap-2" v-if="generatedCode !== '—'">
                         <span class="text-muted fs-11 text-uppercase fw-semibold">Code mission</span>
                         <code class="mission-code-badge">{{ generatedCode }}</code>
-                        <span v-if="selectedTypeFull" class="type-chip">{{ selectedTypeFull.code }}</span>
+                        <span
+                            v-if="selectedTypeFull"
+                            class="type-chip"
+                            :style="{ background: hexToRgba(selectedTypeFull.audit_color, .12), color: selectedTypeFull.audit_color }"
+                        >
+                            <i :class="selectedTypeFull.audit_icon" class="me-1"></i>{{ selectedTypeFull.code }}
+                        </span>
+                        <span
+                            v-if="selectedTypeFull && !selectedTypeFull.is_synced"
+                            class="sync-warning-badge"
+                            title="Ce type de mission n'est pas encore resynchronisé avec le référentiel central (ddmparam). Les libellés/couleurs affichés proviennent déjà de ddmparam, mais la base tenant reste à mettre à jour."
+                        >
+                            <i class="ti ti-refresh-alert me-1"></i>Non synchronisé
+                        </span>
                     </div>
                 </div>
 
@@ -209,10 +222,23 @@
                                 >
                                     <option :value="null">— Sélectionner un type —</option>
                                     <option v-for="t in missionTypes" :key="t.id" :value="t.id">
-                                        {{ t.code }} — {{ t.label }}
+                                        {{ t.code }} — {{ t.label }}{{ t.audit_type_label ? ` (${t.audit_type_label})` : '' }}
                                     </option>
                                 </b-form-select>
                                 <div v-if="form.errors?.mission_type_id" class="invalid-feedback">{{ form.errors.mission_type_id }}</div>
+
+                                <!-- Aperçu du type d'audit rattaché (référentiel central ddmparam) -->
+                                <div v-if="selectedTypeFull" class="audit-type-preview">
+                                    <span
+                                        class="audit-type-dot"
+                                        :style="{ background: selectedTypeFull.audit_color }"
+                                    ></span>
+                                    <i :class="selectedTypeFull.audit_icon" class="fs-12"></i>
+                                    <span class="fs-12 text-muted">{{ selectedTypeFull.audit_type_label || 'Type d\'audit non rattaché' }}</span>
+                                    <span v-if="!selectedTypeFull.audit_type_code" class="fs-11 text-danger ms-1">
+                                        <i class="ti ti-alert-triangle"></i> à rattacher côté paramétrage
+                                    </span>
+                                </div>
                             </b-col>
                             <b-col md="5">
                                 <label class="field-label">Priorité</label>
@@ -619,6 +645,9 @@ import PageTitle from '@/components/PageTitle.vue'
 const props = defineProps({
     exercises:       { type: Array,  default: () => [] },
     missionTypes:    { type: Array,  default: () => [] },
+    // Référentiel central ddmparam.audit_types (source de vérité pour
+    // couleur/icône/libellé — voir MissionController@create)
+    auditTypes:      { type: Array,  default: () => [] },
     entities:        { type: Array,  default: () => [] },
     competencies:    { type: Array,  default: () => [] },
     fpmMissions:     { type: Array,  default: () => [] },
@@ -723,6 +752,15 @@ const getCompCode = (id) => {
     return c?.code || `#${id}`
 }
 
+// Convertit un hex (#RRGGBB) en rgba(...) pour les fonds de badges
+const hexToRgba = (hex, alpha = 1) => {
+    if (!hex) return `rgba(148,163,184,${alpha})` // gris neutre si pas de couleur
+    const h = hex.replace('#', '')
+    const bigint = parseInt(h.length === 3 ? h.split('').map(c => c + c).join('') : h, 16)
+    const r = (bigint >> 16) & 255, g = (bigint >> 8) & 255, b = bigint & 255
+    return `rgba(${r}, ${g}, ${b}, ${alpha})`
+}
+
 // ── Computeds ─────────────────────────────────────────────────────────
 const competenciesSafe = computed(() => props.competencies || [])
 
@@ -735,11 +773,26 @@ const filteredComps = computed(() => {
     )
 })
 
-const selectedTypeFull = computed(() =>
-    form.mission_type_id
-        ? (props.missionTypes || []).find(t => t.id === form.mission_type_id)
-        : null
+// Types de mission déjà enrichis côté contrôleur avec le référentiel
+// central (audit_type_label/audit_color/audit_icon/is_synced) — voir
+// MissionController@create. On garde un fallback local par sécurité si
+// jamais le back envoie une version non enrichie.
+const auditTypesByCode = computed(() =>
+    Object.fromEntries((props.auditTypes || []).map(a => [a.code, a]))
 )
+
+const selectedTypeFull = computed(() => {
+    if (!form.mission_type_id) return null
+    const t = (props.missionTypes || []).find(x => x.id === form.mission_type_id)
+    if (!t) return null
+    const ref = t.audit_type_code ? auditTypesByCode.value[t.audit_type_code] : null
+    return {
+        ...t,
+        audit_type_label: ref?.label ?? t.audit_type_label,
+        audit_color:      ref?.color ?? t.audit_color ?? '#94A3B8',
+        audit_icon:       ref?.icon  ?? t.audit_icon  ?? 'ti ti-clipboard-list',
+    }
+})
 
 const generatedCode = computed(() => {
     if (!form.audit_exercise_id || !form.mission_type_id) return '—'
@@ -1043,9 +1096,23 @@ const submit = () => {
     letter-spacing: .5px;
 }
 .type-chip {
-    background: #e0f2fe; color: #0369a1;
     padding: 2px 7px; border-radius: 4px;
     font-size: 11px; font-weight: 600;
+    display: inline-flex; align-items: center;
+}
+.sync-warning-badge {
+    background: #fef3c7; color: #92400e;
+    padding: 2px 7px; border-radius: 4px;
+    font-size: 10px; font-weight: 600;
+    display: inline-flex; align-items: center;
+}
+.audit-type-preview {
+    display: flex; align-items: center; gap: 6px;
+    margin-top: 6px; padding: 4px 2px;
+}
+.audit-type-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    flex-shrink: 0;
 }
 .status-pill {
     padding: 4px 10px; border-radius: 20px;

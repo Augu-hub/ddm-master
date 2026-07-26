@@ -105,5 +105,5 @@ function retirerActeur(ai: number) {
 </script>
 
 <style scoped>
-@import './outil-shared.css';
+/* @import './outil-shared.css'; */
 </style>

@@ -61,19 +61,25 @@
                     </div>
                 </div>
 
-                <!-- Barre types -->
+                <!--
+                    Barre types — CORRECTION : clé/filtre sur grp.phase_num
+                    (numérique, stable, vient de ddmparam.audit_type_forms.phase_num)
+                    au lieu de grp.phase_type (string qui n'existe plus côté
+                    backend). Le libellé affiché (grp.label) était déjà
+                    dynamique et n'a pas changé.
+                -->
                 <div class="mph-typebar">
-                    <button v-for="grp in phasesByType" :key="grp.phase_type"
+                    <button v-for="grp in phasesByType" :key="grp.phase_num"
                         class="mph-typebtn"
-                        :class="{ active: filterType === grp.phase_type }"
-                        :style="filterType === grp.phase_type ? `border-bottom-color:${grp.color||mc};color:${grp.color||mc}` : ''"
-                        @click="filterType = filterType === grp.phase_type ? null : grp.phase_type">
+                        :class="{ active: filterType === grp.phase_num }"
+                        :style="filterType === grp.phase_num ? `border-bottom-color:${grp.color||mc};color:${grp.color||mc}` : ''"
+                        @click="filterType = filterType === grp.phase_num ? null : grp.phase_num">
                         <span class="mtb-dot" :style="`background:${grp.color||mc}`"></span>
                         {{ grp.label }}
                         <span class="mtb-cnt">{{ (grp.phases||[]).length }}</span>
                         <span class="mtb-done" :style="`color:${grp.color||mc}`">{{ grp.stats?.completed ?? 0 }} ✓</span>
-                        <span v-if="groupUnreadCount(grp.phase_type) > 0" class="mtb-unread">
-                            {{ groupUnreadCount(grp.phase_type) }}
+                        <span v-if="groupUnreadCount(grp.phase_num) > 0" class="mtb-unread">
+                            {{ groupUnreadCount(grp.phase_num) }}
                         </span>
                     </button>
                 </div>
@@ -144,7 +150,7 @@
 
                     <!-- ═══ VUE HIÉRARCHIE ═══ -->
                     <template v-if="viewMode === 'hierarchy'">
-                        <section v-for="grp in filteredGroups" :key="grp.phase_type" class="type-section">
+                        <section v-for="grp in filteredGroups" :key="grp.phase_num" class="type-section">
                             <!-- En-tête de type sticky -->
                             <div class="type-sticky">
                                 <div class="type-sticky-inner">
@@ -483,7 +489,8 @@ const mc = computed<string>(() => {
 
 // ── États ─────────────────────────────────────────────────────────────────────
 const activeEntity      = ref<number|null>(null);
-const filterType        = ref<string|null>(null);
+// CORRECTION : phase_num est numérique (1..5), plus une chaîne phase_type.
+const filterType        = ref<number|null>(null);
 const viewMode          = ref<'hierarchy'|'timeline'>('hierarchy');
 const localNotes        = reactive<Record<number,string>>({});
 const mainEl            = ref<HTMLElement|null>(null);
@@ -494,10 +501,19 @@ const localChatMessages = reactive<Record<number, any[]>>({});
 const noteModal     = ref({ show:false, id:0, label:'', draft:'' });
 const validateModal = ref({ show:false, id:0, label:'', formCode:'', choice:'validate', note:'' });
 const chatPanel     = ref({
-    show:false, assignmentId:0, label:'', formCode:'', phaseType:'',
+    show:false, assignmentId:0, label:'', formCode:'', phaseNum:1,
+    phaseType:'PREPARATION',
     messages:[] as any[], draft:'', type:'message', priority:'normal',
     replyTo: null as any, sending: false,
 });
+
+// La route de chat (POST /m/audit.core/missions/{mission}/chat/{phase_type})
+// attend le phase_type EN TOUTES LETTRES (stocké tel quel en base par
+// MissionPhaseChatController). Chaque phase porte désormais son phase_type
+// (renvoyé par le contrôleur) ; ce mapping ne sert que de repli.
+const PHASE_TYPE_BY_NUM: Record<number,string> = {
+    1:'PREPARATION', 2:'VERIFICATION', 3:'CONCLUSION', 4:'SUIVI', 5:'RECOMMANDATIONS',
+};
 const toast = ref({ show:false, type:'success', msg:'' });
 
 const PRIOS = [
@@ -509,13 +525,16 @@ const PRIOS = [
 const canManage = computed(() => ['DM','CM'].includes((props.auditor as any)?.role ?? ''));
 
 // ── Toutes les phases aplaties ────────────────────────────────────────────────
+// CORRECTION : _grpNum (numérique, phase_num) remplace _grpType (string).
+// _grpLabel reste dynamique, déjà lu depuis grp.label (venant de ddmparam
+// côté backend).
 const allPhases = computed<any[]>(() =>
     props.phasesByType.flatMap(grp =>
         (grp.phases ?? []).map((ph: any) => ({
             ...ph,
             _grpColor: grp.color || mc.value,
             _grpLabel: grp.label,
-            _grpType:  grp.phase_type,
+            _grpNum:   grp.phase_num,
         }))
     )
 );
@@ -531,33 +550,34 @@ const globalPct  = computed(() => {
 const filteredAllPhases = computed<any[]>(() =>
     allPhases.value.filter(ph => {
         if (activeEntity.value !== null && ph.entity_id && ph.entity_id !== activeEntity.value) return false;
-        if (filterType.value && ph._grpType !== filterType.value) return false;
+        if (filterType.value !== null && ph._grpNum !== filterType.value) return false;
         return true;
     })
 );
 
 // ── Groupes hiérarchiques ─────────────────────────────────────────────────────
+// CORRECTION : regroupement par phase_num (numérique) au lieu de phase_type.
 const filteredGroups = computed(() => {
-    const byType = new Map<string, any[]>();
+    const byNum = new Map<number, any[]>();
     for (const ph of filteredAllPhases.value) {
-        if (!byType.has(ph._grpType)) byType.set(ph._grpType, []);
-        byType.get(ph._grpType)!.push(ph);
+        if (!byNum.has(ph._grpNum)) byNum.set(ph._grpNum, []);
+        byNum.get(ph._grpNum)!.push(ph);
     }
 
     const result: any[] = [];
     for (const grp of props.phasesByType) {
-        const pt = grp.phase_type;
-        if (filterType.value && pt !== filterType.value) continue;
-        const phases = byType.get(pt) ?? [];
+        const pnum = grp.phase_num;
+        if (filterType.value !== null && pnum !== filterType.value) continue;
+        const phases = byNum.get(pnum) ?? [];
         if (!phases.length) continue;
 
-        // Tri : weight puis planned_start
+        // ★ Tri : ORDRE DE LA BASE PRINCIPALE — ddmparam.sort_order (celui
+        // réglé par l'admin dans le référentiel), puis id central. On ne
+        // re-trie plus par weight/dates : l'ordre officiel est respecté.
         const sortFn = (a: any, b: any) => {
-            const wa = a.weight ?? 999, wb = b.weight ?? 999;
-            if (wa !== wb) return wa - wb;
-            const da = a.planned_start ? new Date(a.planned_start).getTime() : Infinity;
-            const db = b.planned_start ? new Date(b.planned_start).getTime() : Infinity;
-            return da - db;
+            const sa = a.sort_order ?? 9999, sb = b.sort_order ?? 9999;
+            if (sa !== sb) return sa - sb;
+            return (a.mission_phase_id ?? 0) - (b.mission_phase_id ?? 0);
         };
 
         // Séparer racines et enfants
@@ -596,9 +616,9 @@ const filteredGroups = computed(() => {
         }
 
         result.push({
-            phase_type:  pt,
-            label:       grp.label,
-            color:       grp.color || mc.value,
+            phase_num:  pnum,
+            label:      grp.label,
+            color:      grp.color || mc.value,
             rootPhases,
             childrenMap,
             stats: grp.stats ?? {
@@ -651,8 +671,9 @@ function getChatMessages(id: number): any[] {
 function chatPreview(id: number): any[] { return getChatMessages(id).slice(-2); }
 function msgCount(id: number): number   { return getChatMessages(id).length; }
 function unreadCount(id: number): number { return getChatMessages(id).filter((m:any) => !m.is_read && !m.is_mine).length; }
-function groupUnreadCount(phaseType: string): number {
-    const group = props.phasesByType.find(g => g.phase_type === phaseType);
+// CORRECTION : recherche par phase_num (numérique) au lieu de phase_type.
+function groupUnreadCount(phaseNum: number): number {
+    const group = props.phasesByType.find(g => g.phase_num === phaseNum);
     if (!group) return 0;
     return (group.phases ?? []).reduce((sum:number, ph:any) => sum + unreadCount(ph.assignment_id), 0);
 }
@@ -692,7 +713,9 @@ function openChat(ph: any) {
     localChatMessages[ph.assignment_id].forEach((m:any) => { if (!m.is_mine) m.is_read = true; });
     chatPanel.value = {
         show:true, assignmentId:ph.assignment_id, label:ph.label, formCode:ph.form_code??'',
-        phaseType:ph._grpType??'PREPARATION', messages:localChatMessages[ph.assignment_id],
+        phaseNum:ph._grpNum ?? ph.phase_num ?? 1,
+        phaseType: ph.phase_type ?? PHASE_TYPE_BY_NUM[ph._grpNum ?? ph.phase_num ?? 1] ?? 'PREPARATION',
+        messages:localChatMessages[ph.assignment_id],
         draft:'', type:'message', priority:'normal', replyTo:null, sending:false,
     };
     nextTick(() => { if (chatMsgEl.value) chatMsgEl.value.scrollTop = chatMsgEl.value.scrollHeight; });
@@ -701,13 +724,18 @@ function closeChatPanel() { chatPanel.value.show = false; }
 function setReply(msg: any) { chatPanel.value.replyTo = msg; }
 
 async function sendChatMsg() {
-    const { draft, assignmentId, formCode, type, priority, replyTo, phaseType } = chatPanel.value;
+    const { draft, assignmentId, formCode, type, priority, replyTo, phaseNum, phaseType } = chatPanel.value;
     if (!draft.trim() || chatPanel.value.sending) return;
     chatPanel.value.sending = true;
     try {
         const csrf = (document.querySelector('meta[name="csrf-token"]') as HTMLMetaElement)?.content ?? '';
-        const pt   = (phaseType || 'PREPARATION').toUpperCase();
-        const chatUrl = props.chatBaseUrl ? `${props.chatBaseUrl}/${pt}` : `${baseUrl.value}/m/audit.core/missions/${(props.mission as any).id}/chat/${pt}`;
+        // CORRECTION : la route POST /m/audit.core/missions/{mission}/chat/{phase_type}
+        // attend le phase_type EN TOUTES LETTRES (MissionPhaseChatController le
+        // stocke tel quel en base — poster phaseNum aurait enregistré '1','2'…
+        // à côté des 'PREPARATION' existants). phaseType vient de la phase
+        // ouverte (ph.phase_type), avec repli sur le mapping numérique.
+        const segment = phaseType || PHASE_TYPE_BY_NUM[phaseNum] || 'PREPARATION';
+        const chatUrl = props.chatBaseUrl ? `${props.chatBaseUrl}/${segment}` : `${baseUrl.value}/m/audit.core/missions/${(props.mission as any).id}/chat/${segment}`;
         const res  = await fetch(chatUrl, {
             method:'POST',
             headers:{'Content-Type':'application/json','X-CSRF-TOKEN':csrf,Accept:'application/json'},

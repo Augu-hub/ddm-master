@@ -81,6 +81,28 @@ return [
     ]) : [],
 ],
 
+        // ── Base externe RISKOOL ─────────────────────────────────────────
+        // Application indépendante (inspections / risques professionnels :
+        // enterprises, inspectors, assessments, formulaires CNSS…).
+        // Ce N'EST PAS un tenant DDM (schéma différent) — accès explicite :
+        //     DB::connection('riskool')->table('enterprises')->get();
+        // Surcharger via .env : RISKOOL_DB_HOST / _DATABASE / _USERNAME / _PASSWORD
+        'riskool' => [
+            'driver'    => 'mysql',
+            'host'      => env('RISKOOL_DB_HOST', env('DB_HOST', '127.0.0.1')),
+            'port'      => env('RISKOOL_DB_PORT', env('DB_PORT', '3306')),
+            'database'  => env('RISKOOL_DB_DATABASE', 'riskool'),
+            'username'  => env('RISKOOL_DB_USERNAME', env('DB_USERNAME', 'root')),
+            'password'  => env('RISKOOL_DB_PASSWORD', env('DB_PASSWORD', '')),
+            'charset'   => 'utf8mb4',
+            'collation' => 'utf8mb4_unicode_ci',
+            'prefix'    => '',
+            'prefix_indexes' => true,
+            // Dump d'origine en utf8/ancien format : mode non strict pour lire
+            // sans erreurs de dates zéro / group by hérités.
+            'strict'    => false,
+            'engine'    => null,
+        ],
 
         'mariadb' => [
             'driver' => 'mariadb',

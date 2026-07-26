@@ -138,14 +138,16 @@ class ReunionOuvertureController extends Controller
     /** Charge l'assignment */
     private function getAssignment(int $assignmentId, int $missionId): ?object
     {
+        // ⚠️ NOUVEAU SCHÉMA : le contenu (code/label/form_code) se lit dans
+        // ddmparam.audit_type_forms (id partagé avec mission_phases).
         return DB::table('mission_phase_assignments as mpa')
-            ->join('mission_phases as ph','mpa.mission_phase_id','=','ph.id')
+            ->join('ddmparam.audit_type_forms as atf','mpa.mission_phase_id','=','atf.id')
             ->where('mpa.id', $assignmentId)
             ->where('mpa.mission_programmation_id', $missionId)
             ->select([
                 'mpa.id','mpa.status as phase_status',
                 'mpa.validation_status','mpa.planned_start','mpa.planned_end',
-                'ph.code as phase_code','ph.label as phase_label','ph.form_code',
+                'atf.code as phase_code','atf.label as phase_label','atf.code as form_code',
             ])
             ->first();
     }

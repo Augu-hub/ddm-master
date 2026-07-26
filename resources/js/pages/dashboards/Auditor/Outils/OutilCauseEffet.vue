@@ -11,7 +11,7 @@
               <span class="oz-pill"><i class="ti ti-shield-half"></i>{{ props.auditorRole }}</span>
               <span class="oz-pill"><i class="ti ti-user-check"></i>{{ props.auditeurNom }}</span>
             </div>
-            <h1 class="oz-header__title" style="--hc:#7c3aed"><span class="oz-num">VIII</span>Cause / Effet (Ishikawa 5M+2)</h1>
+            <h1 class="oz-header__title" :style="{'--hc':'#7c3aed'}"><span class="oz-num">VIII</span>Cause / Effet (Ishikawa 5M+2)</h1>
             <div class="oz-header__info">
               <span v-if="missionLibelle"><i class="ti ti-building"></i>{{ missionLibelle }}</span>
               <span v-if="form.procedure_code" class="oz-proc-badge"><i class="ti ti-list-check"></i>{{ form.procedure_code }}</span>
@@ -56,7 +56,7 @@
         <div v-for="cat in categories" :key="cat.code" class="oz-card">
           <div class="oz-card__hd">
             <span style="font-size:1.1rem">{{cat.icon}}</span>
-            <h3 class="oz-card__title" :style="'color:'+cat.color;margin:0">{{cat.label}}</h3>
+            <h3 class="oz-card__title" :style="{color: cat.color, margin: 0}">{{cat.label}}</h3>
             <small class="oz-muted">{{cat.desc}}</small>
             <span class="oz-badge-count">{{ getCauses(cat.code).length }}</span>
             <button v-if="!isLocked" class="oz-add" @click="addCause(cat.code)"><i class="ti ti-plus"></i> Cause</button>

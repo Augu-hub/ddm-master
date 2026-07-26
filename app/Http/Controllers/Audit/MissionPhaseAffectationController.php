@@ -241,6 +241,8 @@ class MissionPhaseAffectationController extends Controller
             $mission = DB::table('mission_programmation')->where('id', $missionId)->first();
             if (!$mission) return response()->json(['error' => "Mission #{$missionId} introuvable."], 404);
 
+            $this->assertPhasesSchemaMigrated();
+
             if (in_array($mission->status, ['terminee', 'annulee', 'cloturee'])) {
                 return response()->json(['error' => "La mission est '{$mission->status}' — modification impossible."], 422);
             }
@@ -262,6 +264,47 @@ class MissionPhaseAffectationController extends Controller
                     ->pluck('id')->map(fn($id) => (int) $id)->toArray();
             }
 
+            // ⚠️ AUTO-PROVISIONING : une phase demandée dans le payload peut
+            // exister dans ddmparam mais ne pas encore avoir de ligne dans
+            // `mission_phases` côté tenant (synchro pas encore passée / migration
+            // pas encore lancée). Plutôt que de rejeter la sauvegarde ("phase
+            // invalide"), on la provisionne à la volée si elle est réellement
+            // valide côté ddmparam pour ce type de mission — ce qui rend la
+            // sauvegarde auto-réparatrice, indépendamment du timing de la synchro.
+            if ($missionTypeId) {
+                $requestedIds = collect($validated['assignments'])
+                    ->pluck('phase_id')->map(fn($id) => (int) $id)->unique()->values()->all();
+                $missingIds = array_values(array_diff($requestedIds, $validPhaseIds));
+
+                if (!empty($missingIds)) {
+                    $auditTypeCode = $this->getAuditTypeCodeForMissionType($missionTypeId);
+                    $provisionable = $auditTypeCode
+                        ? DB::table('ddmparam.audit_type_forms as f')
+                            ->join('ddmparam.audit_types as at', 'at.id', '=', 'f.audit_type_id')
+                            ->where('at.code', $auditTypeCode)
+                            ->where('f.is_active', 1)
+                            ->whereIn('f.id', $missingIds)
+                            ->pluck('f.id')->map(fn($id) => (int) $id)->all()
+                        : [];
+
+                    foreach ($provisionable as $id) {
+                        DB::table('mission_phases')->insertOrIgnore([
+                            'id'              => $id,
+                            'mission_type_id' => $missionTypeId,
+                            'is_mandatory'    => 1,
+                            'status'          => 'active',
+                            'weight'          => 0,
+                            'created_at'      => now(),
+                            'updated_at'      => now(),
+                        ]);
+                    }
+                    if (!empty($provisionable)) {
+                        Log::info("[PhaseAffectation] auto-provisionné " . count($provisionable) . " phase(s) manquante(s) pour mission_type #{$missionTypeId} : " . implode(',', $provisionable));
+                        $validPhaseIds = array_values(array_unique(array_merge($validPhaseIds, $provisionable)));
+                    }
+                }
+            }
+
             $auditeursParEntite = $this->buildAuditeursByEntity($missionId, $validEntityIds);
             $hasFormUrl    = $this->columnExists('mission_phase_assignments', 'form_url');
             $hasIsDisabled = $this->columnExists('mission_phase_assignments', 'is_disabled');
@@ -280,7 +323,7 @@ class MissionPhaseAffectationController extends Controller
                     $skipped++; continue;
                 }
                 if (!empty($validPhaseIds) && !in_array($phaseId, $validPhaseIds)) {
-                    $errors[] = "Ligne #{$idx}: phase #{$phaseId} invalide pour ce type de mission.";
+                    $errors[] = "Ligne #{$idx}: phase #{$phaseId} introuvable dans le référentiel (ddmparam) pour ce type de mission.";
                     $skipped++; continue;
                 }
 
@@ -373,7 +416,7 @@ class MissionPhaseAffectationController extends Controller
             $totalSkipped = 0;
 
             $missionTypes = DB::table('mission_types')->get();
-            
+
             if ($missionTypes->isEmpty()) {
                 return response()->json([
                     'success' => false,
@@ -398,11 +441,11 @@ class MissionPhaseAffectationController extends Controller
                 }
 
                 $syncResult = $this->syncPhasesLabelsInternal($missionType->id, $auditTypeCode);
-                
+
                 $totalUpdated += $syncResult['updated'];
                 $totalCreated += $syncResult['created'];
                 $totalSkipped += $syncResult['skipped'];
-                
+
                 $results[] = [
                     'mission_type_id' => $missionType->id,
                     'mission_type_code' => $missionType->code,
@@ -467,141 +510,57 @@ class MissionPhaseAffectationController extends Controller
     }
 
     /**
-     * Synchronisation interne des phases (sans sort_order)
+     * ⚠️ NOUVEAU SCHÉMA : il n'y a plus de contenu (label/phase_type/parent_id)
+     * dupliqué dans `mission_phases` — cette méthode ne fait donc plus que
+     * PROVISIONNER les phases manquantes (créer la ligne `mission_phases`
+     * avec `id` = id ddmparam) pour ce type de mission. Les clés de retour
+     * restent `updated/created/skipped/changes` pour rester compatible avec
+     * le panneau de résultat déjà affiché côté Vue ; `updated` reste
+     * simplement toujours à 0 puisqu'il n'y a plus rien à mettre à jour.
      */
     private function syncPhasesLabelsInternal(int $missionTypeId, string $auditTypeCode): array
     {
-        $ddmRows = DB::table('ddmparam.audit_type_forms as f')
+        $ddmForms = DB::table('ddmparam.audit_type_forms as f')
             ->join('ddmparam.audit_types as at', 'at.id', '=', 'f.audit_type_id')
             ->where('at.code', $auditTypeCode)
             ->where('f.is_active', 1)
-            ->orderBy('f.phase_num')
-            ->orderBy('f.sort_order')
-            ->get(['f.id as ddm_id', 'f.code', 'f.label', 'f.phase_num', 'f.parent_id', 'f.sort_order']);
+            ->orderBy('f.phase_num')->orderBy('f.sort_order')
+            ->get(['f.id', 'f.code', 'f.label']);
 
-        if ($ddmRows->isEmpty()) {
+        if ($ddmForms->isEmpty()) {
             return ['updated' => 0, 'created' => 0, 'skipped' => 0, 'changes' => []];
         }
 
-        $phaseTypeMap = [
-            1 => 'PREPARATION', 2 => 'VERIFICATION', 3 => 'CONCLUSION',
-            4 => 'SUIVI',       5 => 'RECOMMANDATIONS',
-        ];
-        $ddmByDdmId = $ddmRows->keyBy('ddm_id');
-
-        $localPhases = DB::table('mission_phases')
+        $existingIds = DB::table('mission_phases')
             ->where('mission_type_id', $missionTypeId)
-            ->get();
-        $localByCode = $localPhases->keyBy('form_code');
+            ->pluck('id')->map(fn($id) => (int) $id)->all();
 
-        $updated = 0; $created = 0; $skipped = 0; $changes = [];
+        $created = 0; $skipped = 0; $changes = [];
 
         DB::beginTransaction();
-
         try {
-            // Passe 1 : phases racines
-            foreach ($ddmRows->whereNull('parent_id') as $ddm) {
-                $phaseType = $phaseTypeMap[$ddm->phase_num] ?? 'AUTRE';
-                $local     = $localByCode->get($ddm->code);
-
-                if ($local) {
-                    $patch = []; $rc = [];
-                    if ((string) $local->label !== (string) $ddm->label) {
-                        $patch['label'] = $ddm->label;
-                        $rc[] = ['field' => 'label', 'old' => $local->label, 'new' => $ddm->label];
-                    }
-                    if ((string) ($local->phase_type ?? '') !== $phaseType) {
-                        $patch['phase_type'] = $phaseType;
-                        $rc[] = ['field' => 'phase_type', 'old' => $local->phase_type ?? '', 'new' => $phaseType];
-                    }
-                    if ($patch) {
-                        DB::table('mission_phases')->where('id', $local->id)
-                            ->update(array_merge($patch, ['updated_at' => now()]));
-                        $updated++;
-                        $changes[] = ['code' => $ddm->code, 'action' => 'updated', 'fields' => $rc];
-                    } else {
-                        $skipped++;
-                    }
-                } else {
-                    $newId = DB::table('mission_phases')->insertGetId([
-                        'mission_type_id' => $missionTypeId,
-                        'code'            => $ddm->code,
-                        'code_full'       => $ddm->code,
-                        'label'           => $ddm->label,
-                        'phase_type'      => $phaseType,
-                        'level'           => 1,
-                        'parent_id'       => null,
-                        'is_mandatory'    => false,
-                        'form_code'       => $ddm->code,
-                        'status'          => 'active',
-                        'created_at'      => now(),
-                        'updated_at'      => now(),
-                    ]);
-                    $freshRow = DB::table('mission_phases')->find($newId);
-                    $localByCode->put($ddm->code, $freshRow);
-                    $created++;
-                    $changes[] = ['code' => $ddm->code, 'action' => 'created', 'label' => $ddm->label, 'level' => 1];
+            foreach ($ddmForms as $f) {
+                if (in_array((int) $f->id, $existingIds, true)) {
+                    $skipped++;
+                    continue;
                 }
+                DB::table('mission_phases')->insert([
+                    'id'              => $f->id, // ← = ddmparam.audit_type_forms.id
+                    'mission_type_id' => $missionTypeId,
+                    'is_mandatory'    => 1,
+                    'status'          => 'active',
+                    'weight'          => 0,
+                    'created_at'      => now(),
+                    'updated_at'      => now(),
+                ]);
+                $created++;
+                $changes[] = ['code' => $f->code, 'action' => 'created', 'label' => $f->label, 'level' => 1];
             }
-
-            // Passe 2 : sous-phases
-            foreach ($ddmRows->whereNotNull('parent_id') as $ddm) {
-                $phaseType = $phaseTypeMap[$ddm->phase_num] ?? 'AUTRE';
-                $local     = $localByCode->get($ddm->code);
-
-                $ddmParent     = $ddmByDdmId->get($ddm->parent_id);
-                $localParent   = $ddmParent ? $localByCode->get($ddmParent->code) : null;
-                $localParentId = $localParent?->id;
-
-                if ($local) {
-                    $patch = []; $rc = [];
-                    if ((string) $local->label !== (string) $ddm->label) {
-                        $patch['label'] = $ddm->label;
-                        $rc[] = ['field' => 'label', 'old' => $local->label, 'new' => $ddm->label];
-                    }
-                    if ($localParentId && (int) ($local->parent_id ?? 0) !== $localParentId) {
-                        $patch['parent_id'] = $localParentId;
-                        $rc[] = ['field' => 'parent_id', 'old' => $local->parent_id, 'new' => $localParentId];
-                    }
-                    if ($patch) {
-                        DB::table('mission_phases')->where('id', $local->id)
-                            ->update(array_merge($patch, ['updated_at' => now()]));
-                        $updated++;
-                        $changes[] = ['code' => $ddm->code, 'action' => 'updated', 'fields' => $rc];
-                    } else {
-                        $skipped++;
-                    }
-                } else {
-                    if ($localParentId) {
-                        DB::table('mission_phases')->insertGetId([
-                            'mission_type_id' => $missionTypeId,
-                            'code'            => $ddm->code,
-                            'code_full'       => $ddm->code,
-                            'label'           => $ddm->label,
-                            'phase_type'      => $phaseType,
-                            'level'           => 2,
-                            'parent_id'       => $localParentId,
-                            'is_mandatory'    => false,
-                            'form_code'       => $ddm->code,
-                            'status'          => 'active',
-                            'created_at'      => now(),
-                            'updated_at'      => now(),
-                        ]);
-                        $created++;
-                        $changes[] = ['code' => $ddm->code, 'action' => 'created', 'label' => $ddm->label, 'level' => 2];
-                    } else {
-                        $skipped++;
-                    }
-                }
-            }
-
             DB::commit();
 
-            Log::info("[SyncPhases] MissionType #{$missionTypeId} [{$auditTypeCode}]"
-                . " updated={$updated} created={$created} skipped={$skipped}");
+            Log::info("[SyncPhases] MissionType #{$missionTypeId} [{$auditTypeCode}] created={$created} skipped={$skipped}");
 
-            return ['updated' => $updated, 'created' => $created, 'skipped' => $skipped, 'changes' => $changes];
-
+            return ['updated' => 0, 'created' => $created, 'skipped' => $skipped, 'changes' => $changes];
         } catch (\Exception $e) {
             DB::rollBack();
             throw $e;
@@ -704,6 +663,27 @@ class MissionPhaseAffectationController extends Controller
             if (!$row) return null;
             return ['debut' => $row->date_debut, 'fin' => $row->date_fin];
         } catch (\Exception $e) { return null; }
+    }
+
+    /**
+     * ⚠️ GARDE-FOU : détecte si `mission_phases` est encore sur l'ANCIEN
+     * schéma (colonne `code` présente = migration `migrate_phases_to_central_ids.sql`
+     * pas encore appliquée sur ce tenant). Tant que ce n'est pas migré, il ne
+     * faut PAS écrire dans cette table avec le nouveau format (id = id
+     * ddmparam) : ça viole les anciennes contraintes (`uq_code_type`...) et,
+     * pire, ça peut associer par pur hasard un id ddmparam à une ancienne
+     * ligne d'un AUTRE type de mission (mélange de phases entre missions).
+     */
+    private function assertPhasesSchemaMigrated(): void
+    {
+        if ($this->columnExists('mission_phases', 'code')) {
+            throw new \RuntimeException(
+                "La table mission_phases n'a pas encore été migrée vers le nouveau schéma ".
+                "(elle a encore une colonne 'code' issue de l'ancien format). ".
+                "Lance database/sql/migrate_phases_to_central_ids.sql sur ce tenant ".
+                "avant de continuer — voir le README fourni."
+            );
+        }
     }
 
     private function columnExists(string $table, string $column): bool
@@ -925,68 +905,102 @@ class MissionPhaseAffectationController extends Controller
         }
     }
 
+    /**
+     * ⚠️ NOUVEAU SCHÉMA : `mission_phases.id` (tenant) = `ddmparam.audit_type_forms.id`
+     * directement. Plus de contenu dupliqué localement (label, phase_type,
+     * hiérarchie, form_code) : tout vient de ddmparam, via un simple JOIN sur
+     * l'id (les deux tables partagent désormais le même espace d'identifiants).
+     *
+     * `mission_phases` (tenant) ne fournit plus que les réglages propres au
+     * tenant : `is_mandatory`, `status`, `weight`. Une phase présente dans
+     * ddmparam mais pas encore provisionnée côté tenant (LEFT JOIN sans
+     * correspondance) est renvoyée avec `status = 'not_provisioned'` et
+     * `provisioned = false` : elle s'affiche mais ne peut pas être cochée
+     * (cf. `saveAffectation`, qui filtre sur les ids réellement présents
+     * dans `mission_phases`).
+     *
+     * ⚠️ REGROUPEMENT DYNAMIQUE (cohérent avec AuditorMissionsController) :
+     * les grandes phases ne sont plus mappées sur une liste figée
+     * ('PREPARATION'/'VERIFICATION'/...) — le groupe est identifié par
+     * `phase_num` (1..5, stable, vient de ddmparam) et libellé avec
+     * `phase_label`, qui vient aussi de ddmparam et varie légitimement selon
+     * le type d'audit (ex: "ETUDE / PREPARATION" pour AC vs "Préparation"
+     * pour AF/AP/ES/RP). Plus aucune map de labels côté PHP.
+     */
     private function getPhasesForType(int $typeId): array
     {
-        $all = DB::table('mission_phases')->where('mission_type_id', $typeId)
-            ->whereNotIn('status', ['inactive', 'disabled', 'deleted', 'archived'])
-            ->orderByRaw("CASE COALESCE(phase_type,'AUTRE') WHEN 'PREPARATION' THEN 1 WHEN 'VERIFICATION' THEN 2 WHEN 'CONCLUSION' THEN 3 WHEN 'SUIVI' THEN 4 WHEN 'RECOMMANDATIONS' THEN 5 ELSE 6 END, COALESCE(level,1), COALESCE(code_full,code)")
-            ->get()->map(fn($p) => ['id' => $p->id, 'code' => $p->code ?? '', 'code_full' => $p->code_full ?? $p->code ?? '', 'label' => $p->label ?? '', 'phase_type' => $p->phase_type ?? 'AUTRE', 'level' => (int) ($p->level ?? 1), 'parent_id' => $p->parent_id ?? null, 'is_mandatory' => (bool) ($p->is_mandatory ?? false), 'form_code' => $p->form_code ?? null, 'status' => $p->status ?? null, 'children' => []])->toArray();
+        $this->assertPhasesSchemaMigrated();
 
-        $presentTypes = collect($all)->pluck('phase_type')->unique()->filter()->values()->toArray();
-        $allExpected  = ['PREPARATION', 'VERIFICATION', 'CONCLUSION', 'SUIVI', 'RECOMMANDATIONS'];
-        $missingTypes = array_diff($allExpected, $presentTypes);
-
-        if (!empty($missingTypes) || empty($all)) {
-            $auditTypeCode = $this->getAuditTypeCodeForMissionType($typeId);
-            if ($auditTypeCode) {
-                $phaseNumMap = ['PREPARATION'=>1,'VERIFICATION'=>2,'CONCLUSION'=>3,'SUIVI'=>4,'RECOMMANDATIONS'=>5];
-                $missingPhaseNums = empty($all) ? [1,2,3,4,5] : array_values(array_filter(array_map(fn($pt) => $phaseNumMap[$pt] ?? null, $missingTypes)));
-
-                if (!empty($missingPhaseNums)) {
-                    $ddmForms = DB::table('ddmparam.audit_type_forms as f')
-                        ->join('ddmparam.audit_types as at', 'at.id', '=', 'f.audit_type_id')
-                        ->where('at.code', $auditTypeCode)->whereIn('f.phase_num', $missingPhaseNums)
-                        ->whereNull('f.parent_id')->where('f.is_active', 1)
-                        ->orderBy('f.phase_num')->orderBy('f.sort_order')->get();
-
-                    $virtualId = -1000;
-                    foreach ($ddmForms as $f) {
-                        $phaseType = $allExpected[($f->phase_num - 1)] ?? 'AUTRE';
-                        $all[] = ['id' => $virtualId--, 'code' => $f->code, 'code_full' => $f->code, 'label' => $f->label, 'phase_type' => $phaseType, 'level' => 1, 'parent_id' => null, 'is_mandatory' => false, 'form_code' => $f->code, 'status' => 'ddmparam', 'children' => []];
-                    }
-                }
-            }
+        $auditTypeCode = $this->getAuditTypeCodeForMissionType($typeId);
+        if (!$auditTypeCode) {
+            Log::warning("[PhaseAffectation] getPhasesForType: mission_type #{$typeId} sans audit_type_code — impossible de charger depuis ddmparam.");
+            return [];
         }
 
-        if (empty($all)) return [];
+        $rows = DB::table('ddmparam.audit_type_forms as f')
+            ->join('ddmparam.audit_types as at', 'at.id', '=', 'f.audit_type_id')
+            ->leftJoin('mission_phases as mp', function ($j) use ($typeId) {
+                $j->on('mp.id', '=', 'f.id')->where('mp.mission_type_id', '=', $typeId);
+            })
+            ->where('at.code', $auditTypeCode)
+            ->where('f.is_active', 1)
+            ->orderBy('f.phase_num')->orderBy('f.sort_order')
+            ->get([
+                'f.id', 'f.code', 'f.label', 'f.phase_num', 'f.phase_label', 'f.parent_id', 'f.sort_order',
+                'mp.is_mandatory', 'mp.status', 'mp.weight',
+            ]);
 
-        $byId = [];
-        foreach ($all as &$p) $byId[$p['id']] = &$p;
-        unset($p);
+        if ($rows->isEmpty()) {
+            Log::warning("[PhaseAffectation] getPhasesForType: aucun formulaire actif dans ddmparam pour audit_type={$auditTypeCode}.");
+            return [];
+        }
 
+        // ── Construire la liste à plat (id = id central, donc parent_id
+        //    est DÉJÀ le bon id, aucune résolution indirecte nécessaire) ──
+        $all = [];
+        foreach ($rows as $r) {
+            $provisioned = !is_null($r->status);
+            $all[(int) $r->id] = [
+                'id'           => (int) $r->id,
+                'code'         => $r->code,
+                'code_full'    => $r->code,
+                'label'        => $r->label,
+                'phase_num'    => (int) $r->phase_num,
+                'phase_label'  => $r->phase_label,
+                'level'        => $r->parent_id ? 2 : 1,
+                'parent_id'    => $r->parent_id ? (int) $r->parent_id : null,
+                'is_mandatory' => (bool) ($r->is_mandatory ?? false),
+                'form_code'    => $r->code,
+                'status'       => $r->status ?? 'not_provisioned',
+                'provisioned'  => $provisioned,
+                'children'     => [],
+            ];
+        }
+
+        // ── Construire l'arbre (racines + enfants) ────────────────────────
         $roots = [];
-        foreach ($all as &$p) {
+        foreach ($all as $id => &$p) {
             if ($p['parent_id'] === null) { $roots[] = &$p; }
-            elseif (isset($byId[$p['parent_id']])) { $byId[$p['parent_id']]['children'][] = &$p; }
+            elseif (isset($all[$p['parent_id']])) { $all[$p['parent_id']]['children'][] = &$p; }
             else { $roots[] = &$p; }
         }
         unset($p);
 
+        // ── Grouper par phase_num, dans l'ordre numérique croissant ───────
+        // Plus de liste figée : ce qui existe dans ddmparam pour ce type
+        // d'audit détermine entièrement les groupes et leur ordre.
         $groups = [];
         foreach ($roots as &$r) {
-            $pt = $r['phase_type'] ?? 'AUTRE';
-            if (!isset($groups[$pt])) $groups[$pt] = ['phase_type' => $pt, 'phases' => []];
-            $groups[$pt]['phases'][] = &$r;
+            $pnum = $r['phase_num'];
+            if (!isset($groups[$pnum])) {
+                $groups[$pnum] = ['phase_num' => $pnum, 'label' => $r['phase_label'], 'phases' => []];
+            }
+            $groups[$pnum]['phases'][] = &$r;
         }
         unset($r);
 
-        $ordered = [];
-        foreach (['PREPARATION','VERIFICATION','CONCLUSION','SUIVI','RECOMMANDATIONS'] as $pt) {
-            if (isset($groups[$pt])) { $ordered[] = $groups[$pt]; unset($groups[$pt]); }
-        }
         ksort($groups);
-        foreach ($groups as $g) $ordered[] = $g;
-        return $ordered;
+        return array_values($groups);
     }
 
     private function getAuditTypeCodeForMissionType(int $typeId): ?string
