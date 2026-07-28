@@ -31,8 +31,8 @@ class RiskMatrixController extends Controller
                 'is_active' => (bool) $c->is_active,
             ]);
 
-        $selectedId = $request->integer('config_id')
-            ?: optional($allConfigs->firstWhere('is_active', true))['id']
+        // La matrice ACTIVE s'applique partout : on ignore tout config_id de requête.
+        $selectedId = optional($allConfigs->firstWhere('is_active', true))['id']
             ?: optional($allConfigs->first())['id'];
 
         $matrixData = null;
@@ -71,7 +71,9 @@ class RiskMatrixController extends Controller
     public function getMatrixData(Request $request)
     {
         $tid = $this->tenantId();
-        $configId = $request->integer('config_id');
+        // Toujours la matrice active (on ignore config_id).
+        $configId = RiskMatrixConfig::forTenant($tid)->where('is_active', 1)->value('id')
+            ?: RiskMatrixConfig::forTenant($tid)->orderBy('id')->value('id');
 
         $config = RiskMatrixConfig::forTenant($tid)
             ->with([
@@ -102,21 +104,18 @@ class RiskMatrixController extends Controller
     {
         $impacts = $config->impactLevels->sortByDesc('score')->values();
         $frequencies = $config->frequencyLevels->sortBy('score')->values();
-        
-        $zoneMap = [];
-        foreach ($config->criticalityZones as $zone) {
-            $key = $zone->impact_score . '_' . $zone->frequency_score;
-            $zoneMap[$key] = $zone;
-        }
+
+        // Zones PAR PLAGE (min_score/max_score) — résolution par le score de la cellule.
+        $zones = $config->criticalityZones->sortBy('sort_order')->values();
+        $zoneFor = fn ($score) => $zones->first(fn ($z) => $score >= $z->min_score && $score <= $z->max_score);
 
         $cells = [];
         foreach ($impacts as $impact) {
             $row = [];
             foreach ($frequencies as $freq) {
-                $key = $impact->score . '_' . $freq->score;
-                $zone = $zoneMap[$key] ?? null;
                 $score = $impact->score * $freq->score;
-                
+                $zone = $zoneFor($score);
+
                 $row[] = [
                     'score' => $score,
                     'impact_score' => $impact->score,
@@ -155,12 +154,11 @@ class RiskMatrixController extends Controller
                 'color_code' => $l->color_code,
             ])->values(),
             'cells' => $cells,
-            'zones' => $config->criticalityZones->sortBy('sort_order')->values()->map(fn($z) => [
+            'zones' => $zones->map(fn($z) => [
                 'id' => $z->id,
                 'label' => $z->label,
-                'impact_score' => $z->impact_score,
-                'frequency_score' => $z->frequency_score,
-                'score' => $z->score,
+                'min_score' => $z->min_score,
+                'max_score' => $z->max_score,
                 'color_code' => $z->color_code,
                 'description' => $z->description ?? '',
             ])->values(),

@@ -2,6 +2,8 @@
   <VerticalLayout>
     <div class="page">
 
+      <EvaluationStepper current="inherent" />
+
       <!-- HEADER -->
       <div class="page-hdr">
         <div class="page-hdr-left">
@@ -17,9 +19,10 @@
             <div class="stat stat-ok"><span>{{ stats.with_inherent||0 }}</span><small>Évalués</small></div>
             <div class="stat stat-nd"><span>{{ (stats.total||0)-(stats.with_inherent||0) }}</span><small>En attente</small></div>
           </div>
-          <select v-model="activeConfigId" class="cfg-sel" @change="onCfgChange">
-            <option v-for="c in matrixConfigs" :key="c.id" :value="c.id">{{ c.name }} ({{ c.matrix_label }}){{ c.is_active?' ✓':'' }}</option>
-          </select>
+          <span v-if="activeCfg" class="cfg-fixed" title="Matrice active (appliquée partout)"><i class="ti ti-grid-dots"></i> {{ activeCfg.name }} ({{ activeCfg.matrix_label }})</span>
+          <Link :href="route('risk.core.evaluation.cartographie')" class="btn-next" style="background:#4f46e5">
+            <i class="ti ti-map-2"></i> Cartographie
+          </Link>
           <Link :href="route('risk.core.evaluation.controle')" class="btn-next">
             <i class="ti ti-shield-lock"></i> Contrôle <i class="ti ti-arrow-right"></i>
           </Link>
@@ -294,6 +297,7 @@
 import { ref, computed } from 'vue'
 import { router, Link } from '@inertiajs/vue3'
 import VerticalLayout from '@/layoutsparam/VerticalLayout.vue'
+import EvaluationStepper from './EvaluationStepper.vue'
 
 const props = defineProps({
   risks: { type: Array, default: () => [] },
@@ -309,6 +313,7 @@ const props = defineProps({
 
 const csrf = () => document.querySelector('meta[name="csrf-token"]')?.content || ''
 const activeConfigId = ref(props.selectedConfigId ?? props.matrixConfigs[0]?.id ?? null)
+const activeCfg = computed(() => props.matrixConfigs.find(c => c.is_active) || props.matrixConfigs.find(c => c.id === props.selectedConfigId) || props.matrixConfigs[0] || null)
 const searchQ  = ref('')
 const filter   = ref('all')
 const modal    = ref(false)
@@ -515,6 +520,7 @@ const onCfgChange = () => router.get(route('risk.core.evaluation.inherente'),{co
 .stat-ok span{color:#4ade80;}
 .stat-nd span{color:#fbbf24;}
 .cfg-sel{font-size:11px;padding:6px 10px;border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.07);color:#c8d6e5;border-radius:8px;cursor:pointer;}
+.cfg-fixed{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:700;padding:6px 11px;border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.05);color:#c8d6e5;border-radius:8px;}
 .btn-next{display:flex;align-items:center;gap:6px;padding:7px 16px;background:#2563eb;color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;text-decoration:none;}
 .btn-next:hover{background:#1d4ed8;}
 

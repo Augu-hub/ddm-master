@@ -486,6 +486,49 @@ class RiskActionPlanController extends Controller
         ]);
     }
 
+    /**
+     * Suivi des plans d'action (dashboard opérationnel) — sert ActionTracking.vue.
+     * Réutilise les chargeurs défensifs (données 100 % dynamiques du tenant) et
+     * ajoute le compte de tâches par plan (colonne « Tâches » + résumé).
+     */
+    public function tracking(Request $request): Response
+    {
+        $filters = $request->only(['status', 'priority', 'risk_id', 'entity_id']);
+        $plans   = $this->loadActionPlans($filters);
+        $counts  = $this->loadTaskCounts();
+
+        foreach ($plans as &$p) {
+            $c = $counts[$p['id']] ?? ['total' => 0, 'completed' => 0];
+            $p['tasks_total']     = $c['total'];
+            $p['tasks_completed'] = $c['completed'];
+        }
+        unset($p);
+
+        return Inertia::render('dashboards/Risk/ActionTracking', [
+            'actionPlans' => $plans,
+            'allRisks'    => $this->loadAllRisks(),
+            'stats'       => $this->getStats(),
+            'priorities'  => $this->getPriorities(),
+            'statuses'    => $this->getStatuses(),
+        ]);
+    }
+
+    /** Compte des tâches (total / terminées) par plan d'action. */
+    private function loadTaskCounts(): array
+    {
+        $tid = $this->tid();
+        if (!Schema::hasTable('risk_action_tasks')) return [];
+
+        return DB::table('risk_action_tasks')
+            ->where('tenant_id', $tid)->whereNull('deleted_at')
+            ->groupBy('plan_id')
+            ->selectRaw("plan_id, COUNT(*) as total, SUM(CASE WHEN status='completed' THEN 1 ELSE 0 END) as completed")
+            ->get()
+            ->keyBy('plan_id')
+            ->map(fn ($r) => ['total' => (int) $r->total, 'completed' => (int) $r->completed])
+            ->toArray();
+    }
+
     public function dashboard(Request $request): Response
     {
         return Inertia::render('dashboards/Risk/ActionPlan/Dashboard', [

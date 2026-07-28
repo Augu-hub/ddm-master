@@ -7,8 +7,8 @@
         <div class="t-topbar-left">
           <i class="ti ti-chart-line"></i>
           <div>
-            <h1>Suivi des Actions</h1>
-            <p>Tableau de bord des plans d'action et recommandations — FRUCTIVIA AGRO</p>
+            <h1>Suivi des plans d'action</h1>
+            <p>Avancement, échéances et alertes — données en temps réel du registre</p>
           </div>
         </div>
         <div class="t-topbar-right">
@@ -324,15 +324,9 @@
                       </div>
                       <span class="pl-pct">{{ trackingModal.plan?.progress || 0 }}%</span>
                     </div>
-                    <div class="pt-slider-container">
-                      <input 
-                        type="range" 
-                        v-model.number="progressValue" 
-                        min="0" 
-                        max="100" 
-                        class="pt-slider"
-                        @change="updateProgress"
-                      />
+                    <div class="pt-note">
+                      <i class="ti ti-info-circle"></i>
+                      Calculée automatiquement d'après les tâches terminées ({{ trackingTasks.filter(t=>t.status==='completed').length }}/{{ trackingTasks.length }}). Cochez les tâches ci-dessous pour la faire évoluer.
                     </div>
                   </div>
                 </div>
@@ -449,7 +443,14 @@ const trackingComments = ref([])
 const trackingHistory = ref([])
 const newComment = ref('')
 const progressValue = ref(0)
-const tasksStats = ref({})
+// Comptes de tâches réels (fournis par le contrôleur : tasks_total / tasks_completed)
+const tasksStats = computed(() => {
+  const m = {}
+  for (const p of (props.actionPlans || [])) {
+    m[p.id] = { total: p.tasks_total || 0, completed: p.tasks_completed || 0 }
+  }
+  return m
+})
 const flashMsg = ref('')
 const flashOk = ref(true)
 let flashTimer = null
@@ -1438,6 +1439,19 @@ const reload = () => router.reload({ preserveState: true })
   width: 100%;
   cursor: pointer;
 }
+
+.pt-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 5px;
+  font-size: 9.5px;
+  color: #64748b;
+  line-height: 1.5;
+  background: #f1f5f9;
+  border-radius: 6px;
+  padding: 6px 8px;
+}
+.pt-note i { color: #3b82f6; margin-top: 1px; flex-shrink: 0; }
 
 .td-text-block {
   background: #f8fafc;

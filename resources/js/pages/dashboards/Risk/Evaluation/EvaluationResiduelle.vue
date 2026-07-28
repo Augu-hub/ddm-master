@@ -1,6 +1,8 @@
 <template>
   <VerticalLayout>
     <div class="page">
+
+      <EvaluationStepper current="residuel" />
       <div class="page-hdr">
         <div class="page-hdr-left">
           <div class="hdr-icon hdr-icon--res"><i class="ti ti-shield-half"></i></div>
@@ -27,7 +29,7 @@
           <div class="tt-left">
             <div class="search-box"><i class="ti ti-search"></i><input v-model="searchQ" placeholder="Rechercher…"/></div>
             <div class="filter-tabs">
-              <button :class="['ftab',filter==='all'?'ftab--on':'']" @click="filter='all'">Tous <span>{{ withControl.length }}</span></button>
+              <button :class="['ftab',filter==='all'?'ftab--on':'']" @click="filter='all'">Tous <span>{{ withInherent.length }}</span></button>
               <button :class="['ftab',filter==='done'?'ftab--on':'']" @click="filter='done'"><i class="ti ti-check"></i> Évalués <span>{{ withResidual.length }}</span></button>
               <button :class="['ftab',filter==='todo'?'ftab--on':'']" @click="filter='todo'"><i class="ti ti-clock"></i> En attente <span>{{ withoutResidual.length }}</span></button>
             </div>
@@ -101,9 +103,9 @@
                         </span>
                       </td>
                       <td>
-                        <button :class="['eval-btn',!risk.has_control?'eval-btn--locked':'']" :disabled="!risk.has_control" @click="openModal(risk)">
+                        <button :class="['eval-btn',(!risk.has_control && !risk.residual_criticality)?'eval-btn--locked':'']" :disabled="!risk.has_control && !risk.residual_criticality" @click="openModal(risk)">
                           <i :class="risk.residual_criticality?'ti ti-pencil':'ti ti-plus'"></i>
-                          {{ !risk.has_control?'Contrôle requis': risk.residual_criticality?'Modifier':'Évaluer' }}
+                          {{ (!risk.has_control && !risk.residual_criticality)?'Contrôle requis': risk.residual_criticality?'Modifier':'Évaluer' }}
                         </button>
                       </td>
                     </tr>
@@ -281,6 +283,7 @@
 import { ref, computed } from 'vue'
 import { router, Link } from '@inertiajs/vue3'
 import VerticalLayout from '@/layoutsparam/VerticalLayout.vue'
+import EvaluationStepper from './EvaluationStepper.vue'
 
 const props = defineProps({
   risks: { type: Array, default: () => [] },
@@ -358,11 +361,12 @@ const getFreqDesc  = (lvl,tplId) => { const t=freqCritTpls.value.find(t=>t.id===
 const macroColor     = k => ({Direction:'#7c3aed',Réalisation:'#0d9488',Support:'#2563eb'})[k]||'#64748b'
 const macroKindLabel = k => ({Direction:'DIR',Réalisation:'OP',Support:'SUP'})[k]||(k||'?')
 
+const withInherent   = computed(() => props.risks.filter(r=>r.criticality_score))
 const withControl    = computed(() => props.risks.filter(r=>r.has_control))
 const withResidual   = computed(() => props.risks.filter(r=>r.residual_criticality))
-const withoutResidual = computed(() => withControl.value.filter(r=>!r.residual_criticality))
+const withoutResidual = computed(() => withInherent.value.filter(r=>!r.residual_criticality))
 const filteredRisks  = computed(() => {
-  let r = filter.value==='done'?withResidual.value: filter.value==='todo'?withoutResidual.value: withControl.value
+  let r = filter.value==='done'?withResidual.value: filter.value==='todo'?withoutResidual.value: withInherent.value
   if(searchQ.value){const q=searchQ.value.toLowerCase();r=r.filter(x=>x.libelle?.toLowerCase().includes(q)||x.code_risk?.toLowerCase().includes(q))}
   return r
 })

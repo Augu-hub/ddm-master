@@ -2,6 +2,8 @@
   <VerticalLayout>
     <div class="page">
 
+      <EvaluationStepper current="controle" />
+
       <div class="page-hdr">
         <div class="page-hdr-left">
           <div class="hdr-icon hdr-icon--ctrl"><i class="ti ti-shield-lock"></i></div>
@@ -270,6 +272,7 @@
 import { ref, computed } from 'vue'
 import { router, Link } from '@inertiajs/vue3'
 import VerticalLayout from '@/layoutsparam/VerticalLayout.vue'
+import EvaluationStepper from './EvaluationStepper.vue'
 
 const props = defineProps({
   risks: { type: Array, default: () => [] },

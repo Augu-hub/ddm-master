@@ -12,6 +12,8 @@ use App\Http\Controllers\Risk\MistralNomenclatureController;
 use App\Http\Controllers\Risk\NomenclatureController;
 use App\Http\Controllers\Risk\RiskActionPlanController;
 use App\Http\Controllers\Risk\RiskEvaluationController;
+use App\Http\Controllers\Risk\RiskEvaluationSessionController;
+use App\Http\Controllers\Risk\RiskReportController;
 use App\Http\Controllers\Risk\RiskMatrixController;
 use App\Http\Controllers\Risk\SessionController;
 use App\Http\Controllers\Risk\RiskMatrixConfigController;
@@ -105,10 +107,11 @@ Route::prefix('risks-analyses')->name('risks-analyses.')->group(function () {
 Route::prefix('evaluation')->name('evaluation.')->group(function () {
 
     // Vues (toutes rendent la même page EvaluationGlobale.vue avec initialStep)
-    Route::get('/inherente',  [RiskEvaluationController::class, 'inherente']) ->name('inherente');
-    Route::get('/controle',   [RiskEvaluationController::class, 'controle'])  ->name('controle');
-    Route::get('/residuelle', [RiskEvaluationController::class, 'residuelle'])->name('residuelle');
-    Route::get('/cible',      [RiskEvaluationController::class, 'cible'])     ->name('cible');
+    Route::get('/inherente',    [RiskEvaluationController::class, 'inherente'])  ->name('inherente');
+    Route::get('/controle',     [RiskEvaluationController::class, 'controle'])   ->name('controle');
+    Route::get('/residuelle',   [RiskEvaluationController::class, 'residuelle']) ->name('residuelle');
+    Route::get('/cible',        [RiskEvaluationController::class, 'cible'])      ->name('cible');
+    Route::get('/cartographie', [RiskEvaluationController::class, 'cartographie'])->name('cartographie');
 
     // Stores JSON (fetch depuis Vue) — sauvegarde étape par étape
     Route::post('/inherente/store',  [RiskEvaluationController::class, 'storeInherente']) ->name('inherente.store');
@@ -120,6 +123,34 @@ Route::prefix('evaluation')->name('evaluation.')->group(function () {
     // ── ACTIONS SUR RISQUE ─────────────────────────────────────────────────────
     Route::post('/risk-action', [RiskEvaluationController::class, 'addActionToRisk'])->name('risk-action.store');
     Route::get('/risk/{riskId}/actions', [RiskEvaluationController::class, 'getRiskActions'])->name('risk-actions.index');
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// SESSIONS D'ÉVALUATION — actualisation & comparaison d'évolution
+// ═══════════════════════════════════════════════════════════════════════════
+Route::prefix('eval-sessions')->name('eval-sessions.')->group(function () {
+    Route::get('/',                 [RiskEvaluationSessionController::class, 'index'])      ->name('index');
+    Route::post('/',                [RiskEvaluationSessionController::class, 'store'])      ->name('store');
+    Route::get('/compare',          [RiskEvaluationSessionController::class, 'compare'])    ->name('compare');
+    Route::get('/compare/data',     [RiskEvaluationSessionController::class, 'compareData'])->name('compare.data');
+    Route::get('/{id}/report',      [RiskEvaluationSessionController::class, 'report'])     ->name('report')     ->whereNumber('id');
+    Route::post('/{id}/report',     [RiskEvaluationSessionController::class, 'saveReport']) ->name('report.save')->whereNumber('id');
+    Route::post('/{id}/actualiser', [RiskEvaluationSessionController::class, 'actualiser']) ->name('actualiser')->whereNumber('id');
+    Route::post('/{id}/snapshot',   [RiskEvaluationSessionController::class, 'snapshot'])   ->name('snapshot')  ->whereNumber('id');
+    Route::post('/{id}/activate',   [RiskEvaluationSessionController::class, 'activate'])   ->name('activate')  ->whereNumber('id');
+    Route::post('/{id}/close',      [RiskEvaluationSessionController::class, 'close'])      ->name('close')     ->whereNumber('id');
+    Route::delete('/{id}',          [RiskEvaluationSessionController::class, 'destroy'])    ->name('destroy')   ->whereNumber('id');
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// RAPPORTS & TABLEAU DE BORD (hub)
+// ═══════════════════════════════════════════════════════════════════════════
+Route::prefix('reports')->name('reports.')->group(function () {
+    Route::get('/',                    [RiskReportController::class, 'index'])         ->name('index');
+    Route::get('/fiche/{riskId}',      [RiskReportController::class, 'ficheRisque'])   ->name('fiche')->whereNumber('riskId');
+    Route::get('/plan-synthetique',    [RiskReportController::class, 'planSynthetique'])->name('plan-synthetique');
+    Route::get('/gantt',               [RiskReportController::class, 'gantt'])          ->name('gantt');
+    Route::get('/plan-recommandation/{riskId}', [RiskReportController::class, 'planParRecommandation'])->name('plan-recommandation')->whereNumber('riskId');
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -139,6 +170,9 @@ Route::prefix('action-plan')->name('action-plan.')->group(function () {
     
     // Tableau de bord
     Route::get('/dashboard', [RiskActionPlanController::class, 'dashboard'])->name('dashboard');
+
+    // Suivi opérationnel (ActionTracking.vue)
+    Route::get('/tracking', [RiskActionPlanController::class, 'tracking'])->name('tracking');
 
     // CRUD Plan d'action
     Route::post('/', [RiskActionPlanController::class, 'store'])->name('store');

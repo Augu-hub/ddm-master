@@ -19,13 +19,10 @@
                         </span>
                     </transition>
 
-                    <div v-if="allConfigs && allConfigs.length" class="d-flex align-items-center gap-2">
-                        <label class="form-label text-muted small mb-0">Config :</label>
-                        <select v-model="currentConfigId" @change="onConfigChange" class="form-select form-select-sm" style="width:auto">
-                            <option v-for="c in allConfigs" :key="c.id" :value="c.id">
-                                {{ c.name }} ({{ c.matrix_label }}){{ c.is_active ? ' ✓' : '' }}
-                            </option>
-                        </select>
+                    <div v-if="activeCfg" class="d-flex align-items-center gap-2">
+                        <span class="badge bg-primary-subtle text-primary border border-primary-subtle" title="Matrice active (appliquée partout)">
+                            <i class="ti ti-grid-dots me-1"></i>{{ activeCfg.name }} ({{ activeCfg.matrix_label }}) — matrice active
+                        </span>
                     </div>
 
                     <div v-if="matrixData" class="btn-group btn-group-sm">
@@ -308,11 +305,11 @@
                         </b-card-header>
                         <b-card-body class="p-2">
                             <div v-for="zone in sortedZones" :key="zone.id" class="legend-item"
-                                :style="'border-left:4px solid ' + zone.color">
-                                <span class="legend-dot" :style="'background:' + zone.color"></span>
-                                <span class="legend-label" :style="'color:' + zone.color">{{ zone.label }}</span>
-                                <span class="legend-coord">I{{ zone.impact }}×V{{ zone.freq }}</span>
-                                <span class="legend-score">{{ zone.score }} pts</span>
+                                :style="'border-left:4px solid ' + zone.color_code">
+                                <span class="legend-dot" :style="'background:' + zone.color_code"></span>
+                                <span class="legend-label" :style="'color:' + zone.color_code">{{ zone.label }}</span>
+                                <span class="legend-coord">{{ zone.min_score }}–{{ zone.max_score }}</span>
+                                <span class="legend-score">pts</span>
                             </div>
                             <div v-if="!sortedZones.length" class="text-center text-muted small py-3">
                                 Aucune zone définie. Sélectionnez une cellule pour commencer.
@@ -364,6 +361,7 @@ const allConfigs     = ref(props.allConfigs || [])
 const matrixData     = ref(props.matrixData)
 const masteryLevels  = ref(props.masteryLevels || [])
 const currentConfigId = ref(props.selectedConfigId)
+const activeCfg = computed(() => allConfigs.value.find(c => c.is_active) || allConfigs.value.find(c => c.id === props.selectedConfigId) || allConfigs.value[0] || null)
 const view           = ref('grid')
 const hoveredCell    = ref(null)
 const pinnedCell     = ref(null)
@@ -376,10 +374,8 @@ const selectedCell   = ref(null)
 
 const sortedZones = computed(() => {
     if (!matrixData.value?.zones) return []
-    return [...matrixData.value.zones].sort((a, b) => {
-        if (a.impact_score !== b.impact_score) return b.impact_score - a.impact_score
-        return a.frequency_score - b.frequency_score
-    })
+    // Zones par PLAGE de score (min_score → max_score), du plus faible au plus fort.
+    return [...matrixData.value.zones].sort((a, b) => (a.min_score ?? 0) - (b.min_score ?? 0))
 })
 
 const impactDesc = computed(() =>

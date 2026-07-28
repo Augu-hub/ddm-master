@@ -60,8 +60,8 @@ class RiskEvaluationController extends Controller
 
     private function resolveConfigId(Request $request, $configs): ?int
     {
-        return $request->integer('config_id')
-            ?: optional($configs->firstWhere('is_active', true))['id']
+        // La matrice ACTIVE s'applique partout : on ignore tout config_id de requête.
+        return optional($configs->firstWhere('is_active', true))['id']
             ?: optional($configs->first())['id'];
     }
 
@@ -182,6 +182,7 @@ class RiskEvaluationController extends Controller
             ->leftJoin('activities as a',              'a.id',   '=', 'r.activity_id')
             ->leftJoin('processes as p',               'p.id',   '=', 'a.process_id')
             ->leftJoin('macro_processes as mp',        'mp.id',  '=', 'p.macro_process_id')
+            ->leftJoin('entities as e',                'e.id',   '=', 'r.entity_id')
             // Inherent
             ->leftJoin('risk_impact_levels as il',     'il.id',  '=', 'r.impact_level_id')
             ->leftJoin('risk_frequency_levels as fl',  'fl.id',  '=', 'r.frequency_level_id')
@@ -207,6 +208,7 @@ class RiskEvaluationController extends Controller
             // Identite
             'r.id', 'r.code_risk', 'r.libelle', 'r.statut', 'r.activity_id',
             // Contexte
+            'r.entity_id', 'e.name as entity_name',
             'a.code as activity_code', 'a.name as activity_name', 'a.process_id as process_id',
             'p.code as process_code', 'p.name as process_name',
             'p.macro_process_id as macro_process_id',
@@ -276,12 +278,17 @@ class RiskEvaluationController extends Controller
         }
 
         $result = [];
-        DB::table('risk_register_controls')
+        $rows = DB::table('risk_register_controls')
             ->where('tenant_id', $tid)
             ->whereNull('deleted_at')
             ->select($cols)
-            ->get()
-            ->each(fn($row) => $result[$row->risk_id] = $row);
+            ->get();
+        // NB : ne PAS utiliser ->each(fn(...)=> $result[...]=...) : l'arrow function
+        // capture $result par VALEUR → les affectations étaient perdues (has_control
+        // toujours faux → page résiduelle vide). foreach = affectation réelle.
+        foreach ($rows as $row) {
+            $result[$row->risk_id] = $row;
+        }
 
         \Log::info('[loadControls] tenant='.$tid.' lignes lues', [
             'count'         => count($result),
@@ -619,6 +626,60 @@ class RiskEvaluationController extends Controller
             'masteryLevels'              => $this->loadMasteryLevels(),
             'criteriaTemplates'          => $this->getImpactCriteriaTemplates($cId),
             'frequencyCriteriaTemplates' => $this->getFrequencyCriteriaTemplates($cId),
+            'activeSession'              => $this->activeSession(),
+            'stepProgress'               => $this->stepProgress(),
+        ];
+    }
+
+    /** Session d'évaluation active (affichée en permanence sur les écrans). */
+    private function activeSession(): ?array
+    {
+        if (!Schema::hasTable('risk_sessions')) return null;
+
+        $s = DB::table('risk_sessions')
+            ->where('tenant_id', $this->tid())->whereNull('deleted_at')
+            ->orderByDesc('is_active')->orderByDesc('year')->orderByDesc('created_at')
+            ->first(['id', 'name', 'year', 'status', 'is_active', 'snapshot_at']);
+
+        return $s ? [
+            'id'        => $s->id,
+            'name'      => $s->name,
+            'year'      => $s->year,
+            'status'    => $s->status,
+            'is_active' => (bool) $s->is_active,
+            'is_frozen' => $s->snapshot_at !== null,
+        ] : null;
+    }
+
+    /**
+     * Avancement des 4 étapes séquentielles (pour le stepper et le gating).
+     * Chaque compteur ne considère que les risques prêts pour l'étape :
+     * contrôle nécessite l'inhérent, résiduel nécessite le contrôle, etc.
+     */
+    private function stepProgress(): array
+    {
+        $tid = $this->tid();
+        if (!Schema::hasTable('risk_register')) {
+            return ['total' => 0, 'inherent' => 0, 'controle' => 0, 'residuel' => 0, 'cible' => 0];
+        }
+        $base = fn () => DB::table('risk_register')->where('tenant_id', $tid)
+            ->whereNull('deleted_at')->whereNull('moved_to_library_at');
+
+        $controle = 0;
+        if (Schema::hasTable('risk_register_controls')) {
+            $controle = DB::table('risk_register_controls as rc')
+                ->join('risk_register as r', 'r.id', '=', 'rc.risk_id')
+                ->where('rc.tenant_id', $tid)->whereNull('rc.deleted_at')
+                ->whereNull('r.deleted_at')->whereNull('r.moved_to_library_at')
+                ->distinct('rc.risk_id')->count('rc.risk_id');
+        }
+
+        return [
+            'total'    => ($base)()->count(),
+            'inherent' => ($base)()->whereNotNull('criticality_score')->count(),
+            'controle' => $controle,
+            'residuel' => ($base)()->whereNotNull('residual_impact_level_id')->count(),
+            'cible'    => ($base)()->whereNotNull('target_impact_level_id')->count(),
         ];
     }
 
@@ -688,6 +749,104 @@ class RiskEvaluationController extends Controller
             'dashboards/Risk/Evaluation/EvaluationCible',
             $this->commonPayload($request)
         );
+    }
+
+    /**
+     * GET /evaluation/cartographie — Cartographie de synthèse.
+     *
+     * Rend la matrice inhérente / résiduelle / cible + synthèse, filtrable
+     * par activité, processus, série d'éléments sélectionnés ou entité.
+     * Réutilise l'intégralité du payload d'évaluation (risques déjà enrichis
+     * des trois évaluations I/R/Cible) et y ajoute la liste des entités.
+     */
+    public function cartographie(Request $request): Response
+    {
+        $payload = $this->commonPayload($request);
+
+        // Mode « cartographie d'une session gelée » : on remplace les risques
+        // vivants par les valeurs figées du snapshot de la session demandée.
+        $sessionMeta = null;
+        $sessionId   = $request->integer('session_id');
+        if ($sessionId && Schema::hasTable('risk_session_snapshots')) {
+            $snapRisks = $this->risksFromSnapshot($sessionId);
+            if (!empty($snapRisks)) {
+                $payload['risks'] = collect($snapRisks);
+                $payload['tree']  = $this->buildTree(collect($snapRisks));
+            }
+            $s = DB::table('risk_sessions')->where('id', $sessionId)->first();
+            $sessionMeta = $s ? ['id' => $s->id, 'name' => $s->name, 'year' => $s->year, 'snapshot_at' => $s->snapshot_at] : null;
+        }
+
+        // Liste des entités présentes dans le registre (pour le filtre carto).
+        $entities = collect($payload['risks'])
+            ->filter(fn ($r) => !empty($r['entity_id']))
+            ->groupBy('entity_id')
+            ->map(fn ($group, $id) => [
+                'id'    => (int) $id,
+                'name'  => $group->first()['entity_name'] ?? ('Entité #' . $id),
+                'count' => $group->count(),
+            ])
+            ->sortBy('name')
+            ->values()
+            ->all();
+
+        return Inertia::render(
+            'dashboards/Risk/Evaluation/Cartographie',
+            array_merge($payload, ['entities' => $entities, 'sessionMeta' => $sessionMeta])
+        );
+    }
+
+    /**
+     * Convertit les lignes gelées d'une session (risk_session_snapshots) en la
+     * forme « risque » attendue par Cartographie.vue (mêmes clés que loadRisks).
+     */
+    private function risksFromSnapshot(int $sessionId): array
+    {
+        return DB::table('risk_session_snapshots')
+            ->where('session_id', $sessionId)
+            ->where('tenant_id', $this->tid())
+            ->get()
+            ->map(fn ($s) => [
+                'id'                 => $s->risk_id,
+                'code_risk'          => $s->code_risk,
+                'libelle'            => $s->libelle,
+                'statut'             => 'actif',
+                'entity_id'          => $s->entity_id,
+                'entity_name'        => $s->entity_name,
+                'activity_id'        => $s->activity_id,
+                'activity_code'      => null,
+                'activity_name'      => $s->activity_name,
+                'process_id'         => $s->process_id,
+                'process_code'       => null,
+                'process_name'       => $s->process_name,
+                'macro_process_id'   => $s->macro_process_id,
+                'macro_process_code' => null,
+                'macro_process_name' => $s->macro_process_name,
+                'macro_process_kind' => null,
+                // Inhérent
+                'impact_score'       => $s->inh_impact_score,
+                'frequency_score'    => $s->inh_freq_score,
+                'criticality_score'  => $s->inh_criticality,
+                'zone_id'            => $s->inh_zone_id,
+                'zone_label'         => $s->inh_zone_label,
+                'zone_color'         => $s->inh_zone_color,
+                // Résiduel
+                'residual_impact_score'    => $s->res_impact_score,
+                'residual_frequency_score' => $s->res_freq_score,
+                'residual_criticality'     => $s->res_criticality,
+                'residual_zone_id'         => $s->res_zone_id,
+                'residual_zone_label'      => $s->res_zone_label,
+                'residual_zone_color'      => $s->res_zone_color,
+                // Cible
+                'target_impact_score'    => $s->tgt_impact_score,
+                'target_frequency_score' => $s->tgt_freq_score,
+                'target_criticality'     => $s->tgt_criticality,
+                'target_zone_id'         => $s->tgt_zone_id,
+                'target_zone_label'      => $s->tgt_zone_label,
+                'target_zone_color'      => $s->tgt_zone_color,
+                'decision'           => $s->decision,
+            ])
+            ->all();
     }
 
     // =====================================================================
