@@ -775,6 +775,38 @@ Route::prefix('ap/preparation')->group(function () {
     Route::post('presentation-programme/suggest-indicateurs', [$portee, 'suggestIndicateurs'])
         ->name('auditor.ap.presentation-programme.suggest-indicateurs');
 
+    // ── Champ d'action (sous-phase 1.4 · Planification, formulaire CA) ──
+    // 7 volets : approches (4 « E ») · objectifs · question principale ·
+    // étendue Qui/Quoi/Quand/Où · limites · conclusions · pertinence du mandat.
+    // Trames pré-remplies depuis les paramètres AP + suggestion IA (Mistral).
+    $champ = \App\Http\Controllers\Auditor\Ap\ApChampActionController::class;
+    Route::get('champ-action', [$champ, 'index'])
+        ->name('audit.ap.preparation.champ-action'); // = route_name ddmparam
+    Route::post('champ-action', [$champ, 'save'])
+        ->name('auditor.ap.champ-action.save');
+    Route::post('champ-action/suggest-ia', [$champ, 'suggestIA'])
+        ->name('auditor.ap.champ-action.suggest-ia');
+    Route::post('champ-action/{form}/soumettre', [$champ, 'soumettreFiche'])
+        ->whereNumber('form')->name('auditor.ap.champ-action.soumettre');
+    Route::post('champ-action/{form}/valider', [$champ, 'validerFiche'])
+        ->whereNumber('form')->name('auditor.ap.champ-action.valider');
+
+    // ── Méthodologie de vérification (sous-phase Planification, formulaire MV) ──
+    // 5 volets : lignes directrices d'enquête · critères (sous-critères) ·
+    // sources de l'evidence · méthode de collecte · méthodes d'analyse.
+    // Trame section 1 pré-remplie depuis les questions du Champ d'action + IA.
+    $metho = \App\Http\Controllers\Auditor\Ap\ApMethodologieController::class;
+    Route::get('methodologie-verification', [$metho, 'index'])
+        ->name('audit.ap.preparation.methodologie-verification'); // = route_name ddmparam
+    Route::post('methodologie-verification', [$metho, 'save'])
+        ->name('auditor.ap.methodologie-verification.save');
+    Route::post('methodologie-verification/suggest-ia', [$metho, 'suggestIA'])
+        ->name('auditor.ap.methodologie-verification.suggest-ia');
+    Route::post('methodologie-verification/{form}/soumettre', [$metho, 'soumettreFiche'])
+        ->whereNumber('form')->name('auditor.ap.methodologie-verification.soumettre');
+    Route::post('methodologie-verification/{form}/valider', [$metho, 'validerFiche'])
+        ->whereNumber('form')->name('auditor.ap.methodologie-verification.valider');
+
     Route::get('reunion-ouverture', [\App\Http\Controllers\Auditor\Ap\ApReunionOuvertureController::class, 'index'])
         ->name('audit.ap.preparation.reunion-ouverture'); // = route_name ddmparam
     Route::get('reunion-ouverture/{form}/pdf', [\App\Http\Controllers\Auditor\Ap\ApReunionOuvertureController::class, 'pdf'])

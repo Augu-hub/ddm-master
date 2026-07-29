@@ -17,9 +17,10 @@ return new class extends Migration
             // ✅ Lien unique shareable
             $table->string('share_link')->unique();
             
-            // ✅ Qui a généré/partagé le lien
+            // ✅ Qui a généré/partagé le lien — id user MASTER (ddmparam),
+            //    résolu via App\Models\User. Pas de FK vers users du tenant
+            //    (ids master ≠ tenant) : voir database/sql/fix_mission_request_user_fks.sql
             $table->unsignedBigInteger('shared_by_id');
-            $table->foreign('shared_by_id')->references('id')->on('users')->onDelete('cascade');
             
             // ✅ La demande créée via ce lien (nullable)
             $table->unsignedBigInteger('mission_request_id')->nullable();

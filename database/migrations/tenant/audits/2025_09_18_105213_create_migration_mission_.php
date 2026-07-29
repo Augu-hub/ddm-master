@@ -108,7 +108,9 @@ return new class extends Migration {
             $table->foreignId('related_function_id')->nullable()->constrained('audit_functions')->setNullOnDelete();
             
             $table->string('frequency')->default('Ponctuelle');
-            $table->foreignId('requester_id')->constrained('users')->cascadeOnDelete();
+            // id user MASTER (ddmparam), résolu via App\Models\User — pas de FK
+            // vers users du tenant (ids master ≠ tenant).
+            $table->unsignedBigInteger('requester_id')->index();
             $table->date('requested_date');
             $table->date('proposed_date')->nullable();
             $table->string('status')->default('draft'); // draft, submitted, approved, scheduled

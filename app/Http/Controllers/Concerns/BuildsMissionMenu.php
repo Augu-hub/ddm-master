@@ -33,6 +33,10 @@ trait BuildsMissionMenu
             $rows = DB::table('mission_phase_assignments as mpa')
                 ->join('ddmparam.audit_type_forms as atf', 'mpa.mission_phase_id', '=', 'atf.id')
                 ->where('mpa.mission_programmation_id', $missionId)
+                // Ne montrer que les formulaires ACTIFS de ddmparam : une phase
+                // désactivée côté central (is_active=0) disparaît du menu même
+                // si un assignment existe déjà (complément de centralFormIds()).
+                ->where('atf.is_active', 1)
                 ->orderBy('atf.phase_num')
                 ->orderBy('atf.sort_order')
                 ->orderBy('atf.id')

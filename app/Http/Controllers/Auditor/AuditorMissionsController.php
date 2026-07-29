@@ -762,7 +762,10 @@ class AuditorMissionsController extends Controller
             ->select($select)
             ->join('ddmparam.audit_type_forms as atf', 'mpa.mission_phase_id', '=', 'atf.id')
             ->leftJoin('entities as e', 'mpa.entity_id', '=', 'e.id')
-            ->where('mpa.mission_programmation_id', $missionId);
+            ->where('mpa.mission_programmation_id', $missionId)
+            // Masquer les phases désactivées côté central (is_active=0) même si
+            // un assignment subsiste — même règle que le menu / centralFormIds().
+            ->where('atf.is_active', 1);
 
         // Les réglages tenant (weight) restent dans mission_phases, jointe
         // séparément par id — jamais pour le contenu (label, phase_type...).

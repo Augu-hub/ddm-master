@@ -59,8 +59,8 @@ class MissionRequestController extends Controller
             Log::info("✅ Lien de formulaire généré par " . Auth::user()->name);
 
             // ✅ RETOURNER LE LIEN COMPLET DU FORMULAIRE
-            // Route: /m/audit.core/api/audit/mission-request/create?share=ABC123...
-            $formLink = url('/m/audit.core/api/audit/mission-request/create') . '?share=' . $shareLink;
+            // Route: /m/audit.core/api/audit/mission-requests/create?share=ABC123...
+            $formLink = url('/m/audit.core/api/audit/mission-requests/create') . '?share=' . $shareLink;
 
             return response()->json([
                 'success' => true,
@@ -79,7 +79,7 @@ class MissionRequestController extends Controller
     }
 
     /**
-     * GET /m/audit.core/api/audit/mission-request/create
+     * GET /m/audit.core/api/audit/mission-requests/create
      * Affiche le formulaire de création
      * 
      * Paramètre optionnel: ?share=ABC123...
@@ -161,28 +161,31 @@ class MissionRequestController extends Controller
 
             // ✅ RÉCUPÉRER QUI A PARTAGÉ LE LIEN
             $shareLink = $validated['share_link'] ?? null;
-            $sharedById = null; // ID de qui a partagé le lien
+            $sharedById = null; // ID (MASTER) de qui a partagé le lien
 
             if ($shareLink) {
                 $share = MissionRequestShare::where('share_link', $shareLink)
                     ->where('status', 'active')
                     ->firstOrFail();
-                    
+
                 $sharedById = $share->shared_by_id; // ✅ QUI A PARTAGÉ
-                
+
                 Log::info("✅ Demande créée via lien partagé par ID: $sharedById");
             }
 
             // Générer share_code unique pour le remplissage
             $shareCode = strtoupper(Str::random(12));
 
+            // Source d'audit (FK audit_mission_sources) — NE PAS y stocker un id
+            // user. Le partageur est tracé via mission_request_shares.shared_by_id.
+            $missionSourceId = \DB::table('audit_mission_sources')->orderBy('id')->value('id');
+
             // ✅ CRÉER LA DEMANDE
-            // mission_source_id = ID DE CELUI QUI A PARTAGÉ LE LIEN
             $missionRequest = MissionRequest::create([
                 'entity_id' => $validated['entity_id'],
                 'code' => $validated['mission_number'],
                 'share_code' => $shareCode,
-                'mission_source_id' => $sharedById ?? 1, // ✅ QUI A PARTAGÉ (fallback à 1)
+                'mission_source_id' => $missionSourceId, // source d'audit (défaut : 1re dispo)
                 'mission_type' => 'standard',
                 'mission_objective' => $validated['mission_objective'],
                 'audit_scope' => $validated['audit_scope'],
@@ -214,7 +217,7 @@ class MissionRequestController extends Controller
             return response()->json([
                 'success' => true,
                 'data' => $missionRequest,
-                'share_link' => url('/m/audit.core/api/audit/mission-request/' . $shareCode . '/fill'),
+                'share_link' => url('/m/audit.core/api/audit/mission-requests/' . $shareCode . '/fill'),
                 'message' => 'Demande créée avec succès'
             ], 201);
 
@@ -233,7 +236,7 @@ class MissionRequestController extends Controller
     }
 
     /**
-     * GET /m/audit.core/api/audit/mission-request/{shareCode}/fill
+     * GET /m/audit.core/api/audit/mission-requests/{shareCode}/fill
      * Page de remplissage (PUBLIQUE - pas d'authentification requise)
      */
     public function fill($shareCode)

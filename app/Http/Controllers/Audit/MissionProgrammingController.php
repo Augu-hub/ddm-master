@@ -280,6 +280,10 @@ class MissionProgrammingController extends Controller
                 }
             }
             DB::commit();
+            // Provisionner immédiatement les phases du tenant (mission_phases +
+            // mission_phase_assignments) au lieu d'attendre l'ouverture d'une phase.
+            // Idempotent, try/catch interne : ne bloque jamais la création.
+            \App\Services\Audit\PhaseSyncService::ensureMissionAssignments((int) $mainId);
             return redirect()->route('audit.core.programmation-missions.index')->with('success','Mission programmée avec succès.');
         } catch (\Exception $e) {
             DB::rollBack();
