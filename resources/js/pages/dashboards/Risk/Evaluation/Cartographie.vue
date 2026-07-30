@@ -266,7 +266,7 @@
       <div class="card card--full">
         <div class="card-hdr">
           <strong><i class="ti ti-table"></i> Synthèse par {{ mailleLabel }}</strong>
-          <span class="card-sub">Criticité moyenne inhérente → résiduelle → cible et écart</span>
+          <span class="card-sub">Criticité = Impact × Fréquence · valeur = moyenne des risques de l'activité · Δ = inhérent − cible (réduction visée)</span>
         </div>
         <div class="card-body">
           <table class="synth-table">

@@ -47,18 +47,18 @@
             <thead>
               <tr>
                 <th class="th-n">N°</th>
-                <th class="th-obj">Objectifs</th>
-                <th class="th-proc">Processus / Activité</th>
-                <th class="th-risk">Risques retenus</th>
-                <th class="th-code">CODE Type</th>
-                <th class="th-cause">Cause probable / Source du risque</th>
-                <th class="th-entite">Entités / Partenaires impliqués</th>
-                <th class="th-conseq">Conséquences</th>
-                <th class="th-imp">Impact (I)</th>
-                <th class="th-frq">Fréquence (F)</th>
-                <th class="th-score">Score I×F</th>
+                <th class="th-obj">Obj.</th>
+                <th class="th-proc">Proc. / Act.</th>
+                <th class="th-risk">Risque</th>
+                <th class="th-code">Code</th>
+                <th class="th-cause">Cause / Source</th>
+                <th class="th-entite">Entités / Part.</th>
+                <th class="th-conseq">Conséq.</th>
+                <th class="th-imp" title="Impact">I</th>
+                <th class="th-frq" title="Fréquence">F</th>
+                <th class="th-score" title="Criticité = Impact × Fréquence">I×F</th>
                 <th class="th-zone">Zone</th>
-                <th class="th-status">Évalué</th>
+                <th class="th-status" title="Évalué">✓</th>
               </tr>
             </thead>
             <tbody>
@@ -479,9 +479,11 @@ const save = async () => {
     if (modalDimension.value==='impact') {
       body.impact_score = form.value.impact_score
       if (form.value.impact_criterion_label) body.impact_criterion_label = form.value.impact_criterion_label
+      body.impact_criterion_id = form.value.impact_criterion_id ?? null
     } else {
       body.frequency_score = form.value.frequency_score
       if (form.value.frequency_criterion_label) body.frequency_criterion_label = form.value.frequency_criterion_label
+      body.frequency_criterion_id = form.value.frequency_criterion_id ?? null
     }
 
     const r=await fetch(route('risk.core.evaluation.inherente.store'),{
@@ -491,7 +493,7 @@ const save = async () => {
     const d=await r.json()
     if(r.ok&&d.success){
       showFlash(modalDimension.value==='impact' ? 'Impact enregistré ✓' : 'Fréquence enregistrée ✓', true)
-      patchRisk(selectedRisk.value.id,{impact_score:d.risk.impact_score,frequency_score:d.risk.frequency_score,criticality_score:d.risk.criticality_score,zone_label:d.risk.zone_label,zone_color:d.risk.zone_color,impact_label:d.risk.impact_label,frequency_label:d.risk.frequency_label})
+      patchRisk(selectedRisk.value.id,{impact_score:d.risk.impact_score,frequency_score:d.risk.frequency_score,criticality_score:d.risk.criticality_score,zone_label:d.risk.zone_label,zone_color:d.risk.zone_color,impact_label:d.risk.impact_label,frequency_label:d.risk.frequency_label,impact_criterion_id:d.risk.impact_criterion_id,frequency_criterion_id:d.risk.frequency_criterion_id})
       closeModal()
     } else showFlash(d.message||'Erreur',false)
   } catch { showFlash('Erreur réseau',false) }

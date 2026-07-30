@@ -237,6 +237,10 @@ class RiskEvaluationController extends Controller
         if (Schema::hasColumn('risk_register', 'target_date')) $select[] = 'r.target_date';
         if (Schema::hasColumn('risk_register', 'action_plan')) $select[] = 'r.action_plan';
         if ($hasProcessObj) $select[] = 'p.objective as process_objective';
+        // Critères structurés (ligne choisie à l'inhérent) — verrouillés dans les étapes suivantes.
+        foreach (['impact_criterion_id', 'frequency_criterion_id'] as $cc) {
+            if (Schema::hasColumn('risk_register', $cc)) $select[] = 'r.' . $cc;
+        }
 
         if ($hasDecisionCol) {
             $select[] = 'r.decision';
@@ -861,8 +865,10 @@ class RiskEvaluationController extends Controller
             'risk_id'                  => 'required|integer',
             'impact_score'             => 'nullable|integer|min:1',
             'impact_criterion_label'   => 'nullable|string|max:255',
+            'impact_criterion_id'      => 'nullable|integer',
             'frequency_score'          => 'nullable|integer|min:1',
             'frequency_criterion_label'=> 'nullable|string|max:255',
+            'frequency_criterion_id'   => 'nullable|integer',
         ]);
 
         if (empty($v['impact_score']) && empty($v['frequency_score'])) {
@@ -898,6 +904,14 @@ class RiskEvaluationController extends Controller
             'updated_at'          => now(),
         ];
 
+        // Critère structuré (ligne choisie) — récupéré ensuite (verrouillé) par les autres étapes.
+        if (array_key_exists('impact_criterion_id', $v) && Schema::hasColumn('risk_register', 'impact_criterion_id')) {
+            $update['impact_criterion_id'] = $v['impact_criterion_id'] ?: null;
+        }
+        if (array_key_exists('frequency_criterion_id', $v) && Schema::hasColumn('risk_register', 'frequency_criterion_id')) {
+            $update['frequency_criterion_id'] = $v['frequency_criterion_id'] ?: null;
+        }
+
         // Memorise le critere precis retenu (niveau + critere = cellule cliquee), si fourni.
         if (Schema::hasColumn('risk_register', 'critere_risque')) {
             $bits = [];
@@ -929,6 +943,8 @@ class RiskEvaluationController extends Controller
             'frequency_label'    => $freqLvl?->label,
             'frequency_color'    => $freqLvl?->color_code,
             'frequency_level_id' => $freqLvl?->id,
+            'impact_criterion_id'    => $v['impact_criterion_id'] ?? null,
+            'frequency_criterion_id' => $v['frequency_criterion_id'] ?? null,
             'criticality_score'  => $score,
             'zone_id'            => $zone?->id,
             'zone_label'         => $zone?->label,

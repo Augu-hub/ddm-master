@@ -49,10 +49,10 @@
               <tr>
                 <th>Code</th>
                 <th>Risque</th>
-                <th>Processus / Activité</th>
-                <th>Objectif du processus</th>
-                <th class="th-score-c">Score I.</th>
-                <th class="th-score-c">Zone I.</th>
+                <th>Proc. / Act.</th>
+                <th>Objectif</th>
+                <th class="th-score-c" title="Criticité inhérente = I × F">I×F (I)</th>
+                <th class="th-score-c">Zone (I)</th>
                 <th>Procédure</th>
                 <th>Référentiel</th>
                 <th>Responsable</th>

@@ -3,24 +3,24 @@
     <div class="rr-page">
 
       <!-- ── HEADER ── -->
-      <div class="rr-header">
-        <div class="d-flex align-items-center gap-3">
-          <div class="rr-header-icon"><i class="ti ti-shield-check"></i></div>
+      <div class="page-hdr">
+        <div class="hdr-left">
+          <div class="hdr-icon"><i class="ti ti-shield-check"></i></div>
           <div>
-            <h4 class="mb-0 fw-bold">Registre des risques</h4>
-            <small class="text-muted">Par entité · processus · activité · facteur</small>
+            <h1>Registre des risques</h1>
+            <p>Par entité · processus · activité · facteur</p>
           </div>
         </div>
-        <div class="d-flex gap-2 align-items-center">
-          <span v-if="props.currentUser?.name" class="rr-user-badge">
-            <i class="ti ti-user me-1"></i>{{ props.currentUser.name }}
-            <span v-if="props.isRiskAdmin" class="rr-admin-tag ms-1">Admin</span>
+        <div class="hdr-right">
+          <span v-if="props.currentUser?.name" class="user-badge">
+            <i class="ti ti-user"></i>{{ props.currentUser.name }}
+            <span v-if="props.isRiskAdmin" class="admin-tag">Admin</span>
           </span>
-          <Link :href="route('risk.core.risk-library.index')" class="btn btn-outline-secondary btn-sm">
-            <i class="ti ti-books me-1"></i>Bibliothèque
-          </Link>
+          <Link :href="route('risk.core.risk-library.index')" class="btn-ghost"><i class="ti ti-books"></i> Bibliothèque</Link>
         </div>
       </div>
+
+      <div class="rr-body">
 
       <!-- ── STATS ── -->
       <div class="row g-2 mb-3">
@@ -40,7 +40,7 @@
         <span class="rr-entity-lbl"><i class="ti ti-building me-1"></i>Entité :</span>
         <div class="d-flex gap-2 flex-wrap">
           <button v-for="e in props.entities" :key="e.id"
-                  :class="['btn btn-sm', selectedEntityId === e.id ? 'btn-primary' : 'btn-outline-secondary']"
+                  :class="['ent-btn', selectedEntityId === e.id ? 'ent-btn--on' : '']"
                   @click="selectEntity(e.id)">
             {{ e.name }}
           </button>
@@ -348,6 +348,7 @@
         </div>
       </template>
 
+      </div><!-- /rr-body -->
     </div><!-- /page -->
 
     <!-- ══ OFFCANVAS DÉTAIL ══ -->
@@ -1037,28 +1038,39 @@ function doDelete() {
 </script>
 
 <style scoped>
-.rr-page { padding:18px; }
+.rr-page { background:#f0f4f8; min-height:calc(100vh - 60px); padding:0; font-family:'Inter',system-ui,sans-serif; }
 
-/* HEADER */
-.rr-header { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px; margin-bottom:16px; }
-.rr-header-icon { width:40px; height:40px; border-radius:9px; flex-shrink:0; background:linear-gradient(135deg,#1e293b,#1e3a5f); display:flex; align-items:center; justify-content:center; color:#93c5fd; font-size:18px; }
-.rr-user-badge { font-size:.73rem; background:#f1f5f9; border:1px solid #e2e8f0; border-radius:20px; padding:3px 10px; color:#475569; }
-.rr-admin-tag  { font-size:.6rem; font-weight:700; background:#fef3c7; color:#92400e; padding:1px 6px; border-radius:10px; }
+/* HEADER (bandeau moderne) */
+.page-hdr { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:11px 22px; background:#0f172a; flex-wrap:wrap; }
+.hdr-left { display:flex; align-items:center; gap:12px; }
+.hdr-icon { width:42px; height:42px; border-radius:11px; flex-shrink:0; background:linear-gradient(135deg,#4f46e5,#7c3aed); display:flex; align-items:center; justify-content:center; color:#fff; font-size:21px; }
+.page-hdr h1 { font-size:16px; font-weight:800; color:#f1f5f9; margin:0; }
+.page-hdr p { font-size:11px; color:#64748b; margin:0; }
+.hdr-right { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+.user-badge { display:inline-flex; align-items:center; gap:5px; font-size:11.5px; background:rgba(255,255,255,.07); border:1px solid rgba(255,255,255,.12); border-radius:20px; padding:4px 11px; color:#c8d6e5; }
+.admin-tag { font-size:9px; font-weight:800; background:#fde68a; color:#92400e; padding:1px 7px; border-radius:10px; }
+.btn-ghost { display:inline-flex; align-items:center; gap:6px; padding:7px 13px; background:rgba(255,255,255,.07); color:#c8d6e5; border:1px solid rgba(255,255,255,.12); border-radius:9px; font-size:12px; font-weight:600; cursor:pointer; text-decoration:none; }
+.btn-ghost:hover { background:rgba(255,255,255,.14); }
 
-/* STATS */
-.rr-stat { display:flex; align-items:center; gap:10px; padding:10px 12px; border-radius:8px; border:1px solid transparent; }
-.rr-stat i { font-size:1.2rem; }
-.rr-stat-val { font-size:1.15rem; font-weight:800; line-height:1; }
-.rr-stat-lbl { font-size:.63rem; color:#64748b; }
-.rr-stat--primary { background:#eff6ff; border-color:#bfdbfe; } .rr-stat--primary i { color:#2563eb; }
-.rr-stat--success { background:#f0fdf4; border-color:#bbf7d0; } .rr-stat--success i { color:#16a34a; }
-.rr-stat--warning { background:#fffbeb; border-color:#fde68a; } .rr-stat--warning i { color:#d97706; }
-.rr-stat--info    { background:#f0f9ff; border-color:#bae6fd; } .rr-stat--info i  { color:#0284c7; }
+.rr-body { padding:16px 22px; }
+
+/* STATS (tuiles) */
+.rr-stat { display:flex; align-items:center; gap:11px; padding:12px 14px; border-radius:12px; border:1px solid #e9eef5; background:#fff; }
+.rr-stat i { font-size:18px; width:38px; height:38px; border-radius:10px; display:flex; align-items:center; justify-content:center; color:#fff; flex-shrink:0; }
+.rr-stat-val { font-size:19px; font-weight:900; line-height:1; color:#0f172a; }
+.rr-stat-lbl { font-size:10px; color:#64748b; font-weight:600; margin-top:3px; }
+.rr-stat--primary i { background:#2563eb; }
+.rr-stat--success i { background:#16a34a; }
+.rr-stat--warning i { background:#d97706; }
+.rr-stat--info i    { background:#0284c7; }
 
 /* ENTITÉ */
 .rr-entity-bar { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
-.rr-entity-lbl { font-size:.76rem; font-weight:600; color:#475569; white-space:nowrap; }
-.rr-empty      { text-align:center; padding:48px; color:#94a3b8; }
+.rr-entity-lbl { font-size:12px; font-weight:700; color:#475569; white-space:nowrap; }
+.ent-btn { padding:6px 13px; border:1.5px solid #e2e8f0; border-radius:20px; background:#fff; color:#475569; font-size:12px; font-weight:600; cursor:pointer; transition:all .12s; }
+.ent-btn:hover { border-color:#c7d2fe; color:#4338ca; }
+.ent-btn--on { background:#4f46e5; border-color:#4f46e5; color:#fff; }
+.rr-empty { text-align:center; padding:48px; color:#94a3b8; background:#fff; border:1px solid #e9eef5; border-radius:12px; }
 
 /* TABLEAU */
 .rr-table-wrap { overflow-x:auto; border-radius:10px; border:2px solid #e2e8f0; }

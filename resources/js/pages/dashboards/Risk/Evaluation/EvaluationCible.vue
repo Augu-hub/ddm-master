@@ -40,15 +40,15 @@
               <tr>
                 <th>Code</th>
                 <th>Risque</th>
-                <th>Processus</th>
-                <th class="th-c">Inhérent</th>
-                <th class="th-c">Résiduel</th>
-                <th class="th-c">Impact cible</th>
-                <th class="th-c">Fréq. cible</th>
-                <th class="th-c">Score C.</th>
-                <th class="th-c">Zone C.</th>
-                <th>Appétence I.</th>
-                <th>Appétence F.</th>
+                <th>Proc.</th>
+                <th class="th-c" title="Criticité inhérente">I×F (I)</th>
+                <th class="th-c" title="Criticité résiduelle">I×F (R)</th>
+                <th class="th-c" title="Impact cible">I (C)</th>
+                <th class="th-c" title="Fréquence cible">F (C)</th>
+                <th class="th-c" title="Criticité cible = I × F">I×F (C)</th>
+                <th class="th-c">Zone (C)</th>
+                <th>Appét. I</th>
+                <th>Appét. F</th>
                 <th>Tolérance</th>
                 <th>Décision</th>
                 <th>Statut</th>
@@ -372,11 +372,22 @@ const refImpact   = computed(() => selectedRisk.value?.residual_impact_score??se
 const refFreq     = computed(() => selectedRisk.value?.residual_frequency_score??selectedRisk.value?.frequency_score??null)
 const refLabel    = computed(() => selectedRisk.value?.residual_criticality?'résiduel':'inhérent')
 
-const impactCritTpls = computed(() => (props.criteriaTemplates??[]).map(t=>{
-  const apt=props.appetites.find(a=>a.id===t.appetite_id)
-  return {...t,appetite_label:apt?.label||t.appetite_label||null,appetite_color:apt?.color||null,appetite_score_max:apt?.score_max||null}
-}))
-const freqCritTpls = computed(() => props.frequencyCriteriaTemplates??[])
+// Critère VERROUILLÉ : seule la ligne critère choisie à l'inhérent s'affiche (le niveau reste modifiable).
+const impactCritTpls = computed(() => {
+  const list = (props.criteriaTemplates??[]).map(t=>{
+    const apt=props.appetites.find(a=>a.id===t.appetite_id)
+    return {...t,appetite_label:apt?.label||t.appetite_label||null,appetite_color:apt?.color||null,appetite_score_max:apt?.score_max||null}
+  })
+  const lock = selectedRisk.value?.impact_criterion_id
+  if (lock) { const only = list.filter(t=>t.id===lock); if (only.length) return only }
+  return list
+})
+const freqCritTpls = computed(() => {
+  const list = props.frequencyCriteriaTemplates??[]
+  const lock = selectedRisk.value?.frequency_criterion_id
+  if (lock) { const only = list.filter(t=>t.id===lock); if (only.length) return only }
+  return list
+})
 const getCritDesc  = (lvl,tplId) => (lvl.criteria??[]).find(c=>c.template_id===tplId)?.description??''
 const getFreqDesc  = (lvl,tplId) => { const t=freqCritTpls.value.find(t=>t.id===tplId); return (t?.levels??[]).find(l=>l.frequency_level_id===lvl.id)?.description??''  }
 const macroColor     = k => ({Direction:'#7c3aed',Réalisation:'#0d9488',Support:'#2563eb'})[k]||'#64748b'

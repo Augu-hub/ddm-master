@@ -41,14 +41,14 @@
               <tr>
                 <th>Code</th>
                 <th>Risque</th>
-                <th>Processus / Activité</th>
-                <th class="th-c">Score I.</th>
-                <th class="th-c">Zone I.</th>
+                <th>Proc. / Act.</th>
+                <th class="th-c" title="Criticité inhérente = I × F">I×F (I)</th>
+                <th class="th-c">Zone (I)</th>
                 <th class="th-c">Contrôle</th>
-                <th class="th-c">Impact R.</th>
-                <th class="th-c">Fréq. R.</th>
-                <th class="th-c">Score R.</th>
-                <th class="th-c">Zone R.</th>
+                <th class="th-c" title="Impact résiduel">I (R)</th>
+                <th class="th-c" title="Fréquence résiduelle">F (R)</th>
+                <th class="th-c" title="Criticité résiduelle = I × F">I×F (R)</th>
+                <th class="th-c">Zone (R)</th>
                 <th>Statut</th>
                 <th>Action</th>
               </tr>
@@ -351,11 +351,22 @@ const selectFreqLevel = (lvl, tpl = null) => {
   lockedFreqId.value = lvl.id
 }
 
-const impactCritTpls = computed(() => (props.criteriaTemplates??[]).map(t=>{
-  const apt = props.appetites.find(a=>a.id===t.appetite_id)
-  return {...t, appetite_label:apt?.label||t.appetite_label||null, appetite_color:apt?.color||null, appetite_score_max:apt?.score_max||null}
-}))
-const freqCritTpls = computed(() => props.frequencyCriteriaTemplates??[])
+// Critère VERROUILLÉ : on ne montre que la ligne critère choisie à l'inhérent (le niveau reste modifiable).
+const impactCritTpls = computed(() => {
+  const list = (props.criteriaTemplates??[]).map(t=>{
+    const apt = props.appetites.find(a=>a.id===t.appetite_id)
+    return {...t, appetite_label:apt?.label||t.appetite_label||null, appetite_color:apt?.color||null, appetite_score_max:apt?.score_max||null}
+  })
+  const lock = selectedRisk.value?.impact_criterion_id
+  if (lock) { const only = list.filter(t=>t.id===lock); if (only.length) return only }
+  return list
+})
+const freqCritTpls = computed(() => {
+  const list = props.frequencyCriteriaTemplates??[]
+  const lock = selectedRisk.value?.frequency_criterion_id
+  if (lock) { const only = list.filter(t=>t.id===lock); if (only.length) return only }
+  return list
+})
 const getCritDesc  = (lvl,tplId) => (lvl.criteria??[]).find(c=>c.template_id===tplId)?.description??''
 const getFreqDesc  = (lvl,tplId) => { const t=freqCritTpls.value.find(t=>t.id===tplId); return (t?.levels??[]).find(l=>l.frequency_level_id===lvl.id)?.description??''  }
 const macroColor     = k => ({Direction:'#7c3aed',Réalisation:'#0d9488',Support:'#2563eb'})[k]||'#64748b'
@@ -379,8 +390,9 @@ const openModal = risk => {
   const impLvl  = impactDesc.value.find(l=>l.score===risk.residual_impact_score)?.id??null
   const freqLvl = freqAsc.value.find(l=>l.score===risk.residual_frequency_score)?.id??null
   form.value = {
-    impact_id:impLvl, impact_score:risk.residual_impact_score??null, impact_criterion_id:null, impact_criterion_label:null,
-    frequency_id:freqLvl, frequency_score:risk.residual_frequency_score??null, frequency_criterion_id:null, frequency_criterion_label:null,
+    // Critère récupéré (verrouillé) depuis l'inhérent — seul le niveau reste modifiable.
+    impact_id:impLvl, impact_score:risk.residual_impact_score??null, impact_criterion_id:risk.impact_criterion_id??null, impact_criterion_label:null,
+    frequency_id:freqLvl, frequency_score:risk.residual_frequency_score??null, frequency_criterion_id:risk.frequency_criterion_id??null, frequency_criterion_label:null,
   }
   // Si une evaluation existe deja, on verrouille directement sur sa colonne ; sinon vue complete (toutes les colonnes).
   lockedImpactId.value = impLvl
