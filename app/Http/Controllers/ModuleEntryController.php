@@ -46,7 +46,7 @@ class ModuleEntryController extends Controller
         ]);
 
         // 🔥 GESTION DES REDIRECTIONS
-        
+
         // Cas 1 : ?go=1 → Redirection vers entry_route si défini
         if ($request->query('go') === '1' && $module->entry_route_name) {
             Log::info('🔀 Redirection vers entry_route (go=1)', [
@@ -78,10 +78,10 @@ class ModuleEntryController extends Controller
 
         // Cas 4 : Pas de redirection → Afficher le shell du module
         Log::info('🎨 Affichage du shell module (pas de redirection)');
-        
+
         // Déterminer le layout à utiliser pour ce module
         $layout = $this->getLayoutForModule($module);
-        
+
         Log::info('📐 Layout sélectionné', [
             'layout' => $layout,
             'module_code' => $module->code,
@@ -114,7 +114,7 @@ class ModuleEntryController extends Controller
         $layoutMap = [
             'param.projects' => 'Layouts/ParamLayout',
             //'audit.core' => 'Layouts/AuditLayout',
-            'risk.core' => 'Layouts/RiskLayout',
+            'risk.core' => 'Layouts/ModuleLayout',
             'process.core' => 'Layouts/ProcessLayout',
         ];
 

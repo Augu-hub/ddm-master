@@ -2,22 +2,14 @@
 
 namespace App\Providers;
 
-use App\Models\AuditType;
-use App\Models\AuditTypeForm;
-use App\Models\MissionType;
-use App\Models\Tenant;
-use App\Observers\AuditTypeFormObserver;
-use App\Observers\AuditTypeObserver;
-use App\Observers\MissionTypeObserver;
-use App\Observers\TenantObserver;
+use App\Services\MistralFrequencyAssistant;
+use App\Services\MistralImpactAssistant;
 use App\Support\TenantManager;
 use Illuminate\Filesystem\FilesystemAdapter;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\ServiceProvider;
 use Inertia\Inertia;
-use League\Flysystem\Filesystem as Flysystem;
-use League\Flysystem\Local\LocalFilesystemAdapter;
-
+use App\Models\Param;
 class AppServiceProvider extends ServiceProvider
 {
     public function register(): void
@@ -26,6 +18,8 @@ class AppServiceProvider extends ServiceProvider
         $this->app->singleton(TenantManager::class, function () {
             return new TenantManager();
         });
+        $this->app->singleton(MistralImpactAssistant::class);
+        $this->app->singleton(MistralFrequencyAssistant::class);
     }
 
     public function boot(): void
@@ -71,7 +65,15 @@ class AppServiceProvider extends ServiceProvider
 
         // Partage Inertia (si nécessaire)
         Inertia::share([
-            // vos variables partagées
+            'entities' => function () {
+                // ANCIEN CODE - À SUPPRIMER
+            },
+        ]);
+        */
+
+        // ✅ OU remplacez-le par ceci :
+        Inertia::share([
+
         ]);
     }
 }
